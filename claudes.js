@@ -18,6 +18,8 @@ export class Instance {
     this.waitsOn = "";        // hold on a peer: the name of the session it waits for
     this.name = "";           // the session's own name, what a peer addresses it by
     this.sock = "";           // the record's messagingSocketPath, where peer.js delivers
+    this.sessionId = "";      // the record's; with cwd, what names the session log
+    this.cwd = "";            // the record's, where claude started; path follows the shell
     this.statusSince = 0;     // epoch of the record's last status change, 0 without one
     this.lastWrite = 0;       // epoch claude last wrote to its session log
     this.since = 0;           // epoch this instance entered its current state
@@ -468,7 +470,8 @@ export async function discover() {
     if (!pane) {                                   // nothing to focus, but the record knows
       found.push(new Instance({pid, summary: title || cmd, path: rec.cwd ?? "",
         state, asking: rec.status === "waiting" ? (rec.waitingFor ?? "") : "", waitsOn: holdFor,
-        name: rec.name ?? "", sock: rec.messagingSocketPath ?? "", statusSince: since}));
+        name: rec.name ?? "", sock: rec.messagingSocketPath ?? "", statusSince: since,
+        sessionId: rec.sessionId ?? "", cwd: rec.cwd ?? ""}));
       continue;
     }
     const client = clientBySession.get(pane.session_name) ?? {};
@@ -489,6 +492,8 @@ export async function discover() {
       waitsOn: holdFor,
       name: rec.name ?? "",
       sock: rec.messagingSocketPath ?? "",
+      sessionId: rec.sessionId ?? "",
+      cwd: rec.cwd ?? "",
       statusSince: since,
       lastWrite: state ? 0 : lastWrite(pane.pane_current_path),
       clientTty: client.client_tty ?? "",
