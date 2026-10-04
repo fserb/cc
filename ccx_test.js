@@ -43,9 +43,9 @@ const width = (s) =>
 
 Deno.test("fuzzy: a subsequence matches, and a missing character does not", () => {
   ok(fuzzy("wrng", "~/prj/wrangler"), "wrng should find ~/prj/wrangler");
-  eq(fuzzy("zq", "~/prj/ccx"), null, "a character not in the hay");
-  eq(fuzzy("xc", "~/prj/ccx"), null, "the right characters in the wrong order");
-  eq(fuzzy("", "~/prj/ccx"), {score: 0, idx: []}, "an empty needle matches everything");
+  eq(fuzzy("zq", "~/ai/ccx"), null, "a character not in the hay");
+  eq(fuzzy("xc", "~/ai/ccx"), null, "the right characters in the wrong order");
+  eq(fuzzy("", "~/ai/ccx"), {score: 0, idx: []}, "an empty needle matches everything");
 });
 
 Deno.test("fuzzy: wrng lands on the letters of wrangler", () => {
@@ -57,15 +57,15 @@ Deno.test("fuzzy: wrng lands on the letters of wrangler", () => {
   eq(fuzzy("wrng", hay).score, 8, "score");
 });
 
-Deno.test("fuzzy: cx collapses onto the TRAILING cx of ~/prj/ccx", () => {
-  const hay = "~/prj/ccx";      // indices 6, 7, 8 are c, c, x
-  eq(fuzzy("cx", hay).idx, [7, 8], "the backward pass must take the second c, not the first");
+Deno.test("fuzzy: cx collapses onto the TRAILING cx of ~/ai/ccx", () => {
+  const hay = "~/ai/ccx";      // indices 5, 6, 7 are c, c, x
+  eq(fuzzy("cx", hay).idx, [6, 7], "the backward pass must take the second c, not the first");
 });
 
 Deno.test("fuzzy: the hay is matched case-insensitively", () => {
-  eq(fuzzy("cx", "~/PRJ/CCX").idx, [7, 8], "upper case hay");
+  eq(fuzzy("cx", "~/AI/CCX").idx, [6, 7], "upper case hay");
   // the needle is not lowered here: both UIs lower it before they call
-  eq(fuzzy("CX", "~/prj/ccx"), null, "the caller owns lowering the needle");
+  eq(fuzzy("CX", "~/ai/ccx"), null, "the caller owns lowering the needle");
 });
 
 Deno.test("fuzzy: a skipped character costs 2, or 1 at a word start", () => {
@@ -82,7 +82,7 @@ Deno.test("fuzzy: a match at a path-segment head beats one buried mid-word", () 
 });
 
 Deno.test("fuzzy: a prefix costs nothing", () => {
-  eq(fuzzy("~/p", "~/prj/ccx"), {score: 0, idx: [0, 1, 2]}, "an exact prefix");
+  eq(fuzzy("~/a", "~/ai/ccx"), {score: 0, idx: [0, 1, 2]}, "an exact prefix");
 });
 
 // rank
@@ -117,24 +117,24 @@ Deno.test("rank: path breaks a tie on pid", () => {
 });
 
 Deno.test("rank: a needle outranks the sort", () => {
-  const good = row("free", 0, "~/prj/ccx");        // scores 6 on "ccx"
-  const worse = row("wait", 0, "~/prj/c-c-x");     // scores 8: two skipped characters
+  const good = row("free", 0, "~/ai/ccx");        // scores 6 on "ccx"
+  const worse = row("wait", 0, "~/ai/c-c-x");     // scores 8: two skipped characters
   eq(rank([good, worse], "", "state").map((i) => i.state), ["wait", "free"],
     "with no needle the wait row is first");
-  eq(rank([good, worse], "ccx", "state").map((i) => i.shortPath), ["~/prj/ccx", "~/prj/c-c-x"],
+  eq(rank([good, worse], "ccx", "state").map((i) => i.shortPath), ["~/ai/ccx", "~/ai/c-c-x"],
     "with a needle the closer match is first, whatever its state");
 });
 
 Deno.test("rank: a needle drops what does not match", () => {
-  const rows = [row("wait", 0, "~/prj/ccx"), row("wait", 0, "~/blah")];
-  eq(rank(rows, "ccx", "state").map((i) => i.shortPath), ["~/prj/ccx"], "one survivor");
+  const rows = [row("wait", 0, "~/ai/ccx"), row("wait", 0, "~/blah")];
+  eq(rank(rows, "ccx", "state").map((i) => i.shortPath), ["~/ai/ccx"], "one survivor");
   eq(rank(rows, "zzz", "state"), [], "nothing matches");
 });
 
 Deno.test("rank: ties fall back to the sort", () => {
   // identical text, so identical scores; only the sort can order them
-  const free = row("free", 0, "~/prj/ccx", "", 1);
-  const wait = row("wait", 0, "~/prj/ccx", "", 2);
+  const free = row("free", 0, "~/ai/ccx", "", 1);
+  const wait = row("wait", 0, "~/ai/ccx", "", 2);
   eq(rank([free, wait], "ccx", "state").map((i) => i.pid), [2, 1], "state breaks the tie");
   eq(rank([free, wait], "ccx", "path").map((i) => i.pid), [1, 2], "path breaks it on pid");
 });
@@ -166,8 +166,8 @@ Deno.test("fmtAge: seconds, then minutes, then hours", () => {
 
 Deno.test("Instance: shortPath abbreviates HOME and carries the tab", () => {
   const home = Deno.env.get("HOME");
-  eq(new Instance({path: `${home}/prj/ccx`}).shortPath, "~/prj/ccx", "HOME becomes ~");
-  eq(new Instance({path: `${home}/prj/ccx`, tab: "2"}).shortPath, "~/prj/ccx:2",
+  eq(new Instance({path: `${home}/ai/ccx`}).shortPath, "~/ai/ccx", "HOME becomes ~");
+  eq(new Instance({path: `${home}/ai/ccx`, tab: "2"}).shortPath, "~/ai/ccx:2",
     "the tmux window index is appended only when there is one");
   eq(new Instance({path: "/tmp/x"}).shortPath, "/tmp/x", "a path outside HOME is untouched");
   eq(new Instance({}).shortPath, "?", "no path at all");
@@ -259,9 +259,9 @@ const PATH_W = 26, SUMMARY_W = 50;
 // on purpose, so changing the fixture fails loudly instead of weakening the test
 const ROWS = [
   ["● wait", "5m", "~/prj/kanji", "日本語のタイトル in a session title"],
-  ["● wait", "42s", "~/prj/ccx", "port ccx from python to deno"],
+  ["● wait", "42s", "~/ai/ccx", "port ccx from python to deno"],
   ["◆ wait", "7s", "~/blah", "reorganize the skills tree"],
-  ["◐ busy", "25m", "~/prj/ccx:2", "inline the bell and play it from memory"],
+  ["◐ busy", "25m", "~/ai/ccx:2", "inline the bell and play it from memory"],
   ["◐ busy", "3m", "~/prj/wrangler", "wrangler config for the edge worker"],
   ["◐ busy", "1m", "~/prj/a-very-long-director",
     "a summary that is definitely longer than fifty dis"],   // both cropped, hard
@@ -371,7 +371,7 @@ Deno.test("snapshot: the toast takes the last line, right aligned", async () => 
 Deno.test("snapshot: a filter reorders and the digits follow the drawn order", async () => {
   const frame = await snapshot("100x14", "plain", "/ccx");
   eq(at(frame[HEAD], NUM), "1", "the first row is numbered 1");
-  eq(at(frame[HEAD], PATH, 9), "~/prj/ccx", "the closest match is first");
+  eq(at(frame[HEAD], PATH, 8), "~/ai/ccx", "the closest match is first");
   eq(at(frame[HEAD + 1], NUM), "2", "the second row is numbered 2");
 });
 
@@ -852,7 +852,7 @@ Deno.test("paneState: it judges from the bottom 8 lines, not the scrollback", ()
 });
 
 Deno.test("paneState: the banner is free until a reply is under it", () => {
-  eq(paneState("Claude Code v2.1.252\n\n cwd: ~/prj/ccx"), "free", "a freshly cleared session");
+  eq(paneState("Claude Code v2.1.252\n\n cwd: ~/ai/ccx"), "free", "a freshly cleared session");
   eq(paneState("Claude Code v2.1.252\n⏺ an answer\n> "), "wait",
     "walking up from the bottom hits the answer first, so this is a conversation");
   eq(paneState("Claude Code without a version"), "wait", "the banner needs its version number");
@@ -965,7 +965,7 @@ Deno.test("cursor: the fill is keyed on the ranked index, not the screen row", a
 Deno.test("offset: the table starts at the ranked index, and the digits follow it",
   async () => {
     const frame = await snapshot("100x8", "plain", "cursor=2", "offset=1");
-    eq(at(frame[HEAD], PATH, 9), "~/prj/ccx", "ranked index 1 is drawn first");
+    eq(at(frame[HEAD], PATH, 8), "~/ai/ccx", "ranked index 1 is drawn first");
     eq(at(frame[HEAD], NUM), "2", "the digit is the ranked position, not the screen row");
     eq(at(frame[HEAD + 1], NUM), "3", "and it keeps counting");
     // 8 ranked, 4 drawn, so 4 are not on screen: index 0 above and 5 to 7 below
@@ -1121,7 +1121,7 @@ Deno.test("chat: the body wraps under its header rather than truncating", async 
 Deno.test("chat: a word longer than the line is cut, and nothing is lost", async () => {
   const frame = await snapshot("chat", "46x40", "plain");
   const joined = frame.map((l) => l.trimEnd().replace(/^ {7}/, "")).join("");
-  ok(joined.includes("/Users/fserb/prj/ccx/a-very-long-directory-name-that-does-not-fit-" +
+  ok(joined.includes("/Users/fserb/ai/ccx/a-very-long-directory-name-that-does-not-fit-" +
     "on-one-line-at-all/deeper"), "every character of the path survives the cut");
 });
 
@@ -1179,7 +1179,7 @@ Deno.test("resolve: a name picks that instance and nothing else", async () => {
 });
 
 Deno.test("resolve: a fuzzy target matching two is the feature, not an error", async () => {
-  eq(await resolved("ccx"), ["1000 ccx-e8 ~/prj/ccx", "1004 ccx-2f ~/prj/ccx:2"],
+  eq(await resolved("ccx"), ["1000 ccx-e8 ~/ai/ccx", "1004 ccx-2f ~/ai/ccx:2"],
     "both ccx sessions");
 });
 
@@ -1202,12 +1202,12 @@ Deno.test("resolve: the same instance named twice is one target", async () => {
 
 Deno.test("resolve: targets keep the order they were written in", async () => {
   eq(await resolved("1005,1000"),
-    ["1005 kanji-90 ~/prj/kanji", "1000 ccx-e8 ~/prj/ccx"], "not re-sorted");
+    ["1005 kanji-90 ~/prj/kanji", "1000 ccx-e8 ~/ai/ccx"], "not re-sorted");
 });
 
 Deno.test("resolve: a target matching nothing is a miss, and the rest still resolve",
   async () => {
-    eq(await resolved("nope,1000"), ["miss nope", "1000 ccx-e8 ~/prj/ccx"], "one of each");
+    eq(await resolved("nope,1000"), ["miss nope", "1000 ccx-e8 ~/ai/ccx"], "one of each");
   });
 
 const BAD = [

@@ -8,7 +8,7 @@ export const SORTS = ["state", "path"];
 
 // Subsequence match, {score, idx} or null; lowest score wins. Greedy forward to prove the
 // match exists, then greedy backward from the last hit, which pulls the characters as far
-// right as they go: "cx" collapses onto the trailing `cx` of ~/prj/ccx, not the c before
+// right as they go: "cx" collapses onto the trailing `cx` of ~/ai/ccx, not the c before
 // it. A skipped character costs 2, or 1 at a word start, so a match at the head of a path
 // segment beats one buried mid-word.
 export function fuzzy(needle, hay) {

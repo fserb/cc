@@ -674,13 +674,13 @@ const NOW = 1_700_000_000;
 // the names are the record's own, which is what `ccx send` resolves a target against; two
 // start with `ccx` on purpose, so a fuzzy target has something to be ambiguous about
 const SAMPLE = [
-  ["wait", 42, "~/prj/ccx", "port ccx from python to deno", "ccx-e8"],
+  ["wait", 42, "~/ai/ccx", "port ccx from python to deno", "ccx-e8"],
   ["busy", 197, "~/prj/wrangler", "wrangler config for the edge worker", "wrangler-3a"],
   ["free", 8100, "~/web/blob2", "", "blob2-7c"],
   // a dialog is up, so this one draws ◆ rather than ●: same state, same sort
   ["wait", 7, "~/blah", "reorganize the skills tree", "blah-11",
     "edit ~/blah/skills/SKILLS.md"],
-  ["busy", 1500, "~/prj/ccx:2", "inline the bell and play it from memory", "ccx-2f"],
+  ["busy", 1500, "~/ai/ccx:2", "inline the bell and play it from memory", "ccx-2f"],
   // two-cell characters: a width counted in code units misaligns this row's summary
   ["wait", 320, "~/prj/kanji", "日本語のタイトル in a session title", "kanji-90"],
   // over both crops, so the hard cut at 26 and 50 shows in a frame
@@ -709,10 +709,10 @@ const CHAT_SAMPLE = [
     msgId: "m1", sessionId: "s1"},
   {at: NOW - 3600, from: "ccx-85", to: "ccx-ef", body: "ack", msgId: "m2", sessionId: "s2"},
   {at: NOW - 900, from: "ccx-49", to: "all", body: "chat.js is in.\n" +
-    "the log is ~/.claude/chat/-Users-fserb-prj-ccx.jsonl, one message per line.",
+    "the log is ~/.claude/chat/-Users-fserb-ai-ccx.jsonl, one message per line.",
     msgId: "m3", sessionId: "s3"},
   {at: NOW - 30, from: "ccx-85", to: "ccx-49", body: "日本語のタイトル, and a path with " +
-    "no break in it: /Users/fserb/prj/ccx/a-very-long-directory-name-that-does-not-fit-on-" +
+    "no break in it: /Users/fserb/ai/ccx/a-very-long-directory-name-that-does-not-fit-on-" +
     "one-line-at-all/deeper", msgId: "m4", sessionId: "s4"},
 ];
 
@@ -740,7 +740,7 @@ function cmdSnapshot(...args) {
   const needle = filter.trim().toLowerCase();
   const ranked = rank(rows, needle, SORTS[0]);
   const frame = (chat
-    ? chatRender({cwd: "~/prj/ccx", msgs: rows.length ? CHAT_SAMPLE : [], offset, toast,
+    ? chatRender({cwd: "~/ai/ccx", msgs: rows.length ? CHAT_SAMPLE : [], offset, toast,
       cols, height, now: NOW})
     : render({
       ranked, total: rows.length, waiting: rows.filter((i) => i.state === "wait").length,

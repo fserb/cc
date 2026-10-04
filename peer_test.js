@@ -54,7 +54,7 @@ const BODIES = {
   "plain text": "take claudes.js",
   "several lines": "line one\nline two\n\nline four",
   "quotes and angle brackets": 'he said "no" and 3 < 5 > 2',
-  "a path with a colon": "/Users/fserb/prj/ccx/claudes.js:219",
+  "a path with a colon": "/Users/fserb/ai/ccx/claudes.js:219",
   "wide characters and an em dash": "日本語のタイトル — and more",
   "a 2KB body": "x".repeat(2048),
   "a trailing newline": "ends with a newline\n",
