@@ -78,12 +78,12 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .said pre code { color: var(--text); }
 .said ul, .said ol { padding-left: 20px; }
 .said h4 { color: var(--accent); font-size: 17px; }
-details.tool { font: 15px/1.4 var(--mono); color: var(--idle); }
+details.tool { font: 15px/1.4 var(--mono); color: var(--dim); }
 details.tool summary { list-style: none; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 details.tool summary::-webkit-details-marker { display: none; }
-details.tool summary::before { content: "⏺ "; color: var(--busy); }
+details.tool summary::before { content: "⏺ "; color: #5d6e6c; }
 details.tool.err summary::before { color: var(--error); }
-details.tool summary b { color: var(--text); font-weight: 600; }
+details.tool summary b { color: var(--idle); font-weight: 600; }
 details.tool pre { margin: 6px 0 0 16px; padding-left: 8px; border-left: 1px solid var(--edge); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--dim); font: 14px/1.4 var(--mono); }
 details.tool pre.in { color: var(--mauve); }
 .working { font-size: 15px; color: var(--busy); }
