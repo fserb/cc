@@ -71,6 +71,11 @@ Deno.test("Server: a foreign Host, a cross-site request and a form POST are refu
   eq(await status("/api/list", {headers: {host: "localhost:7681"}}), 200, "localhost");
   eq(await status("/api/s/5/esc", {method: "POST", body: "{}", headers: {...HOST,
     "content-type": "application/json", "sec-fetch-site": "cross-site"}}), 403, "cross-site");
+  const xs = {...HOST, "sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate"};
+  eq(await status("/", {headers: xs}), 200, "the home-screen shortcut opening the page");
+  eq(await status("/api/list", {headers: xs}), 403, "a cross-site navigation to the API");
+  eq(await status("/", {headers: {...HOST, "sec-fetch-site": "cross-site"}}), 403,
+    "a cross-site fetch of the page");
   eq(await status("/api/s/5/type", {method: "POST", body: '{"text":"x"}',
     headers: {...HOST, "content-type": "text/plain"}}), 415, "a POST that needs no preflight");
 });

@@ -252,7 +252,11 @@ export class Server {
     const path = url.pathname.replace(/\/+$/, "") || "/";
     const get = req.method === "GET", post = req.method === "POST";
     if (!this.hosts.has(req.headers.get("host") ?? "")) return json({error: "bad host"}, 403);
-    if (req.headers.get("sec-fetch-site") === "cross-site") return json({error: "cross-site"}, 403);
+    // the home-screen shortcut opens the page as a cross-site navigation, which reads nothing
+    const open = get && path === "/" && req.headers.get("sec-fetch-mode") === "navigate";
+    if (!open && req.headers.get("sec-fetch-site") === "cross-site") {
+      return json({error: "cross-site"}, 403);
+    }
     if (post && !(req.headers.get("content-type") ?? "").startsWith("application/json")) {
       return json({error: "a POST is application/json"}, 415);
     }

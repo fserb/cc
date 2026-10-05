@@ -102,7 +102,9 @@ web page you visit could otherwise reach it two ways, and both are refused befor
   {upstream_hostport}`. The systray's panel server makes the same check for the same reason
 - **cross-site POST**: a form or a no-cors fetch to the tailnet URL. `Sec-Fetch-Site:
   cross-site` is refused, and a POST must be `application/json`, which another origin
-  cannot send without a CORS preflight the server never answers
+  cannot send without a CORS preflight the server never answers. One exception: a GET
+  navigation to the page itself, because Android Chrome opens the home-screen shortcut
+  with `Sec-Fetch-Site: cross-site`. Opening the page reads nothing back to the other site
 
 ## API
 
