@@ -13,8 +13,6 @@
 <style>
 @font-face { font-family: Inconsolata; src: url(inconsolata.ttf) format("truetype"); font-weight: 200 900; font-stretch: 50% 200%; }
 :root {
-  /* Chrome keeps the gesture bar inset with the keyboard up (crbug.com/406935609), which
-     leaves a strip of padding between the input and the keyboard */
   --safe: env(safe-area-inset-bottom);
   --accent: #ceaadf; --mauve: #b8a0be; --dim: #626262; --text: #d6d6dc;
   --bg: #000; --bar: #181020; --panel: #0e0b12; --edge: #35284a; --cursor: #2a1e38;
@@ -22,7 +20,6 @@
   --busy: #93aeaa; --hold: #8a7f9c;
   --mono: Inconsolata, ui-monospace, monospace;
 }
-:root.kb { --safe: 0px; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; background: var(--panel); color: var(--text); }
 body { font: 17px/1.4 var(--mono); -webkit-tap-highlight-color: transparent; }
@@ -151,12 +148,23 @@ details.tool pre.in { color: var(--mauve); }
 // the API beside it; every URL is relative, since caddy serves this under /ccx/.
 
 // the page is as tall as what is visible: with the keyboard up, Chrome on Android sometimes
-// leaves 100dvh taller than that, and the bottom of the input sits behind the keyboard
+// leaves 100dvh taller than that. And with the keyboard up the gesture bar inset can read 0
+// while a strip that tall still covers the bottom of the page, hiding the input, so the
+// inset seen before the keyboard opened is kept
+const probe = document.createElement("div");
+probe.style.cssText = "position: fixed; height: env(safe-area-inset-bottom); visibility: hidden";
+document.documentElement.append(probe);
+let inset = 0;
 function fit() {
   const {height} = visualViewport;
   const root = document.documentElement;
   root.style.setProperty("--seen", `${height}px`);
-  root.classList.toggle("kb", height < screen.height * 0.75);
+  if (height >= screen.height * 0.75) {
+    inset = probe.offsetHeight;
+    root.style.removeProperty("--safe");
+  } else {
+    root.style.setProperty("--safe", `${inset}px`);
+  }
   scrollTo(0, 0);
 }
 visualViewport.addEventListener("resize", fit);
