@@ -218,9 +218,12 @@ export class Server {
       if (r.events.length || r.reset) c.send("log", r, r.end);
       c.end = r.end;
     }
-    if (text === null || text === c.screen) return;
-    c.screen = text;
-    c.send("screen", {text});
+    if (text === null) return;
+    if (text !== c.screen) {
+      c.screen = text;
+      c.send("screen", {text});
+    }
+    // parsed every tick, not on a new screen: the dialog draws before the record says wait
     const dialog = inst.state === "wait" ? parseDialog(text) : null;
     const d = JSON.stringify(dialog);
     if (d !== c.dialog) {
