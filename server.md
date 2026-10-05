@@ -33,7 +33,9 @@ the first version: attaching files or images, the bell (the systray owns it).
 
 ## Shape
 
-    server.js        Deno.serve, the routes, the poll, and the page as one string
+    server.js        Deno.serve, the routes, the poll
+    page.html        the page, imported as text (`with {type: "text"}`), which works
+                     under `deno run` with no flag and inside the bundle, both measured
     transcript.js    reads one session log into display events, tail first, paged back
     dialog.js        parses the dialog out of a pane capture, and picks an option
     spawn.js         starts a claude in a new tmux window or session
@@ -213,7 +215,16 @@ the rest of ccx: a missing field falls back, a changed meaning is not caught.
 
 ## The page
 
-One HTML string in `server.js`, served at `/`, with inline CSS and a module script.
+Built: `page.html`, served at `/`, inline CSS and a module script, the mock's look on live
+data. Checked at 390x844 in headless Chrome against a scratch session: the list, history
+with markdown and collapsed tools, the pane view, the folder-trust card answered by
+tapping, a prompt sent from the textarea and its reply arriving over the stream, `+`
+beside opening the new instance, and the new-claude suggestions. Not yet on a phone.
+
+- the first history page reads back until it has 40 events or 4MB: a 256KB tail of a log
+  whose last lines are a file write and its read was two events on screen
+- a session's row may arrive after the page draws, so the bottom bar waits for it rather
+  than saying "not in tmux"
 Three views, switched by the URL hash so the back button works: the list, a session, and
 the new-claude form.
 
