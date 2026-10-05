@@ -84,7 +84,9 @@ main.list { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 details.tool { font: 15px/1.4 var(--mono); color: #46464e; }
 details.tool summary { list-style: none; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 details.tool summary::-webkit-details-marker { display: none; }
-details.tool summary::before { content: "⏺ "; color: #3e4a49; }
+/* ● and not ⏺: U+23FA is an emoji too, and Android draws it as an orange square that no
+   color reaches */
+details.tool summary::before { content: "● "; color: var(--busy); opacity: .5; }
 details.tool.err summary::before { color: var(--error); }
 details.tool summary b { color: #5c5c64; font-weight: 600; }
 details.tool pre { margin: 6px 0 0 16px; padding-left: 8px; border-left: 1px solid var(--edge); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--dim); font: 14px/1.4 var(--mono); }
