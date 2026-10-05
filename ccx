@@ -791,6 +791,15 @@ async function cmdDoctor() {
   const probe = await net.probe();
   console.log(`api ${net.url} (${net.from}) ${probe.ok ? "up" : "DOWN"} ` +
     `${probe.note} in ${Math.round(probe.ms)}ms`);
+  // the server is in whichever process started it, the systray or `ccx serve`, so it is
+  // asked over HTTP rather than looked up
+  try {
+    const r = await fetch("http://127.0.0.1:7681/api/list", {signal: AbortSignal.timeout(2000)});
+    const body = await r.json();
+    console.log(`serve 127.0.0.1:7681 up, HTTP ${r.status}, ${body.rows?.length ?? "?"} rows`);
+  } catch (e) {
+    console.log(`serve 127.0.0.1:7681 not answering: ${e.name}: ${e.message}`);
+  }
   const records = sessionRecords();
   for (const i of await discover()) {
     const rec = records[i.pid] ?? {};

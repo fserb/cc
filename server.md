@@ -47,6 +47,11 @@ instance list; inside the systray it is the systray's own poll result, so there 
 `discover()` per 1.5s and not two. Alone, `ccx serve` runs its own `discover()` +
 `StateClock` loop, the same thing the TUI does.
 
+Built: `ccx systray` starts it from `serve()` after its own panel server, and `doctor`
+asks the port over HTTP, since the server lives in whichever process started it. Measured
+in the rebuilt bundle: 7681 bound, a foreign Host refused, the screen, log and dirs routes
+answering from under launchd.
+
 `ccx serve [--port N]` in `ccx`, routed like `list` and `doctor`, never through the bundle.
 `ccx systray` always starts the server, in the systray's own process: one poll, one
 process. A port already bound (a second copy, or `ccx serve` beside the systray) is

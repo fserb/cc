@@ -607,6 +607,19 @@ function place(bounds) {
   };
 }
 
+// The web server, off this process's poll. It has to come after the panel's Deno.serve:
+// in the bundle the first one loses its port to the startup window. Loaded on use, so a
+// server that fails to load costs the phone and not the menu bar.
+async function serve(model) {
+  try {
+    const {runServer} = await import("./server.js");
+    const r = runServer({source: () => ({instances: model.instances, net: model.net})});
+    if (r.error) console.error(`serve: ${r.error}; the menu bar still works`);
+  } catch (e) {
+    console.error(`serve: ${e.message ?? e}; the menu bar still works`);
+  }
+}
+
 // Never returns; the OS ends it. Returns 1 without starting anything under `deno run`.
 export async function runSystray(argv = Deno.args) {
   if (typeof desktop.Tray !== "function") {
@@ -764,6 +777,7 @@ export async function runSystray(argv = Deno.args) {
 
   await model.poll();
   setInterval(() => model.poll(), POLL);
+  serve(model);
   // the only way to look at the panel from a script
   if (argv.includes("--show")) setTimeout(show, 600);   // after getBounds has settled
   return 0;
