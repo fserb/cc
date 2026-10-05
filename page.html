@@ -150,8 +150,9 @@ details.tool pre.in { color: var(--mauve); }
 
 // the page is as tall as what is visible: with the keyboard up, Chrome on Android sometimes
 // leaves 100dvh taller than that. And with the keyboard up the gesture bar inset can read 0
-// while a strip that tall still covers the bottom of the page, hiding the input, so the
-// inset seen before the keyboard opened is kept
+// while a strip still covers the bottom of the page, hiding the input. Half the inset seen
+// before the keyboard opened, plus 4px, clears it and matches the 8px above the input,
+// tuned by eye on an Android phone
 const probe = document.createElement("div");
 probe.style.cssText = "position: fixed; height: env(safe-area-inset-bottom); visibility: hidden";
 document.documentElement.append(probe);
@@ -166,7 +167,7 @@ function fit() {
     inset = probe.offsetHeight;
     root.style.removeProperty("--safe");
   } else {
-    root.style.setProperty("--safe", `${inset}px`);
+    root.style.setProperty("--safe", `${inset / 2 + 4}px`);
   }
   scrollTo(0, 0);
 }
