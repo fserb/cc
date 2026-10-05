@@ -60,6 +60,8 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .group .gp { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; color: var(--mauve); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .group .icon { width: 36px; height: 36px; font-size: 22px; }
 .group .gc { font-size: 14px; color: var(--idle); white-space: nowrap; }
+/* one empty row's worth under the last, so it does not end on the screen's edge */
+main.list { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 .empty { padding: 40px 14px; color: var(--hint); text-align: center; }
 
 .log, [data-events] { display: flex; flex-direction: column; gap: 12px; }
@@ -260,7 +262,7 @@ function listView() {
         <span class="counts">${tally(rows)}${offline ? ` <span class="off">${esc(offline)}</span>` : ""}</span>
         <button class="icon" data-go="#new" title="new claude in a directory">+</button>
       </header>
-      <main>${body || `<p class="empty">no claude running</p>`}</main>
+      <main class="list">${body || `<p class="empty">no claude running</p>`}</main>
     </div>`);
     $("main").scrollTop = top;
   };
