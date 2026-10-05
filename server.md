@@ -227,8 +227,8 @@ tapping, a prompt sent from the textarea and its reply arriving over the stream,
 beside opening the new instance, and the new-claude suggestions.
 
 On the phone (Android Chrome, through caddy, 2026-10-04): the list, typing into a session,
-`+` beside, and the new-claude form starting a claude in a new folder in a new kitty
-window. Starting opens a page at once, which becomes the session's when it settles:
+`+` beside, the new-claude form starting a claude in a new folder in a new kitty
+window, and `/clear` typed into a session from the page. Starting opens a page at once, which becomes the session's when it settles:
 555ms beside, measured; a new kitty window takes longer.
 
 - the first history page reads back until it has 40 events or 4MB: a 256KB tail of a log
