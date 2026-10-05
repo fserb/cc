@@ -8,6 +8,12 @@
 //   already polled, so inside the systray there is one discover() per tick and not two
 // - **inside the bundle the first `Deno.serve` loses its port** to the runtime's startup
 //   window, so the systray has to start this after its own
+// - `type` runs whatever it is given, so two checks come before any route. The Host has to
+//   be 127.0.0.1 or localhost on our port: a page that rebinds a name of its own onto
+//   127.0.0.1 arrives with that name, and caddy is told to send the upstream's
+//   (`header_up Host {upstream_hostport}`). And no cross-site request: `Sec-Fetch-Site`
+//   where the browser sends it, and a POST must be `application/json`, which a page on
+//   another origin cannot send without a CORS preflight this server never answers
 
 import {byCodePoint, HOME} from "./sh.js";
 import {logPath, readFrom, readPage} from "./transcript.js";
@@ -115,8 +121,9 @@ function stream(onClose) {
 }
 
 export class Server {
-  constructor(source) {
+  constructor(source, port = PORT) {
     this.source = source;                 // () => {instances, net}
+    this.hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
     this.lists = new Set();               // api/events clients
     this.sessions = new Set();            // api/s/<pid>/events clients
     this.lastList = "";
@@ -226,6 +233,11 @@ export class Server {
     const url = new URL(req.url);
     const path = url.pathname.replace(/\/+$/, "") || "/";
     const get = req.method === "GET", post = req.method === "POST";
+    if (!this.hosts.has(req.headers.get("host") ?? "")) return json({error: "bad host"}, 403);
+    if (req.headers.get("sec-fetch-site") === "cross-site") return json({error: "cross-site"}, 403);
+    if (post && !(req.headers.get("content-type") ?? "").startsWith("application/json")) {
+      return json({error: "a POST is application/json"}, 415);
+    }
     if (get && path === "/") return new Response(PAGE, {headers: {"content-type": "text/html; charset=utf-8"}});
     if (get && path === "/api/list") return json(this.listBody());
     if (get && path === "/api/events") return this.listEvents();
@@ -276,7 +288,7 @@ export class Server {
 // Start serving. {server, stop} or {error}: a port already taken is reported, not thrown,
 // so the systray carries on without it.
 export function runServer({source, port = PORT, hostname = "127.0.0.1"}) {
-  const s = new Server(source);
+  const s = new Server(source, port);
   let http;
   try {
     http = Deno.serve({port, hostname, onListen() {}}, (req) => s.handle(req).catch((e) =>

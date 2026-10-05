@@ -64,8 +64,11 @@ first, it would bind a random port with no error, and caddy would proxy to nothi
 The server binds **127.0.0.1 only**, default port 7681. Caddy already terminates TLS for
 `marx.giraffe-yo.ts.net:443` and proxies `/boxerz` the same way, so one more block:
 
+    redir /ccx /ccx/
     handle_path /ccx* {
-        reverse_proxy localhost:7681
+        reverse_proxy localhost:7681 {
+            header_up Host {upstream_hostport}
+        }
     }
 
 Then `https://marx.giraffe-yo.ts.net/ccx/` from the phone. `handle_path` strips the prefix,
@@ -78,6 +81,17 @@ and the tailnet cert gives that for free.
 
 Anyone who can reach it. The tailnet is the boundary: caddy only listens for the tailnet
 name, and the server only on 127.0.0.1. No auth in ccx.
+
+That boundary does not cover your own browser. `type` runs whatever it is given, so any
+web page you visit could otherwise reach it two ways, and both are refused before routing:
+
+- **DNS rebinding**: a page points a name of its own at 127.0.0.1 and calls the port, as
+  same-origin. It arrives with that name as Host, so only `127.0.0.1:<port>` and
+  `localhost:<port>` are accepted, and caddy sends the upstream's own with `header_up Host
+  {upstream_hostport}`. The systray's panel server makes the same check for the same reason
+- **cross-site POST**: a form or a no-cors fetch to the tailnet URL. `Sec-Fetch-Site:
+  cross-site` is refused, and a POST must be `application/json`, which another origin
+  cannot send without a CORS preflight the server never answers
 
 ## API
 

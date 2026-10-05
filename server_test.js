@@ -35,29 +35,44 @@ Deno.test("dirsUnder: the subdirectories that start with the last part", () => {
 });
 
 const server = (instances) => new Server(() => ({instances, net: {offline: false}}));
-const call = (s, path, init) => s.handle(new Request(`http://x${path}`, init));
+const HOST = {host: "127.0.0.1:7681"};
+const JSON_POST = {method: "POST", headers: {...HOST, "content-type": "application/json"}};
+const call = (s, path, init = {}) =>
+  s.handle(new Request(`http://x${path}`, {headers: HOST, ...init}));
+const post = (s, path, body = "{}") => call(s, path, {...JSON_POST, body});
 
 Deno.test("Server: the list, and a pid not in the poll is 404 before any action", async () => {
   const s = server([inst(5, "kitty-1", "1", "0"), inst(6, "", "", "")]);
   const list = await (await call(s, "/api/list")).json();
   eq(list.rows.map((r) => [r.pid, r.hasPane, r.path]), [[5, true, "~/p5"], [6, false, "~/p6"]],
     "rows, tmux first, path in ~ form");
-  for (const [path, init] of [["/api/s/7/log"], ["/api/s/7/type", {method: "POST", body: '{"text":"rm -rf"}'}],
-    ["/api/s/7/esc", {method: "POST"}]]) {
-    eq((await call(s, path, init)).status, 404, `${path} on an unknown pid`);
-  }
+  eq((await call(s, "/api/s/7/log")).status, 404, "log on an unknown pid");
+  eq((await post(s, "/api/s/7/type", '{"text":"rm -rf"}')).status, 404, "type on one");
+  eq((await post(s, "/api/s/7/esc")).status, 404, "esc on one");
   eq((await call(s, "/api/nope")).status, 404, "an unknown route");
 });
 
 Deno.test("Server: an instance outside tmux is read-only", async () => {
   const s = server([inst(6, "", "", "")]);
-  const r = await call(s, "/api/s/6/type", {method: "POST", body: '{"text":"hi"}'});
+  const r = await post(s, "/api/s/6/type", '{"text":"hi"}');
   eq([r.status, (await r.json()).error], [409, "pid 6 is not inside tmux; nothing to type into"],
     "type");
-  eq((await call(s, "/api/s/6/esc", {method: "POST"})).status, 409, "esc");
-  eq((await call(s, "/api/s/6/type", {method: "POST", body: "{}"})).status, 400, "no text");
+  eq((await post(s, "/api/s/6/esc")).status, 409, "esc");
+  eq((await post(s, "/api/s/6/type")).status, 400, "no text");
   eq(await (await call(s, "/api/s/6/log")).json(), {events: [], start: 0, end: 0},
     "no sessionId, no history");
+});
+
+Deno.test("Server: a foreign Host, a cross-site request and a form POST are refused", async () => {
+  const s = server([inst(5, "kitty-1", "1", "0")]);
+  const status = async (path, init) => (await s.handle(new Request(`http://x${path}`, init))).status;
+  eq(await status("/api/list", {headers: {host: "evil.example:7681"}}), 403, "rebound name");
+  eq(await status("/api/list", {}), 403, "no Host at all");
+  eq(await status("/api/list", {headers: {host: "localhost:7681"}}), 200, "localhost");
+  eq(await status("/api/s/5/esc", {method: "POST", body: "{}", headers: {...HOST,
+    "content-type": "application/json", "sec-fetch-site": "cross-site"}}), 403, "cross-site");
+  eq(await status("/api/s/5/type", {method: "POST", body: '{"text":"x"}',
+    headers: {...HOST, "content-type": "text/plain"}}), 415, "a POST that needs no preflight");
 });
 
 Deno.test("runServer: the list stream, and a taken port is an error, not a throw", async () => {
