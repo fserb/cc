@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="#181020">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -23,7 +23,11 @@ body { font: 17px/1.4 var(--mono); -webkit-tap-highlight-color: transparent; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 a { color: var(--accent); }
 
-.app { height: 100dvh; display: flex; flex-direction: column; }
+/* sized by the visual viewport, which the keyboard shrinks; 100dvh does not move for it on
+   iOS, and the bottom bar sat under the keyboard */
+.app { position: fixed; left: 0; right: 0; top: var(--vt, 0); height: var(--vh, 100dvh); display: flex; flex-direction: column; }
+html, body { overflow: hidden; }
+.kb .compose, .kb .foot, .kb .readonly { padding-bottom: 8px; }
 header {
   display: flex; align-items: center; gap: 6px; background: var(--bar);
   padding: calc(env(safe-area-inset-top) + 3px) 6px 3px; border-bottom: 1px solid var(--edge);
@@ -665,6 +669,23 @@ document.addEventListener("visibilitychange", () => {
   openList();
   if (view?.s && !view.s.gone && view.s.end !== null) view.open();
 });
+
+// The keyboard shrinks the visual viewport and leaves the layout one where it was, and
+// iOS scrolls the page under it to keep the field in view. Pinning the app to the visual
+// viewport keeps the bottom bar on top of the keyboard; with the keyboard up the home
+// indicator's safe-area padding is under the keyboard, so it goes.
+function fit() {
+  const vv = visualViewport;
+  if (!vv) return;
+  const m = $("main"), stick = m && m.scrollHeight - m.scrollTop - m.clientHeight < 80;
+  document.documentElement.style.setProperty("--vh", `${vv.height}px`);
+  document.documentElement.style.setProperty("--vt", `${vv.offsetTop}px`);
+  document.documentElement.classList.toggle("kb", innerHeight - vv.height > 120);
+  if (stick) m.scrollTop = m.scrollHeight;
+}
+visualViewport?.addEventListener("resize", fit);
+visualViewport?.addEventListener("scroll", fit);
+fit();
 
 addEventListener("hashchange", route);
 openList();
