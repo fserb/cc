@@ -30,6 +30,7 @@ header {
   display: flex; align-items: center; gap: 4px; background: var(--bar);
   padding: calc(env(safe-area-inset-top) + 6px) 6px 6px; border-bottom: 1px solid var(--edge);
 }
+header .title[data-go] { cursor: pointer; line-height: 48px; }
 header .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 header > .title:first-child { padding-left: 8px; }
 header .title b { color: var(--accent); font-size: 20px; }
@@ -376,7 +377,7 @@ function sessionView(pid, tab) {
     const r = s.row ?? {pid, name: "", path: "", state: "free"};
     const pane = r.hasPane;
     return `<button class="icon" data-go="#">‹</button>
-      <div class="title">${glyph(r)} <b>${esc(nameOf(r))}</b><small>${esc(r.path)}</small></div>
+      <div class="title" data-go="#">${glyph(r)} <b>${esc(nameOf(r))}</b><small>${esc(r.path)}</small></div>
       ${pane ? `<button class="icon sw${s.tab === "screen" ? " on" : ""}" data-tab title="${s.tab === "screen" ? "show the history" : "show the pane"}">${s.tab === "screen" ? "≡" : "&gt;_"}</button>
       <button class="icon" data-spawn="${esc(r.path)}" data-after="${esc(r.pane)}" data-open title="new claude beside this one">+</button>` : ""}`;
   };
