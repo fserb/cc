@@ -162,6 +162,16 @@ The session log is `~/.claude/projects/<slug>/<sessionId>.jsonl`. One measured h
   messages, `task-notification`, `mode`, `file-history-snapshot`, `last-prompt`
 - a turn is written one content block per line, so a reply appears block by block, not
   token by token. The screen view is where the in-progress text is
+- **a prompt typed while a turn runs is not a `user` record**: it is a `queued_command`
+  attachment with `commandMode: "prompt"` (411 over 60 logs, none also written as a
+  `user` record). A peer message landing mid-turn is one too, and 315 of 2415 of those
+  are also written as a `user` record, so peer events carry `msg_id` and repeats drop
+- a tool's result is its own event, `result`, joined to its `tool` on `id` by the page.
+  They can sit on different pages, and while following, the result arrives later
+
+Built: `transcript.js`, `readPage(path, before)` and `readFrom(path, offset)`, events
+`user`, `peer`, `text`, `tool`, `result`, `command` (a slash command or `!`), `output`
+(its stdout), `note` (interrupted, compacted). Paging all of 60 logs, 545MB, takes 1s.
 
 Markdown rendering is a small hand-written subset (paragraphs, code fences, inline code,
 lists, bold, links) in the page. No dependency. Undocumented format, same caveat as
