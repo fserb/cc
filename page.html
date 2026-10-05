@@ -381,7 +381,7 @@ function sessionView(pid, tab) {
     return `<button class="icon" data-go="#">‹</button>
       <div class="title" data-go="#">${glyph(r)} <b>${esc(nameOf(r))}</b><small>${esc(r.path)}</small></div>
       ${pane ? `<button class="icon sw${s.tab === "screen" ? " on" : ""}" data-tab title="${s.tab === "screen" ? "show the history" : "show the pane"}">${s.tab === "screen" ? "≡" : "&gt;_"}</button>
-      <button class="icon" data-spawn="${esc(r.path)}" data-after="${esc(r.pane)}" data-open title="new claude beside this one">+</button>` : ""}`;
+      <button class="icon" data-spawn="${esc(r.path)}" data-after="${esc(r.pane)}" title="new claude beside this one">+</button>` : ""}`;
   };
 
   const dialogHtml = () => {
@@ -489,7 +489,13 @@ function sessionView(pid, tab) {
   };
 
   (async () => {
-    const p = await api(`api/s/${pid}/log`);
+    // a claude started a moment ago can be ahead of the server's 1.5s poll, which answers
+    // 404 until it catches up; that is not an exit
+    let p = await api(`api/s/${pid}/log`);
+    for (let n = 0; p.error && n < 8; n++) {
+      await new Promise((ok) => setTimeout(ok, 500));
+      p = await api(`api/s/${pid}/log`);
+    }
     if (p.error) {
       if (!s.row) s.gone = true;
       draw();
@@ -575,20 +581,51 @@ function newView() {
       input.value = typed;
       input.focus();
     },
-    start: async (button) => {
-      const dir = typed.replace(/\/+$/, "") || "/";
-      button.disabled = true;
-      button.textContent = "starting…";
-      const r = await api("api/spawn", {dir, mkdir: $("[data-mkdir]").checked});
-      if (r.error && !r.pane) {
-        button.disabled = false;
-        button.textContent = "start claude";
-        return toast(r.error, true);
-      }
-      if (r.error) toast(r.error, true);
-      if (r.pid) location.hash = `#${r.pid}`;
-    },
+    start: () => startClaude({dir: typed.replace(/\/+$/, "") || "/",
+      mkdir: $("[data-mkdir]").checked}, "in a new kitty window"),
   };
+}
+
+// #starting
+
+// A spawn takes from half a second to several: a new kitty window, a shell, claude, and
+// the server's poll finding it. So the page moves at once, and this one is replaced by the
+// session's when it is known, `replace` so that back is the list and not this.
+let starting = null;
+
+function startClaude(body, where) {
+  starting = {body, where, at: Date.now(), result: api("api/spawn", body)};
+  location.hash = "#starting";
+}
+
+function startingView() {
+  if (!starting) {
+    location.replace("#");
+    return null;
+  }
+  const job = starting;
+  let timer = 0, err = "";
+  const draw = () => {
+    const secs = Math.floor((Date.now() - job.at) / 1000);
+    mount(`<div class="app">
+      <header><button class="icon" data-go="#">‹</button>
+        <div class="title" data-go="#"><span class="g" style="color:${STATE.free.color}">◌</span> <b>starting claude</b><small>${esc(job.where)}</small></div></header>
+      <main><div class="log">
+        <div class="cmd">${esc(job.body.dir)}</div>
+        ${err ? `<div class="gone">${esc(err)}</div>` : `<div class="working">✻ starting… ${secs}s</div>`}
+      </div></main>
+    </div>`);
+  };
+  draw();
+  timer = setInterval(draw, 1000);
+  job.result.then((r) => {
+    if (view?.job !== job) return;          // left the page before it settled
+    if (r.pid) return location.replace(`#${r.pid}`);
+    clearInterval(timer);
+    err = r.error ?? "claude did not start";
+    draw();
+  });
+  return {job, close: () => clearInterval(timer)};
 }
 
 // routing
@@ -598,16 +635,13 @@ function route() {
   const [key, tab] = location.hash.slice(1).split("/");
   if (!key) view = listView();
   else if (key === "new") view = newView();
+  else if (key === "starting") view = startingView();
   else view = sessionView(Number(key), tab === "screen" ? "screen" : "log");
 }
 
-async function spawnBeside(button) {
+function spawnBeside(button) {
   const {spawn: dir, after} = button.dataset;
-  toast(`starting claude in ${dir}…`);
-  const r = await api("api/spawn", {dir, after});
-  if (r.error) return toast(r.error, true);
-  if (button.dataset.open !== undefined) location.hash = `#${r.pid}`;
-  else toast(`started ${r.pid}`);
+  startClaude(after ? {dir, after} : {dir}, after ? "in a new tab beside" : "in a new kitty window");
 }
 
 async function send() {
@@ -650,7 +684,7 @@ document.addEventListener("click", async (e) => {
   } else if (d.send !== undefined) send();
   else if (d.pick !== undefined) pick(t);
   else if (d.dir !== undefined) view.pick(d.dir);
-  else if (d.start !== undefined) view.start(t);
+  else if (d.start !== undefined) view.start();
 });
 
 document.addEventListener("input", (e) => {
