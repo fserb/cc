@@ -13,12 +13,16 @@
 <style>
 @font-face { font-family: Inconsolata; src: url(inconsolata.ttf) format("truetype"); font-weight: 200 900; font-stretch: 50% 200%; }
 :root {
+  /* Chrome keeps the gesture bar inset with the keyboard up (crbug.com/406935609), which
+     leaves a strip of padding between the input and the keyboard */
+  --safe: env(safe-area-inset-bottom);
   --accent: #ceaadf; --mauve: #b8a0be; --dim: #626262; --text: #d6d6dc;
   --bg: #000; --bar: #181020; --panel: #0e0b12; --edge: #35284a; --cursor: #2a1e38;
   --gold: #ffd500; --idle: #82828a; --hint: #4a4a55; --error: #df6565;
   --busy: #93aeaa; --hold: #8a7f9c;
   --mono: Inconsolata, ui-monospace, monospace;
 }
+:root.kb { --safe: 0px; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; background: var(--panel); color: var(--text); }
 body { font: 17px/1.4 var(--mono); -webkit-tap-highlight-color: transparent; }
@@ -27,7 +31,7 @@ a { color: var(--accent); }
 
 /* dvh follows the keyboard only because the viewport meta says
    interactive-widget=resizes-content: Chrome since 108, Firefox; not iOS Safari (2026-10) */
-.app { height: 100dvh; display: flex; flex-direction: column; }
+.app { height: var(--seen, 100dvh); display: flex; flex-direction: column; }
 header {
   display: flex; align-items: center; gap: 4px; background: var(--bar);
   padding: calc(env(safe-area-inset-top) + 6px) 6px 6px; border-bottom: 1px solid var(--edge);
@@ -64,7 +68,7 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .group .icon { width: 36px; height: 36px; font-size: 22px; }
 .group .gc { font-size: 18px; color: var(--idle); white-space: nowrap; }
 /* one empty row's worth under the last, so it does not end on the screen's edge */
-main.list { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
+main.list { padding-bottom: calc(60px + var(--safe)); }
 .empty { padding: 40px 14px; color: var(--hint); text-align: center; }
 
 .log, [data-events] { display: flex; flex-direction: column; gap: 12px; }
@@ -100,7 +104,7 @@ details.tool pre.in { color: var(--mauve); }
 .screen { padding: 10px 8px; }
 .screen pre { font: 14px/1.3 var(--mono); white-space: pre; overflow-x: auto; }
 
-.compose { background: var(--bar); border-top: 1px solid var(--edge); padding: 8px 10px calc(env(safe-area-inset-bottom) + 8px); display: flex; flex-direction: column; gap: 8px; }
+.compose { background: var(--bar); border-top: 1px solid var(--edge); padding: 8px 10px calc(var(--safe) + 8px); display: flex; flex-direction: column; gap: 8px; }
 .dialog { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid #5a4a10; border-radius: 12px; background: #15110a; max-height: 55dvh; overflow-y: auto; }
 .dq { font: 15px/1.4 var(--mono); display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
 .dq .dt { color: var(--gold); font-weight: 600; }
@@ -117,7 +121,7 @@ details.tool pre.in { color: var(--mauve); }
 .in textarea { flex: 1; resize: none; min-height: 40px; max-height: 140px; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--edge); background: #07050a; color: var(--text); font: 17px/1.35 var(--mono); }
 .in textarea::placeholder { color: var(--hint); }
 .in .send { width: 44px; height: 40px; border-radius: 12px; background: var(--accent); color: #1a0f22; font-size: 20px; font-weight: 700; }
-.readonly { padding: 12px 14px calc(env(safe-area-inset-bottom) + 12px); background: var(--bar); border-top: 1px solid var(--edge); font-size: 15px; color: var(--hint); text-align: center; }
+.readonly { padding: 12px 14px calc(var(--safe) + 12px); background: var(--bar); border-top: 1px solid var(--edge); font-size: 15px; color: var(--hint); text-align: center; }
 
 .form { padding: 18px 14px; display: flex; flex-direction: column; gap: 14px; }
 .form label { font-size: 14px; color: var(--idle); }
@@ -132,7 +136,7 @@ details.tool pre.in { color: var(--mauve); }
 .sugg h3 { font-size: 14px; font-weight: 400; color: var(--hint); padding: 8px 12px 4px; text-transform: uppercase; letter-spacing: .05em; }
 .check { display: flex; gap: 10px; align-items: center; font-size: 16px; color: var(--gold); }
 .check input { width: 20px; height: 20px; accent-color: var(--accent); }
-.foot { padding: 14px 14px calc(env(safe-area-inset-bottom) + 14px); border-top: 1px solid var(--edge); background: var(--bar); }
+.foot { padding: 14px 14px calc(var(--safe) + 14px); border-top: 1px solid var(--edge); background: var(--bar); }
 .big { width: 100%; padding: 13px; border-radius: 12px; border: 1px solid var(--edge); font-weight: 600; color: var(--accent); background: var(--cursor); }
 .big:active { background: var(--edge); }
 .big:disabled { color: var(--hint); }
@@ -145,6 +149,19 @@ details.tool pre.in { color: var(--mauve); }
 <script type="module">
 // The ccx page: the listing, one session, and a form to start one. Everything comes from
 // the API beside it; every URL is relative, since caddy serves this under /ccx/.
+
+// the page is as tall as what is visible: with the keyboard up, Chrome on Android sometimes
+// leaves 100dvh taller than that, and the bottom of the input sits behind the keyboard
+function fit() {
+  const {height} = visualViewport;
+  const root = document.documentElement;
+  root.style.setProperty("--seen", `${height}px`);
+  root.classList.toggle("kb", height < screen.height * 0.75);
+  scrollTo(0, 0);
+}
+visualViewport.addEventListener("resize", fit);
+addEventListener("resize", fit);
+fit();
 
 const STATE = {
   wait: {glyph: "●", color: "#ffd500"},
