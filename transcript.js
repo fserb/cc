@@ -68,12 +68,16 @@ function readRange(path, from, to) {
 // The events in the `size` bytes before `before`, or before the end of the log when it is
 // null. Only whole lines: the partial first one is left to the next page back, and with no
 // `before` the unfinished last one to readFrom(). `start` is where the next page back
-// ends, `end` where readFrom() picks up. A page that holds nothing worth drawing, 256KB of
-// attachments, goes on back until it finds something or reaches the top.
-export function readPage(path, before = null, size = PAGE) {
+// ends, `end` where readFrom() picks up. A window goes on back until it holds `want`
+// events, the top or `budget` bytes: one Write's input is 40KB, a Read's result more, and
+// a 256KB tail of those was two lines on the screen.
+export const WANT = 40, BUDGET = 4 * 1024 * 1024;
+
+export function readPage(path, before = null, size = PAGE, want = WANT, budget = BUDGET) {
   const total = sizeOf(path);
   if (total < 0) return {events: [], start: 0, end: 0};
-  let stop = Math.min(before ?? total, total), end = null;
+  let stop = Math.min(before ?? total, total), end = null, events = [];
+  const limit = stop - budget;
   for (let from = Math.max(0, stop - size); ;) {
     const buf = readRange(path, from, stop);
     const a = from === 0 ? 0 : buf.indexOf(10) + 1;
@@ -84,8 +88,10 @@ export function readPage(path, before = null, size = PAGE) {
       continue;
     }
     end ??= from + Math.max(a, b);
-    const events = parse(buf.subarray(a, Math.max(a, b)));
-    if (events.length || from === 0) return {events, start: from + a, end};
+    events = [...parse(buf.subarray(a, Math.max(a, b))), ...events];
+    if (events.length >= want || from === 0 || from <= limit) {
+      return {events, start: from + a, end};
+    }
     stop = from + a;
     from = Math.max(0, stop - size);
   }

@@ -20,10 +20,20 @@ import {logPath, readFrom, readPage} from "./transcript.js";
 import {parseDialog, pick, screen} from "./dialog.js";
 import {sendKeys, typeInto} from "./jump.js";
 import {expandDir, spawn} from "./spawn.js";
+import PAGE from "./page.html" with {type: "text"};
 
 export const PORT = 7681;
 const TICK = 1500;
 const KEEPALIVE = 15000;     // an SSE comment this often, so no proxy calls it idle
+
+// kitty's font, which a phone does not have. OFL, so it can be served; on a box without it
+// the page falls back to the phone's own monospace.
+const FONT = `${HOME}/Library/Fonts/Inconsolata[wdth,wght].ttf`;
+
+const MANIFEST = JSON.stringify({name: "ccx", short_name: "ccx", start_url: "./",
+  scope: "./", display: "standalone", background_color: "#0e0b12", theme_color: "#181020"});
+
+const HOSTNAME = Deno.hostname().split(".")[0];
 
 const tilde = (p) => p && p.startsWith(HOME) ? `~${p.slice(HOME.length)}` : p;
 
@@ -136,7 +146,8 @@ export class Server {
 
   listBody() {
     const {instances, net} = this.source();
-    return {rows: tmuxOrder(instances).map(rowOf), offline: net?.offline ? net.label : ""};
+    return {rows: tmuxOrder(instances).map(rowOf), offline: net?.offline ? net.label : "",
+      host: HOSTNAME};
   }
 
   start() {
@@ -238,7 +249,21 @@ export class Server {
     if (post && !(req.headers.get("content-type") ?? "").startsWith("application/json")) {
       return json({error: "a POST is application/json"}, 415);
     }
-    if (get && path === "/") return new Response(PAGE, {headers: {"content-type": "text/html; charset=utf-8"}});
+    if (get && path === "/") {
+      return new Response(PAGE, {headers: {"content-type": "text/html; charset=utf-8",
+        "cache-control": "no-cache"}});
+    }
+    if (get && path === "/manifest.json") {
+      return new Response(MANIFEST, {headers: {"content-type": "application/manifest+json"}});
+    }
+    if (get && path === "/inconsolata.ttf") {
+      try {
+        return new Response(await Deno.readFile(FONT), {headers: {"content-type": "font/ttf",
+          "cache-control": "max-age=604800"}});
+      } catch {
+        return json({error: "no font here"}, 404);
+      }
+    }
     if (get && path === "/api/list") return json(this.listBody());
     if (get && path === "/api/events") return this.listEvents();
     if (get && path === "/api/dirs") return json(dirsUnder(url.searchParams.get("prefix") ?? ""));
@@ -302,9 +327,3 @@ export function runServer({source, port = PORT, hostname = "127.0.0.1"}) {
     await http.shutdown();
   }};
 }
-
-// The page, until it is written: the API is what this build step is about.
-const PAGE = `<!doctype html>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width">
-<title>ccx</title><p>ccx serve: see <a href="api/list">api/list</a>.</p>
-`;

@@ -84,11 +84,11 @@ Deno.test("readPage: paging back gives every event once, in order", () => {
   for (let n = 0; n < 200; n++) lines.push(user(`prompt ${n} ${"x".repeat(n % 37)}`));
   const path = file(lines);
   const all = [];
-  let p = readPage(path, null, 1000), pages = 1;
+  let p = readPage(path, null, 1000, 1), pages = 1;
   for (;;) {
     all.unshift(...p.events);
     if (p.start === 0) break;
-    p = readPage(path, p.start, 1000);
+    p = readPage(path, p.start, 1000, 1);
     pages++;
   }
   eq(all.map((e) => e.text), lines.map((l) => l.message.content), "nothing lost or repeated");
@@ -98,18 +98,26 @@ Deno.test("readPage: paging back gives every event once, in order", () => {
 Deno.test("readPage: a line longer than the page still arrives whole", () => {
   const big = "y".repeat(5000);
   const path = file([user("first"), assistant({type: "text", text: big}), user("last")]);
-  const tail = readPage(path, null, 100);
+  const tail = readPage(path, null, 100, 1);
   eq(tail.events.map((e) => e.text), ["last"], "the tail page");
-  const back = readPage(path, tail.start, 100);
+  const back = readPage(path, tail.start, 100, 1);
   eq(back.events.map((e) => e.text.length), [5000], "the long line, widened to");
-  eq(readPage(path, back.start, 100).events.map((e) => e.text), ["first"], "and the top");
+  eq(readPage(path, back.start, 100, 1).events.map((e) => e.text), ["first"], "and the top");
+});
+
+Deno.test("readPage: windows go on back until there are enough events, or the budget", () => {
+  const path = file(Array.from({length: 30}, (_, n) => user(`p${n} ${"x".repeat(50)}`)));
+  const p = readPage(path, null, 200, 10);
+  eq([p.events.length >= 10, p.events.at(-1).text.startsWith("p29")], [true, true], "ten or so");
+  eq(readPage(path, null, 200, 1000).start, 0, "all the way to the top when it wants more");
+  eq(readPage(path, null, 200, 1000, 400).events.length < 30, true, "but not past the budget");
 });
 
 Deno.test("readPage: a page of nothing to draw goes on back", () => {
   const noise = Array.from({length: 50}, () => ({type: "attachment", timestamp: T,
     attachment: {type: "date", date: "x".repeat(40)}}));
   const path = file([user("under the noise"), ...noise]);
-  const p = readPage(path, null, 200);
+  const p = readPage(path, null, 200, 1);
   eq(p.events.map((e) => e.text), ["under the noise"], "found past the attachments");
   eq(p.start, 0, "and that was the top");
   eq(p.end, Deno.statSync(path).size, "end is still the end of the log");
