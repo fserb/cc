@@ -20,6 +20,7 @@ import {logPath, readFrom, readPage} from "./transcript.js";
 import {parseDialog, pick, screen} from "./dialog.js";
 import {sendKeys, typeInto} from "./jump.js";
 import {expandDir, spawn} from "./spawn.js";
+import {appIconPng} from "./icon.js";
 import PAGE from "./page.html" with {type: "text"};
 
 export const PORT = 7681;
@@ -31,7 +32,13 @@ const KEEPALIVE = 15000;     // an SSE comment this often, so no proxy calls it 
 const FONT = `${HOME}/Library/Fonts/Inconsolata[wdth,wght].ttf`;
 
 const MANIFEST = JSON.stringify({name: "ccx", short_name: "ccx", start_url: "./",
-  scope: "./", display: "standalone", background_color: "#0e0b12", theme_color: "#181020"});
+  scope: "./", display: "standalone", background_color: "#0e0b12", theme_color: "#181020",
+  icons: [192, 512].map((n) => ({src: `icon-${n}.png`, sizes: `${n}x${n}`,
+    type: "image/png", purpose: "any maskable"}))});
+
+// drawn once, on first ask: the 512 is ~100ms of supersampling
+const ICONS = new Map();
+const iconOf = (px) => ICONS.get(px) ?? ICONS.set(px, appIconPng(px)).get(px);
 
 const HOSTNAME = Deno.hostname().split(".")[0];
 
@@ -255,6 +262,11 @@ export class Server {
     }
     if (get && path === "/manifest.json") {
       return new Response(MANIFEST, {headers: {"content-type": "application/manifest+json"}});
+    }
+    const icon = get && path.match(/^\/icon-(192|512)\.png$/);
+    if (icon) {
+      return new Response(await iconOf(Number(icon[1])), {headers: {"content-type": "image/png",
+        "cache-control": "max-age=604800"}});
     }
     if (get && path === "/inconsolata.ttf") {
       try {

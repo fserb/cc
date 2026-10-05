@@ -147,6 +147,25 @@ export function iconPng(states, scale = 2, offline = false) {
   return png(px, px, rgba);
 }
 
+// The web page's home-screen icon: one dot per state, as the menu bar draws them, on the
+// panel's background. The dots stay inside the middle 60%, since an Android launcher crops
+// a `maskable` icon to its own shape and keeps only the middle 80% for certain.
+const APP_BG = [0x0e, 0x0b, 0x12];
+const APP_STATES = ["wait", "busy", "hold", "free"];
+const APP_BOX = 0.6;
+
+export function appIconPng(px = 192) {
+  const rgba = new Uint8Array(px * px * 4);
+  for (let at = 0; at < rgba.length; at += 4) rgba.set([...APP_BG, 255], at);
+  const box = px * APP_BOX, off = (px - box) / 2;
+  iconDots(APP_STATES, box).forEach(({cx, cy, r}, n) => {
+    const state = APP_STATES[n];
+    if (state === "hold") stamp(rgba, px, cx + off, cy + off, r, r * HOLD_HOLE, DOTS.busy);
+    else stamp(rgba, px, cx + off, cy + off, r, 0, DOTS[state] ?? FREE);
+  });
+  return png(px, px, rgba);
+}
+
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
   for (let n = 0; n < 256; n++) {
