@@ -109,8 +109,9 @@ web page you visit could otherwise reach it two ways, and both are refused befor
 All JSON, all under the page's own path.
 
     GET  api/list                  {rows, offline}: rows are pid, name, path, cwd, state,
-                                   asking, waitsOn, summary, since, age, hasPane, pane,
-                                   session, window, paneIndex; in tmux order, with
+                                   asking, waitsOn, summary, since, hasPane, pane,
+                                   session, window, paneIndex; no age, which would make
+                                   every row change every second; in tmux order, with
                                    `window` and `paneIndex` compared as numbers,
                                    since tmux gives them as strings
     GET  api/events                SSE; `list` with the same body at once, then whenever

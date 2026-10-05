@@ -48,7 +48,7 @@ export function tmuxOrder(instances) {
 
 export function rowOf(i) {
   return {pid: i.pid, name: i.name, path: tilde(i.path), cwd: i.cwd, state: i.state,
-    asking: i.asking, waitsOn: i.waitsOn, summary: i.summary, since: i.since, age: i.age,
+    asking: i.asking, waitsOn: i.waitsOn, summary: i.summary, since: i.since,
     hasPane: Boolean(i.pane), pane: i.pane, session: i.session, window: i.window,
     paneIndex: i.paneIndex};
 }
