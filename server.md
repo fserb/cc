@@ -83,25 +83,40 @@ name, and the server only on 127.0.0.1. No auth in ccx.
 
 All JSON, all under the page's own path.
 
-    GET  api/list                  rows: pid, session, name, path, state, asking, waitsOn,
-                                   summary, age, hasPane; in tmux order, with
+    GET  api/list                  {rows, offline}: rows are pid, name, path, cwd, state,
+                                   asking, waitsOn, summary, since, age, hasPane, pane,
+                                   session, window, paneIndex; in tmux order, with
                                    `window` and `paneIndex` compared as numbers,
                                    since tmux gives them as strings
-    GET  api/events                SSE; `list` event with the rows whenever they change
-    GET  api/s/<pid>/log?before=N  transcript page ending before byte offset N (tail if no N)
-    GET  api/s/<pid>/events        SSE; `log` events as the transcript grows, `screen` when
-                                   the capture changes, `state` on a state change
-    POST api/s/<pid>/type   {text}       typeInto()
-    POST api/s/<pid>/pick   {n}          choose option n of the dialog that is up
-    POST api/s/<pid>/esc                 Escape
+    GET  api/events                SSE; `list` with the same body at once, then whenever
+                                   it changes
+    GET  api/s/<pid>/log?before=N  {events, start, end}: the page ending before byte N,
+                                   the tail with no N. `start` is the next N back
+    GET  api/s/<pid>/events?from=N SSE from byte N (or Last-Event-ID): `state` with the
+                                   row, `log` {events, end, reset?} with `end` as its id,
+                                   `screen` {text}, `dialog` (parsed, or null), `gone`
+                                   when the pid leaves the poll. No N: the tail, as a reset
+    GET  api/s/<pid>/screen        {text, dialog}, once
+    POST api/s/<pid>/type   {text}         typeInto()
+    POST api/s/<pid>/pick   {i, labels}    option i of the dialog, refused unless its
+                                           labels are still `labels`
+    POST api/s/<pid>/esc                   Escape
     POST api/spawn  {dir, after?, mkdir?}
                                    with `after`, a pane id: a new tmux window right after
                                    that pane's, in its session. Without: a new kitty
-                                   window. Answers {pid}
-    GET  api/dirs?prefix=~/ai/c    subdirectories under prefix, for the dir field
+                                   window. Answers {pid, pane}
+    GET  api/dirs?prefix=~/ai/c    {dirs, exists}: subdirectories under prefix, for the
+                                   dir field, and whether prefix itself is one
 
 Errors use the existing convention: the functions return a message or null, and the
-server answers `{error}` with 409 for "not in tmux" and 502 for a tmux failure.
+server answers `{error}` with 502 when the message starts `tmux:` and 409 otherwise (not
+in tmux, no dialog, the dialog changed), 400 for a malformed body.
+
+Built: `server.js` and `ccx serve [--port N]`. Run against a scratch session through every
+route: spawn into a new directory, `pick` refusing stale labels with 409 and then
+answering folder trust, `type` starting a turn, `esc` interrupting it (busy to wait), the
+log showing the prompt and the partial reply. The session stream follows a /clear, which
+starts a new log under a new sessionId, by checking the path every tick.
 
 **pid is checked against the current poll** before any action. A pid that is no longer
 a claude is 404: `typeInto` on a pane whose claude exited types into whatever shell took

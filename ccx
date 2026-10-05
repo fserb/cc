@@ -18,6 +18,7 @@ import {Online} from "./online.js";
 // down with it, which is the same reason `systray.js` is reached this way.
 const peerModule = () => import("./peer.js");
 const chatModule = () => import("./chat.js");
+const serverModule = () => import("./server.js");
 
 // render
 
@@ -812,6 +813,45 @@ async function cmdFocus(pid) {
   Deno.exit(1);
 }
 
+// ccx serve [--port N]
+// The HTTP server alone, with its own poll; `ccx systray` runs the same server off its own.
+async function cmdServe(...args) {
+  let port;
+  for (let n = 0; n < args.length; n++) {
+    if (args[n] !== "--port" || !/^\d+$/.test(args[n + 1] ?? "")) usage();
+    port = Number(args[++n]);
+  }
+  let mod;
+  try {
+    mod = await serverModule();
+  } catch (e) {
+    console.error(`serve: ${e.message ?? e}`);
+    Deno.exit(1);
+  }
+  const clock = new StateClock(), net = new Online();
+  let instances = [], polling = false;
+  const poll = async () => {
+    net.tick();
+    if (polling) return;
+    polling = true;
+    try {
+      instances = clock.update(await discover());
+    } finally {
+      polling = false;
+    }
+  };
+  await poll();
+  setInterval(poll, 1500);
+  port ??= mod.PORT;
+  const r = mod.runServer({source: () => ({instances, net}), port});
+  if (r.error) {
+    console.error(`serve: ${r.error}`);
+    Deno.exit(1);
+  }
+  console.log(`ccx serve on http://127.0.0.1:${port}/`);
+  await new Promise(() => {});
+}
+
 const BUNDLE = `${import.meta.dirname}/ccx.app`;
 
 // Deno.Tray is undefined under `deno run`: with the desktop globals this *is* the tray,
@@ -979,6 +1019,7 @@ const COMMANDS = {
   send: [cmdSend, -1],               // -1: its own validation, since the message is the rest
   user: [cmdUser, -1],
   chat: [cmdChat, -1],
+  serve: [cmdServe, -1],
   systray: [cmdSystray, -1],         // -1: passes its own flags through to the bundle
   help: [cmdHelp, 0],
   "-h": [cmdHelp, 0],
@@ -1000,6 +1041,7 @@ const HELP = [
   ["  send <target> <message...>", "a chat message to one or more instances"],
   ["  user <target> <text...>", "typed into an instance as its user, /commands included"],
   ["  chat [--no-follow]", "what the agents here have said to each other"],
+  ["  serve [--port N]", "the web page and its API on 127.0.0.1, port 7681"],
   ["  systray", "the menu bar app, needs ./task build"],
   ["  help", "this"],
   "",
