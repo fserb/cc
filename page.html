@@ -46,6 +46,8 @@ header .title .g { font-weight: bold; }
 .counts { font-size: 19px; color: var(--idle); white-space: nowrap; }
 .counts .off { color: var(--error); }
 main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+/* a long press on something you tap selects nothing; the log and the pane stay selectable */
+header, .rows, .group, .sugg, .opt, .icon { -webkit-user-select: none; user-select: none; }
 
 .rows { list-style: none; }
 .rows li a {
@@ -388,6 +390,14 @@ function sessionView(pid, tab) {
     const m = $("main");
     if (m) m.scrollTop = m.scrollHeight;
   };
+  // the log shrinking or growing under the keyboard, a dialog or the textarea keeps its
+  // bottom edge where it was, so what was in view above the input stays in view
+  let seen = 0;
+  const keep = new ResizeObserver(([e]) => {
+    const h = e.target.clientHeight;
+    e.target.scrollTop += seen - h;
+    seen = h;
+  });
 
   // a result is drawn into its tool's <details>, which may be on an older page or not
   // arrived yet; one that has no tool here is left out
@@ -447,6 +457,9 @@ function sessionView(pid, tab) {
     if (s.tab !== "screen") render(s.events, $("[data-events]"));
     const ta = $("textarea");
     if (ta) ta.value = draft;
+    keep.disconnect();
+    seen = $("main").clientHeight;
+    keep.observe($("main"));
     toBottom();
     drawn = true;
   };
@@ -486,19 +499,26 @@ function sessionView(pid, tab) {
       if (!was || was.hasPane !== s.row.hasPane) return draw();
       if (before === JSON.stringify([s.row.state, s.row.asking, s.row.name, s.row.hasPane])) return;
       $("header").innerHTML = header();
+      const stick = nearBottom();
       const w = $(".working");
       if (w) w.hidden = s.row.state !== "busy";
       redrawDialog();
+      if (stick) toBottom();
     });
     s.stream.addEventListener("screen", (e) => {
       s.screen = JSON.parse(e.data).text;
       if (s.tab !== "screen") return;
       const pre = $(".screen pre");
-      if (pre) pre.textContent = s.screen;
+      if (!pre) return;
+      const stick = nearBottom();
+      pre.textContent = s.screen;
+      if (stick) toBottom();
     });
     s.stream.addEventListener("dialog", (e) => {
       s.dialog = JSON.parse(e.data);
+      const stick = nearBottom();
       redrawDialog();
+      if (stick) toBottom();
     });
     s.stream.addEventListener("gone", () => {
       s.gone = true;
@@ -545,7 +565,7 @@ function sessionView(pid, tab) {
         draw();
       }
     },
-    close: () => s.stream?.close(),
+    close: () => { s.stream?.close(); keep.disconnect(); },
   };
 }
 
