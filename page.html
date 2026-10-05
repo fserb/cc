@@ -56,9 +56,10 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .sub .p { color: var(--mauve); }
 .sub .on { color: var(--hold); }
 .rows li.notmux .nm::after { content: " no tmux"; font-size: 14px; color: var(--hint); }
-.group { display: flex; align-items: center; gap: 10px; padding: 14px 14px 6px; position: sticky; top: 0; background: var(--panel); border-bottom: 1px solid var(--edge); z-index: 1; }
-.group .gp { flex: 1; min-width: 0; font-weight: 600; color: var(--mauve); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.group .gc { font-size: 15px; color: var(--idle); white-space: nowrap; }
+.group { display: flex; align-items: center; gap: 10px; padding: 4px 6px 4px 14px; position: sticky; top: 0; background: var(--panel); border-bottom: 1px solid var(--edge); z-index: 1; }
+.group .gp { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; color: var(--mauve); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group .icon { width: 36px; height: 36px; font-size: 22px; }
+.group .gc { font-size: 14px; color: var(--idle); white-space: nowrap; }
 .empty { padding: 40px 14px; color: var(--hint); text-align: center; }
 
 .log, [data-events] { display: flex; flex-direction: column; gap: 12px; }
