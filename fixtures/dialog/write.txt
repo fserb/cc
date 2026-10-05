@@ -1,0 +1,40 @@
+
+❯ Run the shell command date > now.txt with the Bash tool. Nothing else.
+
+  Ran 1 shell command
+
+⏺ I ran date > now.txt. It finished without errors and wrote the current date to now.txt in /private/tmp/ccx-dlg.
+
+✻ Crunched for 4s · done 8:02 PM
+
+❯ Use the AskUserQuestion tool once, with two questions: first "Pick a colour" single-select with options red, green,
+  blue; second "Pick fruits" multiSelect with options apple, pear, plum. Then just report the answers.
+
+⏺ User answered Claude's questions:
+  ⎿  · Pick a colour → blue
+     · Pick fruits → apple, plum
+
+⏺ Your answers:
+  - Colour: blue
+  - Fruits: apple, plum
+
+✻ Crunched for 7s · done 8:04 PM
+
+❯ Use the Write tool to create notes.md containing three lines: alpha, beta, gamma. Nothing else.
+
+⏺ Write(notes.md)
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Create file
+ notes.md
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  1 alpha
+  2 beta
+  3 gamma
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Do you want to create notes.md?
+ ❯ 1. Yes
+   2. Yes, and switch to accept edits (auto-approve file edits and common file commands) for this session (shift+tab)
+   3. No
+
+ Esc to cancel · Tab to amend

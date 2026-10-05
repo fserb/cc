@@ -1,0 +1,17 @@
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ First run
+
+│ The cache takes about 14 s to build the first time. What should the first run do?
+
+❯ 1. Wait for it (~14 s once)
+     The first run is slower; every run after it is fast.
+  2. Build it in the background
+     Starts at once; slow until the cache is built.
+  3. Build it only when needed
+     Starts at once; waits only for what it needs.
+  4. Type something.
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── demo ─

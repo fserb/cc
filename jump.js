@@ -155,3 +155,12 @@ export async function typeInto(inst, text) {
     "send-keys", "-t", inst.pane, "Enter");
   return r.code === 0 ? null : `tmux: ${r.err.trim() || `exit ${r.code}`}`;
 }
+
+// Press `keys`, tmux key names, on the instance's pane, in one call. An error message, or
+// null when it worked. Same caveat as typeInto(): a pane whose claude exited since takes
+// them in its shell.
+export async function sendKeys(inst, keys) {
+  if (!inst.pane) return `pid ${inst.pid} is not inside tmux; nothing to send keys to`;
+  const r = await run("tmux", "send-keys", "-t", inst.pane, ...keys);
+  return r.code === 0 ? null : `tmux: ${r.err.trim() || `exit ${r.code}`}`;
+}

@@ -117,28 +117,28 @@ every 1.5s, and only sends when the text changed.
 
 ## Dialogs
 
-The dialog is not in the transcript and not in the record beyond `waitingFor` naming its
-kind, so its text comes from the screen. While the record says `waiting`, the server
-parses the capture's bottom block (the same `capture-pane -p` the screen view uses):
+Built: `dialog.js`, `parseDialog(text)` and `pick(inst, i, labels)`, tested against
+captures of six kinds in `fixtures/dialog`: folder trust, a Bash and a Write permission,
+the question tool single-select, multi-select and review page, and plan approval. The
+findings are at the top of `dialog.js`; the ones that changed the design:
 
-- **options**: lines matching `^\s*(❯\s*)?(\d+)\.\s+(.*)`, each continued by the indented
-  lines under it until the next number or a blank line. `❯` marks the current one
-- **the rest of the box** above the first option is the card's text: title, command or
-  path, question. Box-drawing characters stripped
-- the parse is sent as a `dialog` event on the session stream, `{title, body, options}`,
-  or `null` when nothing parses
+- **folder trust has no record** until it is answered, so `waitingFor` cannot gate the
+  parse. The server parses the screen whenever the state is wait, and the bottom-of-screen
+  rule in `dialog.js` keeps an idle input box from reading as a dialog
+- **folder trust is not numbered and its default is "No, exit"**. The options are the
+  block around the `❯` cursor, numbered or bare, not every `N.` line on screen: a plan's
+  own steps are numbered above the options approving it
+- **a digit alone picks a numbered option**, no Enter, measured on a permission and the
+  question tool; on a multi-select it toggles the box. A bare option (folder trust, the
+  multi-select's `Submit`) is arrows from the cursor, then Enter
+- the dialog's text is the lines between the `─` rule above it and its options, `╌` rules
+  and the question tool's `│` stripped; first line the title
+- a wrapped label continues at the column a description uses, so both land in `detail`
+- `pick` re-captures and refuses with "the dialog changed" unless the labels are the ones
+  the page drew. Live: a stale list was refused, then `No` declined a Bash command
 
-**Picking.** `pick n` sends ↑ or ↓ from the `❯` row to row n, then Enter, in one tmux
-call. Arrows rather than the digit: the cursor and Enter are what every list menu in
-Claude Code shares, numbered or not. Unverified whether a digit alone selects; if it does
-on every dialog, that is one key instead of several. The server re-captures and
-re-parses right before sending, and refuses with 409 if the options changed since the
-page drew them, so a tap never lands on a different dialog.
-
-**When nothing parses** (a dialog drawn differently, a multi-select with checkboxes, a
-release that changes the box), the card says so and the screen view is the fallback, where
-`esc` and the textarea still work. Each dialog kind that does not parse is a case to add,
-named by `waitingFor`.
+Not tried yet: picking "Type something." and then typing, and dialogs other than these
+six. One that does not parse shows the screen view, where `esc` and the textarea work.
 
 ## Transcript
 
@@ -275,9 +275,10 @@ record whose `tmux` names the new pane, up to 10s, and answers with its pid. The
 `#<pid>`. A timeout answers with the pane id and an error; the screen view still works
 off the pane.
 
-**Folder trust.** A directory claude has not seen opens on its trust dialog. The record
-says `waiting`, its options parse like any other dialog, and tapping the first answers
-it. Nothing special-cased.
+**Folder trust.** A directory claude has not seen opens on its trust dialog, with no
+record yet, so the new pid cannot come from one until it is answered. Its options parse
+(bare, `❯ No, exit` first), and the page shows it like any other dialog. Tapping the first
+option exits claude, so the button order on the card has to read clearly.
 
 ## Phase 2: notifications
 
@@ -329,7 +330,6 @@ Each is a guess the build has to check before relying on it:
 - `ktmux`'s `tmux new-session` starts in the `cwd` kitty gave the window
 - `sendKitty("launch", ...)` to a client tty opens an OS window; `focus-window` is the
   only command sent that way so far
-- whether a digit alone picks a dialog option, which would replace the arrows
 
 ## Open questions
 

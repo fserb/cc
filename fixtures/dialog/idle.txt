@@ -1,0 +1,40 @@
+
+✻ Crunched for 7s · done 8:04 PM
+
+❯ Use the Write tool to create notes.md containing three lines: alpha, beta, gamma. Nothing else.
+
+⏺ Write(notes.md)
+  ⎿  User rejected write to notes.md
+      1 alpha
+      2 beta
+      3 gamma
+
+✻ Worked for 1s · done 8:04 PM
+
+❯ Use EnterPlanMode, write a two-line plan to create x.txt, then call ExitPlanMode to ask me to approve it.
+
+⏺ Entered plan mode
+  Claude is now exploring and designing an implementation approach.
+
+⏺ Updated plan
+  ⎿  /plan to preview
+  ⎿  User rejected Claude's plan:
+     ╭───────────────────────────────────────────────────────────╮
+     │ 1. Create /private/tmp/ccx-dlg/x.txt with the Write tool. │
+     │ 2. Leave it empty unless you specify content.             │
+     ╰───────────────────────────────────────────────────────────╯
+
+✻ Worked for 7s · done 8:05 PM
+
+❯ Reply with just "ok":
+  1. first
+  2. second
+
+⏺ ok
+
+✻ Baked for 1s · done 8:06 PM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ plan mode on (shift+tab to cycle) · ← for agents
