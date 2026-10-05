@@ -27,7 +27,8 @@ clean() {
 # extension, so anything that reads it types it as TypeScript.
 test() {
   deno test -A --ext js "$ROOT/ccx_test.js" "$ROOT/chat_test.js" "$ROOT/peer_test.js" \
-    "$ROOT/transcript_test.js" "$ROOT/dialog_test.js" "$@"
+    "$ROOT/transcript_test.js" "$ROOT/dialog_test.js" \
+    "$ROOT/spawn_test.js" "$@"
 }
 
 check() {

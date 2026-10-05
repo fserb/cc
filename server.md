@@ -235,9 +235,12 @@ looks the same as one started by hand, and drops back to zsh when it exits.
 **Beside an instance, or in a group.** One tmux call, `after` being the instance's pane or
 the group's last:
 
-    new-window -a -t <after> -c <dir> -P -F '#{pane_id}'
+    display-message -p -t <after> '#{session_name}:#{window_index}'
+    new-window -a -d -t <that> -c <dir> -P -F '#{pane_id}'
 
-`-a` puts it right after that pane's window, in the same kitty window. Then
+`new-window -t` takes a window and refuses a pane ("can't specify pane here"), hence the
+lookup. `-a` puts it right after that window, in the same kitty window, and renumbers the
+rest; `-d` leaves the desk on the window it is showing. Then
 `typeInto({pane}, "claude")`: it takes an instance and reads only `pane` and `pid`. The tmux server's environment is what the new zsh inherits,
 not the launchd plist's, so `claude` is on PATH as it is in any other tab.
 
@@ -254,9 +257,7 @@ like any other.
 - nothing comes back on a tty, so the new pane is found by diffing `list-sessions` before
   and after: the one new `kitty-*` session, polled up to 5s. Then `typeInto({pane},
   "claude")`
-- unverified: that `tmux new-session` in `ktmux` starts in the `cwd` kitty gave the
-  window. tmux uses the client's working directory when there is no `-c`, so it should;
-  if not, `ktmux` takes `-c "$PWD"`
+- `ktmux`'s `tmux new-session` starts in the `cwd` kitty gave the window, measured
 - **macOS only.** Here one kitty process (pid 656) already holds every OS window, and
   focus matches on the window's child pid, so one more window costs nothing. On Linux,
   `raiseWindow()` finds the niri window by kitty's own pid and assumes one window per
@@ -267,13 +268,15 @@ like any other.
   -d -s ccx-<basename> -c <dir>`, detached, which the phone can use and the desk reaches
   with `tmux attach`
 
-**Finding the new pid.** Once the pane is known, both kinds go the same way. It exists at
-once, claude's record ~600ms after it starts. The record's `tmux` field is
-`<session>:@<window_id>.<pane_id>`, e.g. `kitty-17937:@8.%8`, and `pane_id` already
-carries the `%`, so the match is `tmux.endsWith(\`.${pane}\`)`. The server waits for a
-record whose `tmux` names the new pane, up to 10s, and answers with its pid. The page then opens
-`#<pid>`. A timeout answers with the pane id and an error; the screen view still works
-off the pane.
+**Finding the new pid.** Once the pane is known, both kinds go the same way. Not by the
+record: a new directory opens on folder trust, which writes none until it is answered. So
+`discover()` is polled until an instance sits in the new pane, which walks claude's
+process up to it, up to 10s. The page then opens `#<pid>`. A timeout answers with the pane
+id and an error; the screen view still works off the pane.
+
+Built: `spawn.js`, `spawn({dir, after, mkdir})`. Measured live: beside, 457ms from the call
+to the pid; a new kitty window, 657ms. `claude` typed before the login zsh is up still
+arrives.
 
 **Folder trust.** A directory claude has not seen opens on its trust dialog, with no
 record yet, so the new pid cannot come from one until it is answered. Its options parse
@@ -327,9 +330,8 @@ Frontend:
 
 Each is a guess the build has to check before relying on it:
 
-- `ktmux`'s `tmux new-session` starts in the `cwd` kitty gave the window
-- `sendKitty("launch", ...)` to a client tty opens an OS window; `focus-window` is the
-  only command sent that way so far
+- picking the question tool's "Type something." and then typing the answer
+- spawning on Linux, `kitty --directory`, which nothing here has run
 
 ## Open questions
 
