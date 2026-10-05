@@ -27,16 +27,16 @@ a { color: var(--accent); }
    interactive-widget=resizes-content: Chrome since 108, Firefox; not iOS Safari (2026-10) */
 .app { height: 100dvh; display: flex; flex-direction: column; }
 header {
-  display: flex; align-items: center; gap: 6px; background: var(--bar);
-  padding: calc(env(safe-area-inset-top) + 3px) 6px 3px; border-bottom: 1px solid var(--edge);
+  display: flex; align-items: center; gap: 4px; background: var(--bar);
+  padding: calc(env(safe-area-inset-top) + 6px) 6px 6px; border-bottom: 1px solid var(--edge);
 }
 header .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 header > .title:first-child { padding-left: 8px; }
-header .title b { color: var(--accent); font-size: 18px; }
-header .title small { margin-left: 8px; color: var(--idle); font-size: 14px; }
+header .title b { color: var(--accent); font-size: 20px; }
+header .title small { margin-left: 8px; color: var(--idle); font-size: 15px; }
 header .title .g { font-weight: bold; }
-.icon { flex: none; width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; font-size: 24px; color: var(--accent); }
-.icon.sw { font: 600 17px var(--mono); }
+.icon { flex: none; width: 48px; height: 48px; border-radius: 10px; display: grid; place-items: center; font-size: 28px; color: var(--accent); }
+.icon.sw { font: 600 19px var(--mono); }
 .icon.sw.on { background: var(--cursor); }
 .icon:active { background: var(--cursor); }
 .counts { font-size: 15px; color: var(--idle); white-space: nowrap; }
