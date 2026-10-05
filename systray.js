@@ -193,17 +193,19 @@ function panelWindow() {
   return null;
 }
 
-/* Send `name` with one plain argument to the panel on the main thread. Calling these off
+/* Send `name` with one plain argument to the panel, or `app`, on the main thread. Calling these off
  * it is a SIGTRAP in AppKit's NSWMWindowCoordinator, not a silent no-op, and they take a
  * word, a double or a BOOL, not an object, so `performSelectorOnMainThread:` cannot carry
  * them. An NSInvocation can: it holds the target, selector and argument, and `invoke` is a
  * selector with no argument.
  */
-function onMain(name, arg) {
+function onMain(name, arg, app = false) {
   try {
     const s = objc();
     const sel = (n) => s.sel_registerName(CSTR.encode(`${n}\0`));
-    const w = panelWindow();
+    const w = app
+      ? s.msg(s.objc_getClass(CSTR.encode("NSApplication\0")), sel("sharedApplication"))
+      : panelWindow();
     if (!w) return;
     const set = sel(name);
     const sig = s.with(w, sel("methodSignatureForSelector:"), set);
@@ -227,6 +229,13 @@ function onMain(name, arg) {
  */
 function joinAllSpaces() {
   onMain("setCollectionBehavior:", new BigUint64Array([(1n << 0n) | (1n << 8n)]));
+}
+
+/* No dock icon. The runtime sets its own activation policy at startup, which outranks
+ * LSUIElement in the bundle and Deno.dock.setVisible(false); Accessory is 1.
+ */
+function accessory() {
+  onMain("setActivationPolicy:", new BigInt64Array([1n]), true);
 }
 
 /* A closed panel is parked off screen, and parking is not enough: when the displays change,
@@ -742,6 +751,7 @@ export async function runSystray(argv = Deno.args) {
   // `ccx systray` starts it, the app died at ~300ms every time.
   await closeAdopted(adopted, panel);
   if (MAC) joinAllSpaces();   // the panel is visible now, so its NSWindow exists
+  if (MAC) accessory();
   if (MAC) seen(false);
 
   /* The states in rank order and the slash are the whole of the icon, so comparing that
@@ -771,7 +781,6 @@ export async function runSystray(argv = Deno.args) {
     panel.executeJs(`ccx(${json(model.view())})`).catch(() => {});
   }
 
-  desktop.dock?.setVisible(false);   // no dock icon; Deno.dock is macOS only
   const err = registerHotkey(() => toggle());
   if (err) console.error(`${err}; the menu bar icon still works`);
 
