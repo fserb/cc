@@ -78,6 +78,10 @@ The server binds **127.0.0.1 only**, default port 7681. Caddy already terminates
         }
     }
 
+Added to `/opt/homebrew/etc/Caddyfile` after `/boxerz` and reloaded, 2026-10-04. Through
+it: `/ccx` redirects to `/ccx/`, the page, the font and the API answer, both SSE streams
+arrive unbuffered, a `text/plain` POST is refused, and `/boxerz` still answers.
+
 Then `https://marx.giraffe-yo.ts.net/ccx/` from the phone. `handle_path` strips the prefix,
 so every URL in the page is relative (`api/list`, never `/api/list`).
 
