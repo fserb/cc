@@ -102,6 +102,7 @@ details.tool pre.in { color: var(--mauve); }
 .screen pre { font: 14px/1.3 var(--mono); white-space: pre; overflow-x: auto; }
 
 .compose { background: var(--bar); border-top: 1px solid var(--edge); padding: 8px 10px calc(var(--safe) + 8px); display: flex; flex-direction: column; gap: 8px; }
+.kb .compose { padding-bottom: var(--safe); }
 .dialog { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid #5a4a10; border-radius: 12px; background: #15110a; max-height: 55dvh; overflow-y: auto; }
 .dq { font: 15px/1.4 var(--mono); display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
 .dq .dt { color: var(--gold); font-weight: 600; }
@@ -159,7 +160,9 @@ function fit() {
   const {height} = visualViewport;
   const root = document.documentElement;
   root.style.setProperty("--seen", `${height}px`);
-  if (height >= screen.height * 0.75) {
+  const kb = height < screen.height * 0.75;
+  root.classList.toggle("kb", kb);
+  if (!kb) {
     inset = probe.offsetHeight;
     root.style.removeProperty("--safe");
   } else {
