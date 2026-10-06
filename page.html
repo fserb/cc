@@ -97,6 +97,13 @@ details.tool.err summary::before { color: var(--error); }
 details.tool summary b { color: #5c5c64; font-weight: 600; }
 details.tool pre { margin: 6px 0 0 16px; padding-left: 8px; border-left: 1px solid var(--edge); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--dim); font: 14px/1.4 var(--mono); }
 details.tool pre.in { color: var(--mauve); }
+details.tools > summary { list-style: none; cursor: pointer; font: 15px/1.4 var(--mono); color: #46464e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+details.tools > summary::-webkit-details-marker { display: none; }
+details.tools > summary::before { content: "▸ "; color: var(--busy); opacity: .5; }
+details.tools[open] > summary::before { content: "▾ "; }
+details.tools.err > summary::before { color: var(--error); opacity: 1; }
+details.tools > summary b { color: #5c5c64; font-weight: 600; }
+details.tools > div { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 0 16px; }
 .working { font-size: 15px; color: var(--busy); }
 .gone { font-size: 15px; color: var(--error); text-align: center; }
 
@@ -404,12 +411,39 @@ function sessionView(pid, tab) {
   const attach = (root, e) => {
     const d = root.querySelector(`[data-tool="${CSS.escape(e.id)}"]`);
     if (!d) return;
+    if (e.error) d.closest(".tools")?.classList.add("err");
     if (e.error) d.classList.add("err");
     d.insertAdjacentHTML("beforeend", `<pre>${esc(e.text || (e.images ? `[${e.images} image]` : "(no output)"))}</pre>`);
+  };
+  // tool calls in a row fold into one line that names them, so a turn of forty reads is
+  // one row until it is opened; a lone call stays as it is
+  const name = (d) => d.querySelector("summary b").textContent;
+  const label = (g) => {
+    const calls = [...g.querySelectorAll("details.tool")];
+    const n = new Map();
+    for (const d of calls) n.set(name(d), (n.get(name(d)) ?? 0) + 1);
+    const names = [...n].map(([k, c]) => c > 1 ? `${k} ×${c}` : k).join(", ");
+    g.querySelector(":scope > summary").innerHTML = `<b>${calls.length} tools</b> ${esc(names)}`;
+  };
+  const addTool = (root, e) => {
+    const last = root.lastElementChild;
+    if (last?.matches("details.tools")) {
+      last.querySelector(":scope > div").insertAdjacentHTML("beforeend", eventHtml(e));
+      return label(last);
+    }
+    if (!last?.matches("details.tool")) return root.insertAdjacentHTML("beforeend", eventHtml(e));
+    const g = document.createElement("details");
+    g.className = last.classList.contains("err") ? "tools err" : "tools";
+    g.innerHTML = "<summary></summary><div></div>";
+    last.replaceWith(g);
+    g.lastElementChild.append(last);
+    g.lastElementChild.insertAdjacentHTML("beforeend", eventHtml(e));
+    label(g);
   };
   const render = (events, root) => {
     for (const e of events) {
       if (e.type === "result") attach(root, e);
+      else if (e.type === "tool") addTool(root, e);
       else root.insertAdjacentHTML("beforeend", eventHtml(e));
     }
   };
