@@ -232,8 +232,10 @@ function capacity(height, total) {
 }
 
 function usageRow(usage, cols) {
-  return margins(fit([{t: usage.text, c: usage.color}], Math.max(0, cols - 1)), cols,
-    PALETTE.bg);
+  const body = fit([{t: usage.text, c: usage.color}],
+    Math.min(Math.max(0, cols - 2), cells(usage.text)));
+  return paint([{t: " ".repeat(Math.max(0, cols - 1 - span(body)))}], PALETTE.bg) +
+    paint(body, PALETTE.bg) + paint([{t: " "}], PALETTE.bg);
 }
 
 // the usage line takes the bottom row and the table everything above it, "N more" included

@@ -58,7 +58,7 @@ function when(ms) {
 }
 
 // What a UI writes, `usage <used> (<even> - out <when>)` or `(<even> - reset <when>)`,
-// as {text, color}, or null with nothing to say. Red when the rate runs
+// as {text, color}, or null with nothing to say. Orange when the rate runs
 // out before the reset; gold is kept for `wait`.
 export function usageLine(u, now = Date.now()) {
   const p = pace(u, now);
@@ -66,5 +66,5 @@ export function usageLine(u, now = Date.now()) {
   const pct = (n) => `${Math.round(n)}%`;
   const end = p.out ? `out ${when(p.out)}` : `reset ${when(u.resetsAt)}`;
   return {text: `usage ${pct(p.used)} (${pct(p.even)} - ${end})`,
-    color: p.out ? PALETTE.error : PALETTE.mauve};
+    color: p.out ? PALETTE.warn : PALETTE.mauve};
 }

@@ -81,6 +81,7 @@ export const PALETTE = {
   accent: "#ceaadf", mauve: "#b8a0be", dim: "#626262", text: "#d6d6dc",
   bg: "#000000", bar: "#181020", panelBg: "#0e0b12", edge: "#35284a", cursor: "#2a1e38",
   gold: "#ffd500", idle: "#82828a", hint: "#4a4a55", error: "#df6565",
+  warn: "#e8965a",
 };
 
 // the digits label the first ten rows, in the order they are drawn

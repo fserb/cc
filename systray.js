@@ -493,7 +493,8 @@ html, body {
   height: ${FOOT - 4}px; }
 #hints { position: absolute; right: 0; top: 0; color: ${PALETTE.dim}; }
 #usage { position: absolute; left: ${PAD + 2}px; width: ${WIDTH - 2 * PAD}px;
-  bottom: ${FOOT + 4}px; height: ${USE}px; white-space: nowrap; overflow: hidden; }
+  bottom: ${FOOT + 4}px; height: ${USE}px; white-space: nowrap; overflow: hidden;
+  text-align: right; }
 </style>
 <div id="head"><span id="filter"></span><span id="count"></span></div>
 <div id="rule"></div>
