@@ -57,15 +57,14 @@ function when(ms) {
   return `${DAYS[d.getDay()]} ${hm}`;
 }
 
-// What a UI writes, as {text, color}, or null with nothing to say. Red when the rate runs
+// What a UI writes, `usage <used> (<even> - out <when>)` or `(<even> - reset <when>)`,
+// as {text, color}, or null with nothing to say. Red when the rate runs
 // out before the reset; gold is kept for `wait`.
 export function usageLine(u, now = Date.now()) {
   const p = pace(u, now);
   if (!p) return null;
   const pct = (n) => `${Math.round(n)}%`;
-  const parts = [`7d ${pct(p.used)}`, `even ${pct(p.even)}`];
-  if (p.out) parts.push(`out ${when(p.out)}, resets ${when(u.resetsAt)}`);
-  else if (p.end !== null) parts.push(`${pct(p.end)} at reset ${when(u.resetsAt)}`);
-  else parts.push(`resets ${when(u.resetsAt)}`);
-  return {text: parts.join("  ·  "), color: p.out ? PALETTE.error : PALETTE.mauve};
+  const end = p.out ? `out ${when(p.out)}` : `reset ${when(u.resetsAt)}`;
+  return {text: `usage ${pct(p.used)} (${pct(p.even)} - ${end})`,
+    color: p.out ? PALETTE.error : PALETTE.mauve};
 }
