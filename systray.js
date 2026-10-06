@@ -12,6 +12,7 @@ import {jump} from "./jump.js";
 import {loadBell, play} from "./bell.js";
 import {iconPng} from "./icon.js";
 import {Online} from "./online.js";
+import {readUsage, usageLine} from "./usage.js";
 
 const POLL = 1500;          // same cadence as the TUI, so the bell lands as promptly
 
@@ -21,6 +22,7 @@ const WIDTH = 620;
 const ROW = 24;             // one instance
 const HEAD = 26;            // the filter line
 const FOOT = 23;            // the key hints
+const USE = 21;             // the seven-day usage, above the hints, when there is any
 const PAD = 8;
 const MAX_ROWS = 12;        // past this the panel is taller than it is useful; keep typing
 const HINTS = "1-0/enter jump   esc close";
@@ -276,6 +278,7 @@ class Model {
   constructor(redraw, close, quit) {
     this.clock = new StateClock();
     this.net = new Online();
+    this.usage = null;
     this.polling = false;
     this.instances = [];
     this.rows = [];
@@ -292,6 +295,7 @@ class Model {
   // listing. This is the thing that runs all day, so it also owns the bell and the probe.
   async poll() {
     this.net.tick();           // returns at once; a probe is due every 30s, or 5s once one
+    this.usage = usageLine(readUsage());
     if (this.polling) return;  // has failed, and never blocks the listing
     this.polling = true;
     try {
@@ -362,7 +366,7 @@ class Model {
 
   height() {
     const rows = Math.min(Math.max(this.rows.length, 1), MAX_ROWS);
-    return PAD + HEAD + rows * ROW + FOOT + PAD;
+    return PAD + HEAD + rows * ROW + (this.usage ? USE : 0) + FOOT + PAD;
   }
 
   // Everything the page paints, in one object: the page decides nothing.
@@ -371,6 +375,7 @@ class Model {
       filter: this.filter,
       counter: this.counter(),
       offline: this.offline(),
+      usage: this.usage,
       empty: this.rows.length ? "" : this.empty(),
       note: this.note(),
       hints: HINTS,
@@ -487,10 +492,13 @@ html, body {
 #foot { position: absolute; left: ${PAD + 2}px; width: ${WIDTH - 2 * PAD}px; bottom: 4px;
   height: ${FOOT - 4}px; }
 #hints { position: absolute; right: 0; top: 0; color: ${PALETTE.dim}; }
+#usage { position: absolute; left: ${PAD + 2}px; width: ${WIDTH - 2 * PAD}px;
+  bottom: ${FOOT + 4}px; height: ${USE}px; white-space: nowrap; overflow: hidden; }
 </style>
 <div id="head"><span id="filter"></span><span id="count"></span></div>
 <div id="rule"></div>
 <div id="rows"></div>
+<div id="usage"></div>
 <div id="foot"><span id="note"></span><span id="hints"></span></div>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -527,6 +535,8 @@ function ccx(state) {
   $("note").textContent = state.note.text;
   $("note").style.color = state.note.color;
   $("hints").textContent = state.hints;
+  $("usage").textContent = state.usage?.text ?? "";
+  $("usage").style.color = state.usage?.color ?? "";
 
   const rows = $("rows");
   rows.textContent = "";

@@ -351,6 +351,13 @@ Deno.test("snapshot: a filter that matches nothing says so", async () => {
   ok(frame[0].includes("0 of 8"), `the bar counts the survivors: "${frame[0].trim()}"`);
 });
 
+Deno.test("snapshot: the usage line takes the bottom row and the count moves up", async () => {
+  const frame = await snapshot("100x8", "plain", "usage=60@48");
+  eq(frame.length, 8, "still 8 lines");
+  eq(at(frame[6], STATE_COL, 6), "5 more", "one row less for the table");
+  ok(frame[7].startsWith(" 7d 60%  ·  even 29%  ·  out "), `usage line: ${frame[7]}`);
+});
+
 Deno.test("snapshot: more rows than fit gets a count, not a scrollbar", async () => {
   const frame = await snapshot("100x8", "plain");
   eq(frame.length, 8, "the frame is exactly as tall as the screen");

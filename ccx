@@ -12,6 +12,7 @@ import {fuzzy, NUMBERS, PALETTE, rank, SORTS, stateOf} from "./view.js";
 import {jump, kittyWindowTitle, raiseTarget, tmuxWindowName, typeInto} from "./jump.js";
 import {loadBell, play, ringer, soundBytes} from "./bell.js";
 import {Online} from "./online.js";
+import {readUsage, usageLine, USAGE} from "./usage.js";
 
 // `peer.js` and `chat.js` load on use, not at startup: a missing one must cost `ccx send`
 // its error line and nothing else. A static import would take `list`, `doctor` and the TUI
@@ -230,8 +231,15 @@ function capacity(height, total) {
   return total > room ? Math.max(1, room - 1) : room;
 }
 
+function usageRow(usage, cols) {
+  return margins(fit([{t: usage.text, c: usage.color}], Math.max(0, cols - 1)), cols,
+    PALETTE.bg);
+}
+
+// the usage line takes the bottom row and the table everything above it, "N more" included
 function render(view) {
-  const {cols, height} = view;
+  const {cols} = view;
+  const height = view.usage ? Math.max(0, view.height - 1) : view.height;
   const lay = layout(cols);
   const lines = [barLine(view, cols), ruleLine(cols), headerLine(lay, cols)];
   const room = capacity(height, view.ranked.length);
@@ -247,7 +255,8 @@ function render(view) {
   lines.length = height;                       // a screen too short crops from the bottom
   const hidden = view.ranked.length - shown.length;
   if (hidden > 0) lines[height - 1] = noteLine(`${hidden} more`, lay, cols);
-  if (view.toast) lines[height - 1] = toastLine(view.toast, cols);
+  if (view.usage) lines.push(usageRow(view.usage, cols));
+  if (view.toast) lines[lines.length - 1] = toastLine(view.toast, cols);
   return lines;
 }
 
@@ -344,6 +353,7 @@ const SHORT_CWD = CWD.replace(HOME, "~");
 const app = {
   clock: new StateClock(),
   net: new Online(),
+  usage: null,
   instances: [],
   ranked: [],
   filter: "",
@@ -382,6 +392,7 @@ function view() {
     needle: needle(),
     sort: app.sort,
     offline: app.net.offline ? app.net.label : "",
+    usage: app.usage,
     cursor: app.cursor,
     offset: app.offset,
     toast: app.toast,
@@ -395,6 +406,7 @@ function view() {
 let polling = false;
 async function reload() {
   app.net.tick();              // returns at once; the probe is its own 30s clock, or 5s
+  app.usage = usageLine(readUsage());
   if (polling) return;         // once one has failed, and never blocks the listing
   polling = true;
   try {
@@ -411,7 +423,7 @@ function refresh() {
   const at = app.ranked.findIndex((i) => i.pid === app.cursorPid);
   app.cursor = at >= 0 ? at : 0;
   app.cursorPid = app.ranked[app.cursor]?.pid ?? null;
-  const room = capacity(size().height, app.ranked.length);
+  const room = tableRoom();
   app.offset = Math.max(0, Math.min(app.offset, app.ranked.length - room, app.cursor));
   app.offset = Math.max(app.offset, app.cursor - room + 1);
 }
@@ -427,6 +439,8 @@ function draw() {
   write(`${ESC}[H${frame.join("\r\n")}`);
 }
 
+const tableRoom = () =>
+  capacity(size().height - (app.usage ? 1 : 0), app.ranked.length);
 const chatRoom = () => Math.max(1, size().height - 2);
 
 // the offset is a line and not a message: a 2KB body is taller than the screen, so a
@@ -529,7 +543,7 @@ function mouse(body, final) {
   // a single click jumps, without closing. Past `room` is the "N more" line, drawn where a
   // row would be, whose index names a row that is not on the screen
   const row = y - 4;
-  if (row >= 0 && row < capacity(size().height, app.ranked.length)) jumpRow(app.offset + row);
+  if (row >= 0 && row < tableRoom()) jumpRow(app.offset + row);
 }
 
 function csi(body, final) {
@@ -546,8 +560,8 @@ function csi(body, final) {
   }
   if (key === "A") return move(-1);
   if (key === "B") return move(1);
-  if (key === "5~") return move(-capacity(size().height, app.ranked.length));
-  if (key === "6~") return move(capacity(size().height, app.ranked.length));
+  if (key === "5~") return move(-tableRoom());
+  if (key === "6~") return move(tableRoom());
   if (key === "H" || key === "1~") return move(-app.ranked.length);
   if (key === "F" || key === "4~") return move(app.ranked.length);
 }
@@ -718,17 +732,23 @@ const CHAT_SAMPLE = [
 ];
 
 // ccx --snapshot [chat] [<cols>x<rows>] [plain] [/<filter>] [empty] [toast] [cursor=N]
-//                 [offset=N]
+//                 [offset=N] [usage=<used>@<hours into the week>]
 // cursor= and offset= reach the cursor row's fill and a scrolled table; both are colour,
 // so `plain` throws away what you came for. `chat` draws the chat view against CHAT_SAMPLE
 // and an `at` fixed against NOW, since a relative age off the clock is not reproducible
 function cmdSnapshot(...args) {
   let cols = 100, height = 14, plain = false, filter = "", rows = sample(), toast = null;
-  let cursor = 0, offset = 0, chat = false, offline = "";
+  let cursor = 0, offset = 0, chat = false, offline = "", use = null;
   for (const a of args) {
     const wh = /^(\d+)x(\d+)$/.exec(a);
     const nm = /^(cursor|offset)=(\d+)$/.exec(a);
+    const us = /^usage=([\d.]+)@([\d.]+)$/.exec(a);
     if (wh) [cols, height] = [Number(wh[1]), Number(wh[2])];
+    else if (us) {
+      // reset times print in local time, so the frame is only fixed under a fixed TZ
+      const now = NOW * 1000, left = (168 - Number(us[2])) * 3600_000;
+      use = usageLine({used: Number(us[1]), resetsAt: now + left, at: now}, now);
+    }
     else if (nm) (nm[1] === "cursor" ? cursor = Number(nm[2]) : offset = Number(nm[2]));
     else if (a === "plain") plain = true;
     else if (a === "chat") chat = true;
@@ -745,7 +765,7 @@ function cmdSnapshot(...args) {
       cols, height, now: NOW})
     : render({
       ranked, total: rows.length, waiting: rows.filter((i) => i.state === "wait").length,
-      filter, needle, sort: SORTS[0], offline, cursor, offset, toast, cols, height,
+      filter, needle, sort: SORTS[0], offline, usage: use, cursor, offset, toast, cols, height,
     })).join("\n");
   console.log(plain ? frame.replaceAll(SGR, "") : frame);
 }
@@ -791,6 +811,13 @@ async function cmdDoctor() {
   const probe = await net.probe();
   console.log(`api ${net.url} (${net.from}) ${probe.ok ? "up" : "DOWN"} ` +
     `${probe.note} in ${Math.round(probe.ms)}ms`);
+  // what the status line last copied out, and how old that copy is
+  const u = readUsage();
+  console.log(u
+    ? `usage ${USAGE} written ${fmtAge((Date.now() - u.at) / 1000)} ago: 7d ` +
+      `${u.used}% resets ${new Date(u.resetsAt).toISOString()}  ` +
+      `${usageLine(u)?.text ?? "(week over)"}`
+    : `usage ${USAGE} missing or unreadable; statusLine in ~/.claude/settings.json writes it`);
   // the server is in whichever process started it, the systray or `ccx serve`, so it is
   // asked over HTTP rather than looked up
   try {
