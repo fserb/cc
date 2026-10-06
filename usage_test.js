@@ -29,8 +29,8 @@ Deno.test("pace: past the reset the numbers are a week that is over", () => {
 
 Deno.test("usageLine: red only when it runs out before the reset", () => {
   const out = usageLine(at(50, 42), now), fine = usageLine(at(20, 84), now);
-  assertEquals(/^usage 50% \(25% - out \w{3} \d\d:\d\d\)$/.test(out.text), true);
-  assertEquals(/^usage 20% \(50% - reset \w{3} \d\d:\d\d\)$/.test(fine.text), true);
+  assertEquals(/^usage 50% \(25% - out \w{3} \d\d?[ap]m\)$/.test(out.text), true);
+  assertEquals(/^usage 20% \(50% - reset \w{3} \d\d?[ap]m\)$/.test(fine.text), true);
   assertEquals(out.color === fine.color, false);
 });
 

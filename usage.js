@@ -51,10 +51,11 @@ export function pace(u, now = Date.now()) {
   return {used: u.used, even, end, out};
 }
 
+// `Thu 4pm` for 16:53: the hour it falls in
 function when(ms) {
   const d = new Date(ms);
-  const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  return `${DAYS[d.getDay()]} ${hm}`;
+  const h = d.getHours();
+  return `${DAYS[d.getDay()]} ${h % 12 || 12}${h < 12 ? "am" : "pm"}`;
 }
 
 // What a UI writes, `usage <used> (<even> - out <when>)` or `(<even> - reset <when>)`,
