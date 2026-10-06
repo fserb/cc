@@ -8,6 +8,7 @@ import {fuzzy, NUMBERS, PALETTE, rank, SORTS, STATE} from "./view.js";
 import {loadBell, soundBytes} from "./bell.js";
 import {iconDots, iconPng} from "./icon.js";
 import {baseFromSettings, Online, pickBase} from "./online.js";
+import {fmtMem, treeUsage} from "./top.js";
 
 // assertions
 
@@ -1271,4 +1272,19 @@ Deno.test("validation: send with no message never reaches resolution", async () 
   eq(code, 2, "exit 2");
   eq(out, "", "and nothing was resolved, listed or sent");
   ok(err.startsWith("usage: ccx"), `usage: ${err.split("\n")[0]}`);
+});
+
+Deno.test("treeUsage: a process counts toward its nearest listed ancestor, root included", () => {
+  const p = (pid, ppid, cpu, rss) => [pid, {pid, ppid, cpu, rss, cmd: `p${pid}`}];
+  const table = new Map([p(1, 0, 0, 0), p(10, 1, 5, 100), p(11, 10, 20, 50),
+    p(12, 11, 1, 10), p(20, 12, 3, 30), p(21, 20, 2, 5), p(30, 1, 50, 999)]);
+  const sums = treeUsage([10, 20], table);
+  eq([...sums.get(10).procs.map((x) => x.pid)], [11, 10, 12], "10's tree, heaviest first");
+  eq([sums.get(10).cpu, sums.get(10).rss], [26, 160], "10's sums");
+  eq([sums.get(20).cpu, sums.get(20).rss], [5, 35], "the nested root keeps its own");
+});
+
+Deno.test("fmtMem: K, then M, then G to one decimal", () => {
+  eq([fmtMem(512), fmtMem(2048), fmtMem(3 * 1024 * 1024 + 512 * 1024)], ["512K", "2M", "3.5G"],
+    "fmtMem");
 });

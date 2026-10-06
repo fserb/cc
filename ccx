@@ -13,6 +13,7 @@ import {jump, kittyWindowTitle, raiseTarget, tmuxWindowName, typeInto} from "./j
 import {loadBell, play, ringer, soundBytes} from "./bell.js";
 import {Online} from "./online.js";
 import {readUsage, usageLine, USAGE} from "./usage.js";
+import {fmtMem, processTable, treeUsage} from "./top.js";
 
 // `peer.js` and `chat.js` load on use, not at startup: a missing one must cost `ccx send`
 // its error line and nothing else. A static import would take `list`, `doctor` and the TUI
@@ -798,6 +799,52 @@ async function cmdList() {
   }
 }
 
+// ccx top [--mem]
+// Each instance with everything it started, heaviest first, and its three heaviest
+// processes under it. Redraws every 2s into a terminal, prints once into a pipe
+async function cmdTop(...args) {
+  let byMem = false;
+  for (const a of args) {
+    if (a !== "--mem") usage();
+    byMem = true;
+  }
+  const clock = new StateClock();
+  const frame = async () => {
+    const [found, table] = await Promise.all([discover(), processTable()]);
+    const sums = treeUsage(found.map((i) => i.pid), table);
+    const rows = clock.update(found).map((i) => ({i, s: sums.get(i.pid)}));
+    rows.sort((a, b) => byMem ? b.s.rss - a.s.rss : b.s.cpu - a.s.cpu);
+    const total = rows.reduce((t, {s}) => [t[0] + s.cpu, t[1] + s.rss], [0, 0]);
+    const cols = Deno.stdout.isTerminal() ? size().cols : Infinity;
+    const clip = (s) => cols === Infinity ? s : fit([{t: s}], cols).map((r) => r.t).join("");
+    const lines = [`${found.length} instances  ${total[0].toFixed(1)}% cpu  ` +
+      `${fmtMem(total[1])} rss`, "",
+      `${"CPU%".padStart(6)} ${"RSS".padStart(6)} ${"PROCS".padStart(6)}  STATE  PATH`];
+    for (const {i, s} of rows) {
+      lines.push(clip(`${s.cpu.toFixed(1).padStart(6)} ${fmtMem(s.rss).padStart(6)} ` +
+        `${String(s.procs.length).padStart(6)}  ${stateOf(i).label.padEnd(6)} ` +
+        `${i.shortPath.padEnd(24)} ${i.summary}`));
+      for (const p of s.procs.slice(0, 3)) {
+        // an app bundle's argv0 has spaces in it, so cut at its MacOS/ instead, and only
+        // before the first flag, or a script whose text names one is cut too
+        const app = p.cmd.split(" -")[0].indexOf(".app/Contents/MacOS/");
+        const argv0 = p.cmd.split(" ")[0];
+        const cmd = (app >= 0 ? p.cmd.slice(app + 20)
+          : argv0.slice(argv0.lastIndexOf("/") + 1) + p.cmd.slice(argv0.length)).slice(0, 160);
+        lines.push(clip(`${p.cpu.toFixed(1).padStart(13)} ${fmtMem(p.rss).padStart(6)}  ` +
+          `${String(p.pid).padStart(6)} ${cmd}`));
+      }
+    }
+    return lines.join("\n");
+  };
+  if (!Deno.stdout.isTerminal()) return console.log(await frame());
+  for (;;) {
+    const text = await frame();
+    write(`${ESC}[H${ESC}[2J${text}\n`);
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+}
+
 async function cmdDoctor() {
   await loadBell();                  // soundBytes() is empty until the gzip has been read
   console.log(`TMUX=${Deno.env.get("TMUX") ?? "(none)"}  ` +
@@ -1052,6 +1099,7 @@ async function cmdChat(...args) {
 const COMMANDS = {
   ui: [cmdUi, 0],
   list: [cmdList, 0],
+  top: [cmdTop, -1],
   doctor: [cmdDoctor, 0],
   focus: [cmdFocus, 1],
   send: [cmdSend, -1],               // -1: its own validation, since the message is the rest
@@ -1074,6 +1122,7 @@ const HELP = [
   "",
   ["  (nothing)", "the listing, and enter to jump to an instance"],
   ["  list", "the same listing, one line each, no UI"],
+  ["  top [--mem]", "what each instance and everything under it costs, by cpu or rss"],
   ["  doctor", "what resolves, and the kitty match it would use"],
   ["  focus <pid>", "jump to an instance without the UI"],
   ["  send <target> <message...>", "a chat message to one or more instances"],
