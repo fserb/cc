@@ -16,7 +16,7 @@ export async function processTable() {
   return table;
 }
 
-// root pid -> {cpu, rss, procs}, procs heaviest first and the root among them. A process
+// root pid -> {cpu, rss, procs}, the root among its procs. A process
 // goes to its NEAREST root ancestor, so a claude under another claude's Bash tool is
 // counted once, by whichever of the two is listed closer to it. RSS summed over a tree
 // counts shared pages once per process, so it reads high against Activity Monitor
@@ -31,7 +31,6 @@ export function treeUsage(roots, table) {
     sum.rss += p.rss;
     sum.procs.push(p);
   }
-  for (const sum of out.values()) sum.procs.sort((a, b) => b.cpu - a.cpu || b.rss - a.rss);
   return out;
 }
 

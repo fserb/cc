@@ -800,8 +800,8 @@ async function cmdList() {
 }
 
 // ccx top [--mem]
-// Each instance with everything it started, heaviest first, and its three heaviest
-// processes under it. Redraws every 2s into a terminal, prints once into a pipe
+// Each instance with everything it started summed, heaviest first. Redraws every 2s into
+// a terminal, prints once into a pipe
 async function cmdTop(...args) {
   let byMem = false;
   for (const a of args) {
@@ -824,16 +824,6 @@ async function cmdTop(...args) {
       lines.push(clip(`${s.cpu.toFixed(1).padStart(6)} ${fmtMem(s.rss).padStart(6)} ` +
         `${String(s.procs.length).padStart(6)}  ${stateOf(i).label.padEnd(6)} ` +
         `${i.shortPath.padEnd(24)} ${i.summary}`));
-      for (const p of s.procs.slice(0, 3)) {
-        // an app bundle's argv0 has spaces in it, so cut at its MacOS/ instead, and only
-        // before the first flag, or a script whose text names one is cut too
-        const app = p.cmd.split(" -")[0].indexOf(".app/Contents/MacOS/");
-        const argv0 = p.cmd.split(" ")[0];
-        const cmd = (app >= 0 ? p.cmd.slice(app + 20)
-          : argv0.slice(argv0.lastIndexOf("/") + 1) + p.cmd.slice(argv0.length)).slice(0, 160);
-        lines.push(clip(`${p.cpu.toFixed(1).padStart(13)} ${fmtMem(p.rss).padStart(6)}  ` +
-          `${String(p.pid).padStart(6)} ${cmd}`));
-      }
     }
     return lines.join("\n");
   };
