@@ -289,7 +289,7 @@ export class Server {
     if (post && path === "/api/spawn") {
       const body = await req.json().catch(() => ({}));
       const r = await spawn({dir: String(body.dir ?? ""), after: String(body.after ?? ""),
-        mkdir: body.mkdir === true});
+        mkdir: body.mkdir === true, name: String(body.name ?? "")});
       return r.error ? json(r, r.pane ? 502 : 409) : json(r);
     }
     const m = path.match(/^\/api\/s\/(\d+)\/(log|events|type|pick|esc|screen)$/);

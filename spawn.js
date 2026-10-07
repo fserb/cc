@@ -93,10 +93,20 @@ export async function claudeIn(pane, wait = 10000) {
   return 0;
 }
 
+// The pane of the last instance in `dir`, the one the page's per-directory + goes after, or
+// "" when no instance there is in tmux.
+export async function paneIn(dir) {
+  return (await discover()).findLast((i) => i.path === dir && i.pane)?.pane ?? "";
+}
+
+function shQuote(s) {
+  return `'${s.replaceAll("'", "'\\''")}'`;
+}
+
 // Start a claude in `dir`: after pane `after` when given, else in a new kitty window.
-// {pid, pane}, or {error} with the pane when one was made, since the screen still works
-// off it.
-export async function spawn({dir, after = "", mkdir = false}) {
+// `name` is its `claude -n`. {pid, pane}, or {error} with the pane when one was made,
+// since the screen still works off it.
+export async function spawn({dir, after = "", mkdir = false, name = ""}) {
   dir = expandDir(dir ?? "");
   if (!dir.startsWith("/")) return {error: `not an absolute path: ${dir}`};
   if (!isDir(dir)) {
@@ -109,8 +119,42 @@ export async function spawn({dir, after = "", mkdir = false}) {
   }
   const made = after ? await newWindowAfter(after, dir) : await newKittyWindow(dir);
   if (made.error) return made;
-  const err = await typeInto({pid: 0, pane: made.pane}, "claude");
+  const err = await typeInto({pid: 0, pane: made.pane},
+    name ? `claude -n ${shQuote(name)}` : "claude");
   if (err) return {error: err, pane: made.pane};
   const pid = await claudeIn(made.pane);
   return pid ? {pid, pane: made.pane} : {error: "claude did not start", pane: made.pane};
+}
+
+function alive(pid) {
+  try {
+    Deno.kill(pid, "SIGCONT");      // a no-op signal that still fails with ESRCH once gone
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// End `inst`: SIGTERM, which lets claude take its MCP servers and shells with it, SIGKILL
+// after `wait`, then its pane, and the tmux window with it when that was its only pane.
+// An error message, or null.
+export async function close(inst, wait = 2000) {
+  try {
+    Deno.kill(inst.pid, "SIGTERM");
+  } catch (e) {
+    if (!(e instanceof Deno.errors.NotFound)) return `kill ${inst.pid}: ${e.message}`;
+  }
+  for (const end = Date.now() + wait; alive(inst.pid) && Date.now() < end;) {
+    await new Promise((ok) => setTimeout(ok, 100));
+  }
+  if (alive(inst.pid)) {
+    try {
+      Deno.kill(inst.pid, "SIGKILL");
+    } catch (e) {
+      if (!(e instanceof Deno.errors.NotFound)) return `kill ${inst.pid}: ${e.message}`;
+    }
+  }
+  if (!inst.pane) return null;
+  const r = await run("tmux", "kill-pane", "-t", inst.pane);
+  return r.code === 0 ? null : TMUX_ERR(r);
 }

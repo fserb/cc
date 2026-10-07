@@ -15,6 +15,7 @@ import {Online} from "./online.js";
 import {readUsage, usageLine, USAGE} from "./usage.js";
 import {fmtMem} from "./top.js";
 import {setNice} from "./nice.js";
+import {close, expandDir, paneIn, spawn} from "./spawn.js";
 
 // `peer.js` and `chat.js` load on use, not at startup: a missing one must cost `ccx send`
 // its error line and nothing else. A static import would take `list`, `doctor` and the TUI
@@ -904,6 +905,45 @@ async function cmdFocus(pid) {
   Deno.exit(1);
 }
 
+// ccx new <dir> [name]
+// The same spawn() as the page's +: a new tmux window after an instance already in `dir`,
+// else a new kitty window
+async function cmdNew(dir, ...words) {
+  if (!dir) usage();
+  const name = words.join(" ");
+  let path = expandDir(dir);
+  if (!path.startsWith("/")) path = `${CWD}/${path}`;
+  try {
+    path = Deno.realPathSync(path);
+  } catch {
+    // spawn() names the missing directory
+  }
+  const after = await paneIn(path);
+  const r = await spawn({dir: path, after, name});
+  if (r.error) {
+    console.error(`new: ${r.error}`);
+    Deno.exit(1);
+  }
+  console.log(`started ${r.pid} in ${path.replace(HOME, "~")}, ` +
+    (after ? `tmux window after ${after}` : "new kitty window"));
+}
+
+// ccx delete <name|pid>
+// An exact name or pid, never the fuzzy match `send` takes, and one instance only: a typo
+// that happens to match some other session would kill that one
+async function cmdDelete(spec) {
+  const needle = spec.toLowerCase();
+  const hits = (await discover()).filter((i) =>
+    String(i.pid) === spec || i.name.toLowerCase() === needle);
+  if (hits.length !== 1) {
+    console.error(hits.length
+      ? `delete: ${JSON.stringify(spec)} names ${hits.length}: ${hits.map((i) => i.pid).join(", ")}`
+      : `delete: no instance is named ${JSON.stringify(spec)}`);
+    Deno.exit(1);
+  }
+  report("closed", hits, [], [await close(hits[0])]);
+}
+
 // ccx serve [--port N]
 // The HTTP server alone, with its own poll; `ccx systray` runs the same server off its own.
 async function cmdServe(...args) {
@@ -1109,6 +1149,8 @@ const COMMANDS = {
   nice: [cmdNice, 1],
   doctor: [cmdDoctor, 0],
   focus: [cmdFocus, 1],
+  new: [cmdNew, -1],
+  delete: [cmdDelete, 1],
   send: [cmdSend, -1],               // -1: its own validation, since the message is the rest
   user: [cmdUser, -1],
   chat: [cmdChat, -1],
@@ -1133,6 +1175,8 @@ const HELP = [
   ["  nice low|normal", "every claude and its process tree to background priority, or back"],
   ["  doctor", "what resolves, and the kitty match it would use"],
   ["  focus <pid>", "jump to an instance without the UI"],
+  ["  new <dir> [name...]", "a claude in dir: beside one already there, else a kitty window"],
+  ["  delete <name|pid>", "end one instance and close its tmux pane"],
   ["  send <target> <message...>", "a chat message to one or more instances"],
   ["  user <target> <text...>", "typed into an instance as its user, /commands included"],
   ["  chat [--no-follow]", "what the agents here have said to each other"],
