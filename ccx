@@ -12,7 +12,7 @@ import {fuzzy, loadOf, NUMBERS, PALETTE, rank, SORTS, stateOf} from "./view.js";
 import {jump, kittyWindowTitle, raiseTarget, tmuxWindowName, typeInto} from "./jump.js";
 import {loadBell, play, ringer, soundBytes} from "./bell.js";
 import {Online} from "./online.js";
-import {readUsage, usageLine, USAGE} from "./usage.js";
+import {byDay, HISTORY, readUsage, usageLine, USAGE} from "./usage.js";
 import {fmtMem} from "./top.js";
 import {setNice} from "./nice.js";
 import {close, expandDir, paneIn, spawn} from "./spawn.js";
@@ -852,6 +852,24 @@ async function cmdNice(level) {
   if (bad) Deno.exit(1);
 }
 
+// ccx usage
+// The seven-day line, then the week so far a local day per row
+function cmdUsage() {
+  const u = readUsage(), line = usageLine(u);
+  if (!line) {
+    console.log(u ? "the week in ccx-usage.json is over" : `${USAGE} missing or unreadable; ` +
+      "statusLine in ~/.claude/settings.json writes it");
+    return Deno.exit(1);
+  }
+  console.log(`${line.text}\n`);
+  for (const d of byDay(u)) {
+    const day = new Date(d.day).toLocaleDateString("en-US", {weekday: "short"});
+    console.log(`${day}  ${`${Math.round(d.used)}%`.padStart(4)}  ` +
+      `${`+${Math.round(d.added)}%`.padStart(4)}  ` +
+      (d.samples ? `${d.samples} samples` : "no samples, interpolated"));
+  }
+}
+
 async function cmdDoctor() {
   await loadBell();                  // soundBytes() is empty until the gzip has been read
   console.log(`TMUX=${Deno.env.get("TMUX") ?? "(none)"}  ` +
@@ -872,7 +890,9 @@ async function cmdDoctor() {
   console.log(u
     ? `usage ${USAGE} written ${fmtAge((Date.now() - u.at) / 1000)} ago: 7d ` +
       `${u.used}% resets ${new Date(u.resetsAt).toISOString()}  ` +
-      `${usageLine(u)?.text ?? "(week over)"}`
+      `${usageLine(u)?.text ?? "(week over)"}\n` +
+      `usage ${HISTORY}: ${u.history.length} lines` +
+      (u.history.length ? ` from ${new Date(u.history[0].at).toISOString()}` : "")
     : `usage ${USAGE} missing or unreadable; statusLine in ~/.claude/settings.json writes it`);
   // the server is in whichever process started it, the systray or `ccx serve`, so it is
   // asked over HTTP rather than looked up
@@ -1147,6 +1167,7 @@ const COMMANDS = {
   list: [cmdList, 0],
   top: [cmdTop, -1],
   nice: [cmdNice, 1],
+  usage: [cmdUsage, 0],
   doctor: [cmdDoctor, 0],
   focus: [cmdFocus, 1],
   new: [cmdNew, -1],
@@ -1173,6 +1194,7 @@ const HELP = [
   ["  list", "the same listing, one line each, no UI"],
   ["  top [--mem]", "what each instance and everything under it costs, by cpu or rss"],
   ["  nice low|normal", "every claude and its process tree to background priority, or back"],
+  ["  usage", "the seven-day limit, its rate over the last 6h, and the week by day"],
   ["  doctor", "what resolves, and the kitty match it would use"],
   ["  focus <pid>", "jump to an instance without the UI"],
   ["  new <dir> [name...]", "a claude in dir: beside one already there, else a kitty window"],

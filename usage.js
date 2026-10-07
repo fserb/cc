@@ -1,8 +1,7 @@
 // The seven-day plan limit, as Claude Code last handed it to its status line. No UI and no
-// network: `~/.claude/settings.json` points `statusLine` at a shell line that copies the
-// JSON it is given to USAGE whenever that JSON holds a `seven_day`, through a temp file and
-// a `mv`, so a reader never sees half of one. Both UIs read it from the poll they already
-// run.
+// network: `~/.claude/settings.json` points `statusLine` at `statusline.sh`, which copies
+// the JSON it is given to USAGE whenever that JSON holds a `seven_day` and appends the
+// numbers to HISTORY when they change. Both UIs read them from the poll they already run.
 //
 // Claude Code fills `rate_limits` from the `anthropic-ratelimit-unified-*` headers of its
 // own API responses (2.1.289): `used_percentage` is utilization * 100 to one decimal and
@@ -14,41 +13,114 @@ import {HOME} from "./sh.js";
 import {PALETTE} from "./view.js";
 
 export const USAGE = `${HOME}/.claude/ccx-usage.json`;
+export const HISTORY = `${HOME}/.claude/ccx-usage.log`;
 const WEEK = 7 * 24 * 3600_000;
 const SETTLE = 3600_000;    // under an hour into a week the average rate is noise
+const RECENT = 6 * 3600_000; // the rate is what the last 6h added
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-// {used, resetsAt, at} with both times in ms, `at` being when the file was written, or
-// null. Anything missing, unreadable or unparseable reads as no data.
-export function readUsage(path = USAGE) {
+// {used, resetsAt, at, history} with every time in ms, `at` being when the file was
+// written, or null. Anything missing, unreadable or unparseable reads as no data.
+export function readUsage(path = USAGE, log = HISTORY) {
   try {
     const at = Deno.statSync(path).mtime?.getTime() ?? 0;
     const week = JSON.parse(Deno.readTextFileSync(path))?.rate_limits?.seven_day;
     const used = Number(week?.used_percentage), resets = Number(week?.resets_at);
     if (!Number.isFinite(used) || !Number.isFinite(resets) || !resets) return null;
-    return {used, resetsAt: resets * 1000, at};
+    return {used, resetsAt: resets * 1000, at, history: readHistory(log)};
   } catch {
     return null;
   }
 }
 
+// HISTORY as [{at, used, resetsAt}], oldest first, five_hour left out. A missing file is
+// no history and a line that does not parse is skipped.
+export function readHistory(path = HISTORY) {
+  let text = "";
+  try {
+    text = Deno.readTextFileSync(path);
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const line of text.split("\n")) {
+    const [at, used, resets] = line.split(" ").map(Number);
+    if (!at || !Number.isFinite(used) || !resets) continue;
+    out.push({at: at * 1000, used, resetsAt: resets * 1000});
+  }
+  return out;
+}
+
+// What was used at `t`, between the samples either side of it.
+function usedAt(samples, t) {
+  let prev = samples[0];
+  for (const s of samples) {
+    if (s.at >= t) {
+      return s.at === prev.at ? s.used
+        : prev.used + (s.used - prev.used) * (t - prev.at) / (s.at - prev.at);
+    }
+    prev = s;
+  }
+  return prev.used;
+}
+
+// This week's samples to `now`: 0 at its start, the history's lines in it, then `u` itself
+// at `now`, sorted, with a running max applied, since an instance holding older numbers can
+// write them after newer ones and within a week the figure only goes up.
+function weekSamples(u, now) {
+  const start = u.resetsAt - WEEK, samples = [{at: start, used: 0}];
+  for (const h of u.history ?? []) {
+    if (h.resetsAt !== u.resetsAt || h.at <= start || h.at >= now) continue;
+    samples.push({at: h.at, used: h.used});
+  }
+  samples.push({at: now, used: u.used});
+  samples.sort((a, b) => a.at - b.at);
+  let top = 0;
+  for (const h of samples) h.used = top = Math.max(top, h.used);
+  return samples;
+}
+
+// The week so far by local day, [{day, used, added, samples}]: `day` the ms its midnight
+// falls on (the first one is the week's start), `used` at its end or at `now`, `added`
+// over it and `samples` how many history lines it holds. A day with none has `used`
+// interpolated across it.
+export function byDay(u, now = Date.now()) {
+  if (!u || now >= u.resetsAt) return [];
+  const samples = weekSamples(u, now), out = [];
+  const start = u.resetsAt - WEEK;
+  let from = start, before = 0;
+  while (from < now) {
+    const next = new Date(from);
+    next.setHours(24, 0, 0, 0);
+    const to = Math.min(next.getTime(), now), used = usedAt(samples, to);
+    const n = samples.filter((s) => s.at > start && s.at >= from && s.at < to).length;
+    out.push({day: from, used, added: used - before, samples: n});
+    [from, before] = [next.getTime(), used];
+  }
+  return out;
+}
+
 // Where the week stands at `now`: `even` is where an even spread over the 7 days would be,
-// `end` where it lands at reset at the average rate so far, and `out` the time it reaches
-// 100% at that rate if that is before the reset. The week is taken to start 7 days before
-// `resets_at`. Past the reset the numbers belong to a week that is over, so null.
+// `rate` what the last 6h added, in % per day, `end` where that rate lands at the reset,
+// and `out` the time it reaches 100% if that is before the reset. The week is taken to
+// start at 0, 7 days before `resets_at`. Past the reset the numbers belong to a week that
+// is over, so null.
 //
-// The rate is measured to `now`, not to when the file was written: no instance writing
-// means no instance calling, so the usage has not moved since. Use from claude.ai or
-// another machine counts against the same limit and is not seen until something here
-// makes a call.
+// `u` itself is taken at `now`, not at when the file was written: no instance writing
+// means no instance calling, so the usage has not moved since. Use from claude.ai or another machine counts against the same limit and
+// is not seen until something here makes a call. With no history, or under 6h of it, the
+// 6h falls between the week's start and the first sample, so the rate is the average.
 export function pace(u, now = Date.now()) {
   if (!u || now >= u.resetsAt) return null;
-  const elapsed = Math.max(0, now - (u.resetsAt - WEEK));
+  const start = u.resetsAt - WEEK, elapsed = Math.max(0, now - start);
   const even = 100 * elapsed / WEEK;
-  if (elapsed < SETTLE || u.used <= 0) return {used: u.used, even, end: null, out: null};
-  const end = u.used * WEEK / elapsed;
-  const out = end > 100 ? u.resetsAt - WEEK + elapsed * 100 / u.used : null;
-  return {used: u.used, even, end, out};
+  const samples = weekSamples(u, now), used = samples.at(-1).used;
+  if (elapsed < SETTLE || used <= 0) return {used, even, rate: null, end: null, out: null};
+  const span = Math.min(RECENT, elapsed);
+  const perMs = (used - usedAt(samples, now - span)) / span;
+  const end = used + perMs * (u.resetsAt - now);
+  const out = end > 100 ? now + (100 - used) / perMs : null;
+  return {used, even, rate: perMs * 24 * 3600_000, end, out};
 }
 
 // `Thu 4pm` for 16:53: the hour it falls in
@@ -58,7 +130,7 @@ function when(ms) {
   return `${DAYS[d.getDay()]} ${h % 12 || 12}${h < 12 ? "am" : "pm"}`;
 }
 
-// What a UI writes, `usage <used> (<even> - out <when>)` or `(<even> - reset <when>)`,
+// What a UI writes, `usage <used> (<even>, <rate>/day - out <when>)` or `- reset <when>`,
 // as {text, color}, or null with nothing to say. Orange when the rate runs
 // out before the reset; gold is kept for `wait`.
 export function usageLine(u, now = Date.now()) {
@@ -66,6 +138,7 @@ export function usageLine(u, now = Date.now()) {
   if (!p) return null;
   const pct = (n) => `${Math.round(n)}%`;
   const end = p.out ? `out ${when(p.out)}` : `reset ${when(u.resetsAt)}`;
-  return {text: `usage ${pct(p.used)} (${pct(p.even)} - ${end})`,
+  const rate = p.rate === null ? "" : `, ${pct(p.rate)}/day`;
+  return {text: `usage ${pct(p.used)} (${pct(p.even)}${rate} - ${end})`,
     color: p.out ? PALETTE.warn : PALETTE.mauve};
 }

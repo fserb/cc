@@ -1,5 +1,5 @@
 import {assertEquals} from "jsr:@std/assert";
-import {pace, readUsage, usageLine} from "./usage.js";
+import {pace, readHistory, readUsage, usageLine} from "./usage.js";
 
 const H = 3600_000, WEEK = 168 * H;
 const at = (used, hours) => ({used, resetsAt: 1_000 * WEEK + WEEK - hours * H, at: 0});
@@ -13,7 +13,7 @@ Deno.test("pace: on an even spread it lands on 100 at the reset and never runs o
 Deno.test("pace: twice the even rate runs out halfway through the week", () => {
   const u = at(50, 42);
   const p = pace(u, now);
-  assertEquals([p.even, p.end, p.out], [25, 200, u.resetsAt - WEEK + 84 * H]);
+  assertEquals([p.even, Math.round(p.end), Math.round(p.out)], [25, 200, u.resetsAt - WEEK + 84 * H]);
 });
 
 Deno.test("pace: under an hour in, or nothing used, there is no rate to project", () => {
@@ -29,8 +29,8 @@ Deno.test("pace: past the reset the numbers are a week that is over", () => {
 
 Deno.test("usageLine: red only when it runs out before the reset", () => {
   const out = usageLine(at(50, 42), now), fine = usageLine(at(20, 84), now);
-  assertEquals(/^usage 50% \(25% - out \w{3} \d\d?[ap]m\)$/.test(out.text), true);
-  assertEquals(/^usage 20% \(50% - reset \w{3} \d\d?[ap]m\)$/.test(fine.text), true);
+  assertEquals(/^usage 50% \(25%, 29%\/day - out \w{3} \d\d?[ap]m\)$/.test(out.text), true);
+  assertEquals(/^usage 20% \(50%, 6%\/day - reset \w{3} \d\d?[ap]m\)$/.test(fine.text), true);
   assertEquals(out.color === fine.color, false);
 });
 
@@ -45,5 +45,50 @@ Deno.test("readUsage: no file, bad JSON or no seven_day is no data", async () =>
     '{"rate_limits":{"seven_day":{"used_percentage":12.5,"resets_at":1700000000}}}');
   const u = readUsage(`${dir}/ok`);
   assertEquals([u.used, u.resetsAt], [12.5, 1_700_000_000_000]);
+  await Deno.remove(dir, {recursive: true});
+});
+
+// a history line for the `at()` week, `hours` into it
+const line = (used, hours, u) => ({at: u.resetsAt - WEEK + hours * H, used,
+  resetsAt: u.resetsAt});
+
+Deno.test("pace: the rate is what the last 6h added, not the week's average", () => {
+  // 30% by hour 36, then 6% over the last 6h: 24%/day, 52% left lasts 52h
+  const u = {...at(48, 50), history: []};
+  u.history = [line(16, 10, u), line(42, 44, u), line(45, 47, u)];
+  const p = pace(u, now);
+  assertEquals(Math.round(p.rate * 10) / 10, 24);
+  assertEquals(p.out, now + 52 * H);
+});
+
+Deno.test("pace: with no history the 6h rate is the average", () => {
+  const p = pace(at(50, 42), now);
+  assertEquals(Math.round(p.rate * 1e6), Math.round(50 * 24 / 42 * 1e6));
+});
+
+Deno.test("pace: an older number written late, or last week's, does not pull it down", () => {
+  const u = {...at(48, 50), history: []};
+  u.history = [line(42, 44, u), line(47, 46, u), line(20, 47, u),
+    {at: now - H, used: 99, resetsAt: u.resetsAt - WEEK}];
+  assertEquals(pace(u, now).used, 48);
+  assertEquals(Math.round(pace(u, now).rate * 1e6) / 1e6, 6 * 4);
+});
+
+Deno.test("pace: nothing added in the last 6h is 0%/day and never runs out", () => {
+  const u = {...at(48, 60), history: []};
+  u.history = [line(48, 40, u)];
+  const p = pace(u, now);
+  assertEquals([p.rate, p.end, p.out], [0, 48, null]);
+  assertEquals(/^usage 48% \(36%, 0%\/day - reset /.test(usageLine(u, now).text), true);
+});
+
+Deno.test("readHistory: one sample per line, five_hour dropped, junk skipped", async () => {
+  const dir = await Deno.makeTempDir();
+  assertEquals(readHistory(`${dir}/none`), []);
+  await Deno.writeTextFile(`${dir}/log`,
+    "1791400418 48 1791824400 8 1791411600\nhalf\n1791400500 50.5 1791824400 \n");
+  assertEquals(readHistory(`${dir}/log`), [
+    {at: 1791400418000, used: 48, resetsAt: 1791824400000},
+    {at: 1791400500000, used: 50.5, resetsAt: 1791824400000}]);
   await Deno.remove(dir, {recursive: true});
 });

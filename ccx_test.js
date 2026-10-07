@@ -360,7 +360,7 @@ Deno.test("snapshot: the usage line takes the bottom row and the count moves up"
   const frame = await snapshot("100x8", "plain", "usage=60@48");
   eq(frame.length, 8, "still 8 lines");
   eq(at(frame[6], STATE_COL, 6), "5 more", "one row less for the table");
-  ok(/^ +usage 60% \(29% - out .*\) $/.test(frame[7]), `right aligned: ${frame[7]}`);
+  ok(/^ +usage 60% \(29%, 30%\/day - out .*\) $/.test(frame[7]), `right aligned: ${frame[7]}`);
   eq(cellsOf(frame[7]).length, 100, "and exactly as wide as the screen");
 });
 
