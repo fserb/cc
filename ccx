@@ -1194,7 +1194,7 @@ const HELP = [
   ["  list", "the same listing, one line each, no UI"],
   ["  top [--mem]", "what each instance and everything under it costs, by cpu or rss"],
   ["  nice low|normal", "every claude and its process tree to background priority, or back"],
-  ["  usage", "the seven-day limit, its rate over the last 6h, and the week by day"],
+  ["  usage", "the seven-day limit, the last 6h against what is left, the week by day"],
   ["  doctor", "what resolves, and the kitty match it would use"],
   ["  focus <pid>", "jump to an instance without the UI"],
   ["  new <dir> [name...]", "a claude in dir: beside one already there, else a kitty window"],

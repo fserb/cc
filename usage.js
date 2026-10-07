@@ -101,8 +101,8 @@ export function byDay(u, now = Date.now()) {
 }
 
 // Where the week stands at `now`: `even` is where an even spread over the 7 days would be,
-// `rate` what the last 6h added, in % per day, `end` where that rate lands at the reset,
-// and `out` the time it reaches 100% if that is before the reset. The week is taken to
+// `rate` what the last 6h added, in % per day, `ratio` that over what is left per day to
+// the reset, `end` where that rate lands at the reset, and `out` the time it reaches 100% if that is before the reset. The week is taken to
 // start at 0, 7 days before `resets_at`. Past the reset the numbers belong to a week that
 // is over, so null.
 //
@@ -115,12 +115,15 @@ export function pace(u, now = Date.now()) {
   const start = u.resetsAt - WEEK, elapsed = Math.max(0, now - start);
   const even = 100 * elapsed / WEEK;
   const samples = weekSamples(u, now), used = samples.at(-1).used;
-  if (elapsed < SETTLE || used <= 0) return {used, even, rate: null, end: null, out: null};
+  if (elapsed < SETTLE || used <= 0) {
+    return {used, even, rate: null, ratio: null, end: null, out: null};
+  }
   const span = Math.min(RECENT, elapsed);
   const perMs = (used - usedAt(samples, now - span)) / span;
   const end = used + perMs * (u.resetsAt - now);
   const out = end > 100 ? now + (100 - used) / perMs : null;
-  return {used, even, rate: perMs * 24 * 3600_000, end, out};
+  const ratio = used < 100 ? perMs * (u.resetsAt - now) / (100 - used) : null;
+  return {used, even, rate: perMs * 24 * 3600_000, ratio, end, out};
 }
 
 // `Thu 4pm` for 16:53: the hour it falls in
@@ -130,15 +133,15 @@ function when(ms) {
   return `${DAYS[d.getDay()]} ${h % 12 || 12}${h < 12 ? "am" : "pm"}`;
 }
 
-// What a UI writes, `usage <used> (<even>, <rate>/day - out <when>)` or `- reset <when>`,
-// as {text, color}, or null with nothing to say. Orange when the rate runs
+// What a UI writes, `usage <used> (<ratio>x pace - out <when>)` or `- reset <when>`, as
+// {text, color}; 1.0x spends exactly what is left by the reset, or null with nothing to say. Orange when the rate runs
 // out before the reset; gold is kept for `wait`.
 export function usageLine(u, now = Date.now()) {
   const p = pace(u, now);
   if (!p) return null;
   const pct = (n) => `${Math.round(n)}%`;
   const end = p.out ? `out ${when(p.out)}` : `reset ${when(u.resetsAt)}`;
-  const rate = p.rate === null ? "" : `, ${pct(p.rate)}/day`;
-  return {text: `usage ${pct(p.used)} (${pct(p.even)}${rate} - ${end})`,
+  const ratio = p.ratio === null ? "" : `${p.ratio.toFixed(1)}x pace - `;
+  return {text: `usage ${pct(p.used)} (${ratio}${end})`,
     color: p.out ? PALETTE.warn : PALETTE.mauve};
 }
