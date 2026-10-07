@@ -9,6 +9,7 @@ import {loadBell, soundBytes} from "./bell.js";
 import {iconDots, iconPng} from "./icon.js";
 import {baseFromSettings, Online, pickBase} from "./online.js";
 import {fmtMem, treeUsage} from "./top.js";
+import {claudeTree} from "./nice.js";
 
 // assertions
 
@@ -1284,6 +1285,13 @@ Deno.test("treeUsage: a process counts toward its nearest listed ancestor, root 
   const sums = treeUsage([10, 20], table);
   eq(sums.get(10), {cpu: 26, rss: 160, procs: 3}, "10's tree");
   eq(sums.get(20), {cpu: 5, rss: 35, procs: 2}, "the nested root keeps its own");
+});
+
+Deno.test("claudeTree: every claude and what is under it, parents first, nothing else", () => {
+  const table = new Map([[1, [0, "launchd"]], [5, [1, "zsh"]], [10, [5, "claude"]],
+    [11, [10, "/bin/zsh -c make"]], [12, [11, "cc foo.c"]], [20, [1, "/opt/x/claude -p hi"]],
+    [30, [1, "less claude.md"]], [31, [30, "sh"]]]);
+  eq(claudeTree(table), [10, 20, 11, 12], "the tree");
 });
 
 Deno.test("fmtMem: K, then M, then G to one decimal", () => {
