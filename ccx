@@ -657,7 +657,7 @@ function quit() {
 async function cmdUi() {
   // no tty: setRaw would throw
   if (!Deno.stdin.isTerminal()) {
-    console.error("ccx is a terminal app: try `ccx list` or `ccx --snapshot`");
+    console.error("ccx ps is a terminal app: try `ccx list` or `ccx --snapshot`");
     Deno.exit(2);
   }
   await loadBell();                  // play() is a no-op until this runs, and a poll cannot await
@@ -1143,7 +1143,7 @@ async function cmdChat(...args) {
 }
 
 const COMMANDS = {
-  ui: [cmdUi, 0],
+  ps: [cmdUi, 0],
   list: [cmdList, 0],
   top: [cmdTop, -1],
   nice: [cmdNice, 1],
@@ -1169,7 +1169,7 @@ const COMMANDS = {
 const HELP = [
   "usage: ccx <command> [args]",
   "",
-  ["  (nothing)", "the listing, and enter to jump to an instance"],
+  ["  ps", "the listing as a TUI, and enter to jump to an instance"],
   ["  list", "the same listing, one line each, no UI"],
   ["  top [--mem]", "what each instance and everything under it costs, by cpu or rss"],
   ["  nice low|normal", "every claude and its process tree to background priority, or back"],
@@ -1182,7 +1182,7 @@ const HELP = [
   ["  chat [--no-follow]", "what the agents here have said to each other"],
   ["  serve [--port N]", "the web page and its API on 127.0.0.1, port 7681"],
   ["  systray", "the menu bar app, needs ./task build"],
-  ["  help", "this"],
+  ["  help", "this, which is also what `ccx` alone prints"],
   "",
   ["  <target>", "a pid, a session name, `all`, or part of either"],
   ["", "`send` and `user` take a comma-separated list of them"],
@@ -1214,7 +1214,7 @@ function usage() {
 
 // everything but `systray` runs as this script, never the bundle: the desktop runtime
 // prints two lines to stdout before user code, ahead of a listing. Do not always exec
-const [name = "ui", ...rest] = Deno.args;
+const [name = "help", ...rest] = Deno.args;
 const cmd = COMMANDS[name];
 if (!cmd || (cmd[1] >= 0 && rest.length !== cmd[1])) usage();
 await cmd[0](...rest);

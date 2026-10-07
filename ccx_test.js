@@ -1254,11 +1254,12 @@ Deno.test("help: asking for it is stdout and 0, a bad argument list is stderr an
     eq(asked.err, "", "and says nothing on stderr");
     ok(asked.out.startsWith("usage: ccx"), `stdout was ${JSON.stringify(asked.out)}`);
     // one text, two streams: every command the table dispatches is named in it
-    for (const name of ["list", "doctor", "focus", "send", "user", "chat", "systray",
+    for (const name of ["ps", "list", "doctor", "focus", "send", "user", "chat", "systray",
       "help"]) {
       ok(new RegExp(`^  ${name}\\b`, "m").test(asked.out), `${name} is not in the help`);
     }
     eq((await ccx("nonesuch")).err, asked.out, "and a bad command prints the same text");
+    eq(await ccx(), asked, "`ccx` alone is `ccx help`");
   });
 
 Deno.test("validation: a bad argument list is never a traceback", async () => {
