@@ -7,7 +7,7 @@
 
 import {MAC} from "./sh.js";
 import {discover, StateClock} from "./claudes.js";
-import {fuzzy, NUMBERS, PALETTE, rank, stateOf} from "./view.js";
+import {fuzzy, loadOf, NUMBERS, PALETTE, rank, stateOf} from "./view.js";
 import {jump} from "./jump.js";
 import {loadBell, play} from "./bell.js";
 import {iconPng} from "./icon.js";
@@ -18,7 +18,7 @@ const POLL = 1500;          // same cadence as the TUI, so the bell lands as pro
 
 // macOS points, Wayland logical pixels and CSS pixels are close enough to the same size
 // that these numbers carry across the three.
-const WIDTH = 620;
+const WIDTH = 716;
 const ROW = 24;             // one instance
 const HEAD = 26;            // the filter line
 const FOOT = 23;            // the key hints
@@ -386,6 +386,7 @@ class Model {
           label: state.label,
           color: state.color,
           age: inst.age,
+          ...loadOf(inst),
           path: inst.shortPath,
           pathHits: this.marks(inst.shortPath),
           summary: inst.summary,
@@ -484,10 +485,13 @@ html, body {
 .age { left: 84px; width: 34px; text-align: right; color: ${PALETTE.dim}; }
 /* direction: rtl truncates at the head, which keeps the part of a path that identifies it,
    and text-align: left puts back the alignment that rtl otherwise takes with it */
-.path { left: 126px; width: 196px; color: ${PALETTE.mauve}; direction: rtl;
+.cpu, .mem { width: 40px; text-align: right; }
+.cpu { left: 126px; }
+.mem { left: 174px; }
+.path { left: 222px; width: 196px; color: ${PALETTE.mauve}; direction: rtl;
   text-align: left; }
 .path > i { font-style: normal; direction: ltr; unicode-bidi: embed; }
-.sum { left: 330px; width: ${WIDTH - 330 - PAD}px; }
+.sum { left: 426px; width: ${WIDTH - 426 - PAD}px; }
 .m { color: ${PALETTE.accent}; font-weight: bold; }
 #foot { position: absolute; left: ${PAD + 2}px; width: ${WIDTH - 2 * PAD}px; bottom: 4px;
   height: ${FOOT - 4}px; }
@@ -553,6 +557,8 @@ function ccx(state) {
     row.appendChild(field("num", r.num, null, null));
     row.appendChild(field("state", r.label, r.color, null));
     row.appendChild(field("age", r.age, null, null));
+    row.appendChild(field("cpu", r.cpu.t, r.cpu.c, null));
+    row.appendChild(field("mem", r.mem.t, r.mem.c, null));
     row.appendChild(field("path", r.path, null, r.pathHits));
     row.appendChild(field("sum", r.summary, r.sumColor, r.sumHits));
     rows.appendChild(row);

@@ -707,9 +707,9 @@ Deno.test("online: a probe is due every 30s, or every 5s once one has failed", (
 
 Deno.test("snapshot: offline is written beside the counter, and keeps the key hints",
   async () => {
-    const bar = (await snapshot("100x8", "plain", "offline"))[0];
+    const bar = (await snapshot("110x8", "plain", "offline"))[0];
     ok(bar.includes("offline  ·  3/8  ·  by state"), `the bar reads: ${bar.trim()}`);
-    ok(bar.includes("^t chat"), "and 100 cells still has room for the keys");
+    ok(bar.includes("^t chat"), "and 110 cells still has room for the keys");
     ok(!(await snapshot("100x8", "plain"))[0].includes("offline"), "nothing when it is up");
   });
 
@@ -1275,16 +1275,26 @@ Deno.test("validation: send with no message never reaches resolution", async () 
 });
 
 Deno.test("treeUsage: a process counts toward its nearest listed ancestor, root included", () => {
-  const p = (pid, ppid, cpu, rss) => [pid, {pid, ppid, cpu, rss, cmd: `p${pid}`}];
+  const p = (pid, ppid, cpu, rss) => [pid, [ppid, `p${pid}`, cpu, rss]];
   const table = new Map([p(1, 0, 0, 0), p(10, 1, 5, 100), p(11, 10, 20, 50),
     p(12, 11, 1, 10), p(20, 12, 3, 30), p(21, 20, 2, 5), p(30, 1, 50, 999)]);
   const sums = treeUsage([10, 20], table);
-  eq(sums.get(10).procs.map((x) => x.pid).sort(), [10, 11, 12], "10's tree");
-  eq([sums.get(10).cpu, sums.get(10).rss], [26, 160], "10's sums");
-  eq([sums.get(20).cpu, sums.get(20).rss], [5, 35], "the nested root keeps its own");
+  eq(sums.get(10), {cpu: 26, rss: 160, procs: 3}, "10's tree");
+  eq(sums.get(20), {cpu: 5, rss: 35, procs: 2}, "the nested root keeps its own");
 });
 
 Deno.test("fmtMem: K, then M, then G to one decimal", () => {
   eq([fmtMem(512), fmtMem(2048), fmtMem(3 * 1024 * 1024 + 512 * 1024)], ["512K", "2M", "3.5G"],
     "fmtMem");
+});
+
+Deno.test("snapshot: load adds cpu and mem columns, and only the hot cells are warn", async () => {
+  const plain = await snapshot("110x12", "plain", "load");
+  ok(plain[2].includes("cpu   mem   path"), `header: ${plain[2]}`);
+  ok(plain.some((l) => l.includes(" 362%  586M  ~/prj/wrangler")), "the wrangler row");
+  const frame = (await snapshot("110x12", "load")).join("\n");
+  const n = Number.parseInt(PALETTE.warn.slice(1), 16);
+  const warn = `\x1b[38;2;${(n >> 16) & 255};${(n >> 8) & 255};${n & 255}m`;
+  ok(frame.includes(`${warn}362%`) && frame.includes(`${warn}3.3G`), "hot cells are warn");
+  ok(!frame.includes(`${warn}586M`), "a cool cell is not");
 });

@@ -2,6 +2,7 @@
 // because a terminal and a web page have no drawing layer left in common.
 
 import {byCodePoint} from "./sh.js";
+import {fmtMem} from "./top.js";
 
 const STATE_ORDER = {wait: 0, busy: 1, hold: 2, free: 3};
 export const SORTS = ["state", "path"];
@@ -83,6 +84,16 @@ export const PALETTE = {
   gold: "#ffd500", idle: "#82828a", hint: "#4a4a55", error: "#df6565",
   warn: "#e8965a",
 };
+
+// An instance's cpu and memory as two {t, c} cells, dim until one passes what counts as
+// hogging: half a core, or 2G across its process tree
+const HOT_CPU = 50, HOT_RSS = 2 * 1024 * 1024;
+export function loadOf(inst) {
+  return {
+    cpu: {t: `${Math.round(inst.cpu ?? 0)}%`, c: inst.cpu >= HOT_CPU ? PALETTE.warn : PALETTE.dim},
+    mem: {t: fmtMem(inst.rss ?? 0), c: inst.rss >= HOT_RSS ? PALETTE.warn : PALETTE.dim},
+  };
+}
 
 // the digits label the first ten rows, in the order they are drawn
 export const NUMBERS = "1234567890";

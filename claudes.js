@@ -2,6 +2,7 @@
 // either: discover() is the listing, jump() in jump.js is the action.
 
 import {byCodePoint, HOME, sh, UTF8} from "./sh.js";
+import {treeUsage} from "./top.js";
 
 export class Instance {
   constructor(fields) {
@@ -26,6 +27,9 @@ export class Instance {
     this.clientTty = "";
     this.kittyPid = "";       // kitty's own child above the tmux client; what `pid:` matches
     this.kittyProc = "";      // kitty itself; what a Wayland compositor knows the window by
+    this.cpu = 0;             // %cpu of the claude and everything under it, summed
+    this.rss = 0;             // KB, the same tree
+    this.procs = 0;           // how many processes that tree is
     Object.assign(this, fields);
   }
 
@@ -331,13 +335,14 @@ export class StateClock {
 // loose: `less ~/notes/claude` matched and drew a row.
 export const IS_CLAUDE = /^(\S*\/)?claude(\s|$)|^\S+\s+\S*\.claude\/local\/\S*cli\.js(\s|$)/;
 const DAEMON = /^\S+\s+(daemon|bg-pty-host|bg-spare)(\s|$)/;
-const PS_LINE = /^\s*(\d+)\s+(\d+)\s+(.*)$/;
+const PS_LINE = /^\s*(\d+)\s+(\d+)\s+([\d.]+)\s+(\d+)\s+(.*)$/;
 
+// pid -> [ppid, command, %cpu, rss in KB]
 export async function processes() {
   const table = new Map();
-  for (const line of (await sh("ps", "-axo", "pid=,ppid=,command=")).split("\n")) {
+  for (const line of (await sh("ps", "-axo", "pid=,ppid=,%cpu=,rss=,command=")).split("\n")) {
     const m = PS_LINE.exec(line);
-    if (m) table.set(Number(m[1]), [Number(m[2]), m[3]]);
+    if (m) table.set(Number(m[1]), [Number(m[2]), m[5], Number(m[3]), Number(m[4])]);
   }
   return table;
 }
@@ -506,6 +511,8 @@ export async function discover() {
   // all at once: serially, these were the whole cost of a poll on a box with several
   await Promise.all(scrape.map(async ([inst, pane]) =>
     inst.state = paneState(await capture(pane))));
+  const load = treeUsage(found.map((i) => i.pid), procs);
+  for (const i of found) Object.assign(i, load.get(i.pid));
   tagTabs(found);
   return found.sort((a, b) => byCodePoint(a.shortPath, b.shortPath) || a.pid - b.pid);
 }
