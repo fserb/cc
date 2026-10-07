@@ -18,7 +18,7 @@ const POLL = 1500;          // same cadence as the TUI, so the bell lands as pro
 
 // macOS points, Wayland logical pixels and CSS pixels are close enough to the same size
 // that these numbers carry across the three.
-const WIDTH = 716;
+const WIDTH = 724;
 const ROW = 24;             // one instance
 const HEAD = 26;            // the filter line
 const FOOT = 23;            // the key hints
@@ -485,13 +485,12 @@ html, body {
 .age { left: 84px; width: 34px; text-align: right; color: ${PALETTE.dim}; }
 /* direction: rtl truncates at the head, which keeps the part of a path that identifies it,
    and text-align: left puts back the alignment that rtl otherwise takes with it */
-.cpu, .mem { width: 40px; text-align: right; }
-.cpu { left: 126px; }
-.mem { left: 174px; }
-.path { left: 222px; width: 196px; color: ${PALETTE.mauve}; direction: rtl;
+.cpu { left: 126px; width: 48px; text-align: right; }
+.mem { left: 182px; width: 40px; text-align: right; }
+.path { left: 230px; width: 196px; color: ${PALETTE.mauve}; direction: rtl;
   text-align: left; }
 .path > i { font-style: normal; direction: ltr; unicode-bidi: embed; }
-.sum { left: 426px; width: ${WIDTH - 426 - PAD}px; }
+.sum { left: 434px; width: ${WIDTH - 434 - PAD}px; }
 .m { color: ${PALETTE.accent}; font-weight: bold; }
 #foot { position: absolute; left: ${PAD + 2}px; width: ${WIDTH - 2 * PAD}px; bottom: 4px;
   height: ${FOOT - 4}px; }

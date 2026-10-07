@@ -253,8 +253,8 @@ function cellsOf(line) {
 const at = (line, n, len = 1) => cellsOf(line).slice(n, n + len).join("");
 
 // 0-based display cells, the table body's own positions plus the one-cell left margin
-const NUM = 2, STATE_COL = 5, FOR = 13, PATH = 20, SUMMARY = 48;
-const PATH_W = 26, SUMMARY_W = 50;
+const NUM = 2, STATE_COL = 5, FOR = 13, CPU = 20, MEM = 27, PATH = 33, SUMMARY = 61;
+const PATH_W = 26, SUMMARY_W = 37;
 
 // SAMPLE in `ccx` after rank(): waits oldest-first, then busys, then hold, then free. Mirrored here
 // on purpose, so changing the fixture fails loudly instead of weakening the test
@@ -265,16 +265,18 @@ const ROWS = [
   ["◐ busy", "25m", "~/ai/ccx:2", "inline the bell and play it from memory"],
   ["◐ busy", "3m", "~/prj/wrangler", "wrangler config for the edge worker"],
   ["◐ busy", "1m", "~/prj/a-very-long-director",
-    "a summary that is definitely longer than fifty dis"],   // both cropped, hard
+    "a summary that is definitely longer t"],                // both cropped, hard
   ["○ hold", "15m", "~/web/arcade", "PS2 blend modes, holding builds for a bench"],
   ["◌ free", "2h", "~/web/blob2", ""],
 ];
 const HEAD = 3;                 // bar, rule, header, then the rows
 
-Deno.test("snapshot: the content sits at cells 2, 5, 13, 20 and 48", async () => {
+Deno.test("snapshot: the content sits at cells 2, 5, 13, 20, 27, 33 and 61", async () => {
   const frame = await snapshot("100x14", "plain");
   eq(at(frame[2], STATE_COL, 5), "state", "the state header");
   eq(at(frame[2], FOR, 3), "for", "the for header");
+  eq(at(frame[2], CPU, 5), "  cpu", "the cpu header, right aligned");
+  eq(at(frame[2], MEM, 4), " mem", "the mem header, right aligned");
   eq(at(frame[2], PATH, 4), "path", "the path header");
   eq(at(frame[2], SUMMARY, 7), "summary", "the summary header");
 
@@ -284,14 +286,15 @@ Deno.test("snapshot: the content sits at cells 2, 5, 13, 20 and 48", async () =>
     eq(at(line, STATE_COL, 6), label, `row ${n}: the state cell`);
     eq(at(line, FOR, age.length), age, `row ${n}: the age`);
     eq(at(line, PATH, width(path)), path, `row ${n}: the path`);
-    eq(at(line, SUMMARY, width(summary)), summary, `row ${n}: the summary`);
+    const shown = width(summary) > SUMMARY_W ? summary.slice(0, SUMMARY_W) : summary;
+    eq(at(line, SUMMARY, width(shown)), shown, `row ${n}: the summary`);
   });
 });
 
 Deno.test("snapshot: the gaps between the columns are two cells", async () => {
   const frame = await snapshot("100x14", "plain");
   for (const line of frame.slice(HEAD, HEAD + ROWS.length)) {
-    for (const n of [1, 3, 4, 11, 12, 18, 19, 46, 47]) {
+    for (const n of [1, 3, 4, 11, 12, 18, 19, 25, 26, 31, 32, 59, 60]) {
       eq(at(line, n), " ", `cell ${n} is a column gap or a margin`);
     }
   }
@@ -316,13 +319,13 @@ Deno.test("snapshot: every line is exactly as wide as the screen", async () => {
   }
 });
 
-Deno.test("snapshot: a path crops hard at 26 cells and a summary at 50", async () => {
+Deno.test("snapshot: a path crops hard at 26 cells and a summary at 37", async () => {
   const frame = await snapshot("100x14", "plain");
   const line = frame[HEAD + 5];                 // the over-long fixture row
   eq(at(line, PATH, PATH_W), "~/prj/a-very-long-director", "26 cells of path, no more");
   eq(at(line, PATH + PATH_W), " ", "and then the column gap");
-  eq(at(line, SUMMARY, SUMMARY_W), "a summary that is definitely longer than fifty dis",
-    "50 cells of summary");
+  eq(at(line, SUMMARY, SUMMARY_W), "a summary that is definitely longer t",
+    "37 cells of summary");
   eq(width(at(line, PATH, PATH_W)), PATH_W, "the path cell is full");
   eq(width(at(line, SUMMARY, SUMMARY_W)), SUMMARY_W, "the summary cell is full");
 });
@@ -707,9 +710,9 @@ Deno.test("online: a probe is due every 30s, or every 5s once one has failed", (
 
 Deno.test("snapshot: offline is written beside the counter, and keeps the key hints",
   async () => {
-    const bar = (await snapshot("110x8", "plain", "offline"))[0];
+    const bar = (await snapshot("100x8", "plain", "offline"))[0];
     ok(bar.includes("offline  ·  3/8  ·  by state"), `the bar reads: ${bar.trim()}`);
-    ok(bar.includes("^t chat"), "and 110 cells still has room for the keys");
+    ok(bar.includes("^t chat"), "and 100 cells still has room for the keys");
     ok(!(await snapshot("100x8", "plain"))[0].includes("offline"), "nothing when it is up");
   });
 
@@ -1288,13 +1291,13 @@ Deno.test("fmtMem: K, then M, then G to one decimal", () => {
     "fmtMem");
 });
 
-Deno.test("snapshot: load adds cpu and mem columns, and only the hot cells are warn", async () => {
-  const plain = await snapshot("110x12", "plain", "load");
-  ok(plain[2].includes("cpu   mem   path"), `header: ${plain[2]}`);
-  ok(plain.some((l) => l.includes(" 362%  586M  ~/prj/wrangler")), "the wrangler row");
-  const frame = (await snapshot("110x12", "load")).join("\n");
+Deno.test("snapshot: cpu and mem are right aligned, and only the hot cells are warn", async () => {
+  const plain = await snapshot("110x12", "plain");
+  ok(plain[2].includes("  cpu   mem  path"), `header: ${plain[2]}`);
+  ok(plain.some((l) => l.includes("  362%  586M  ~/prj/wrangler")), "the wrangler row");
+  const frame = (await snapshot("110x12")).join("\n");
   const n = Number.parseInt(PALETTE.warn.slice(1), 16);
   const warn = `\x1b[38;2;${(n >> 16) & 255};${(n >> 8) & 255};${n & 255}m`;
-  ok(frame.includes(`${warn}362%`) && frame.includes(`${warn}3.3G`), "hot cells are warn");
+  ok(frame.includes(`${warn} 362%`) && frame.includes(`${warn}3.3G`), "hot cells are warn");
   ok(!frame.includes(`${warn}586M`), "a cool cell is not");
 });
