@@ -38,9 +38,11 @@ check() {
 # The job launchd runs is `open`, never the inner binary: LaunchServices is what
 # detaches the tray (ppid=1, tty=??) and that is the only launch path that has
 # been tested. `open -W` blocks for the life of the app, so KeepAlive waits on
-# the app rather than relaunching in a loop.
+# the app rather than relaunching in a loop. bootout ends the `open -W` job and
+# leaves the app it opened running, and a new `open` returns to that one, so the
+# old app is killed in between.
 install() {
-  [[ -x "$INNER" ]] || build
+  build
   mkdir -p "$(dirname "$PLIST")"
   cat > "$PLIST" <<PLISTEOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -85,6 +87,7 @@ install() {
 </plist>
 PLISTEOF
   launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+  pkill -f "$INNER systray" || true
   launchctl bootstrap "gui/$(id -u)" "$PLIST"
   echo "$LABEL loaded from $PLIST"
 }
