@@ -30,7 +30,7 @@ Deno.test("pace: past the reset the numbers are a week that is over", () => {
 Deno.test("usageLine: red only when it runs out before the reset", () => {
   const out = usageLine(at(50, 42), now), fine = usageLine(at(20, 84), now);
   assertEquals(/^usage 50% \(3\.0x pace - out \w{3} \d\d?[ap]m\)$/.test(out.text), true);
-  assertEquals(/^usage 20% \(0\.[23]x pace - reset \w{3} \d\d?[ap]m\)$/.test(fine.text), true);
+  assertEquals(/^usage 20% \(0\.[23]x pace\)$/.test(fine.text), true);
   assertEquals(out.color === fine.color, false);
 });
 
@@ -81,7 +81,7 @@ Deno.test("pace: nothing added in the last 6h is 0%/day and never runs out", () 
   u.history = [line(48, 40, u)];
   const p = pace(u, now);
   assertEquals([p.rate, p.end, p.out], [0, 48, null]);
-  assertEquals(/^usage 48% \(0\.0x pace - reset /.test(usageLine(u, now).text), true);
+  assertEquals(/^usage 48% \(0\.0x pace\)$/.test(usageLine(u, now).text), true);
 });
 
 Deno.test("readHistory: one sample per line, five_hour dropped, junk skipped", async () => {

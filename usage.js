@@ -133,15 +133,16 @@ function when(ms) {
   return `${DAYS[d.getDay()]} ${h % 12 || 12}${h < 12 ? "am" : "pm"}`;
 }
 
-// What a UI writes, `usage <used> (<ratio>x pace - out <when>)` or `- reset <when>`, as
-// {text, color}; 1.0x spends exactly what is left by the reset, or null with nothing to say. Orange when the rate runs
+// What a UI writes, `usage <used> (<ratio>x pace - out <when>)`, the `- out` part only when
+// the rate runs out before the reset, as {text, color}; 1.0x spends exactly what is left by the reset, or null with nothing to say. Orange when the rate runs
 // out before the reset; gold is kept for `wait`.
 export function usageLine(u, now = Date.now()) {
   const p = pace(u, now);
   if (!p) return null;
   const pct = (n) => `${Math.round(n)}%`;
-  const end = p.out ? `out ${when(p.out)}` : `reset ${when(u.resetsAt)}`;
-  const ratio = p.ratio === null ? "" : `${p.ratio.toFixed(1)}x pace - `;
-  return {text: `usage ${pct(p.used)} (${ratio}${end})`,
+  const parts = [p.ratio === null ? "" : `${p.ratio.toFixed(1)}x pace`,
+    p.out ? `out ${when(p.out)}` : ""].filter(Boolean);
+  const rest = parts.length ? ` (${parts.join(" - ")})` : "";
+  return {text: `usage ${pct(p.used)}${rest}`,
     color: p.out ? PALETTE.warn : PALETTE.mauve};
 }
