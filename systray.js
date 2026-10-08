@@ -5,7 +5,7 @@
  * inside a built app, so they are reached through one cast and guarded on `typeof`.
  */
 
-import {MAC} from "./sh.js";
+import {HOME, MAC} from "./sh.js";
 import {discover, StateClock} from "./claudes.js";
 import {fuzzy, loadOf, NUMBERS, PALETTE, rank, stateOf} from "./view.js";
 import {jump} from "./jump.js";
@@ -14,6 +14,8 @@ import {iconPng} from "./icon.js";
 import {Online} from "./online.js";
 import {readUsage, usageLine} from "./usage.js";
 
+// present while the bell is off, so the choice outlives a restart and KeepAlive
+const MUTED = `${HOME}/.claude/ccx-mute`;
 const POLL = 1500;          // same cadence as the TUI, so the bell lands as promptly
 
 // macOS points, Wayland logical pixels and CSS pixels are close enough to the same size
@@ -41,6 +43,15 @@ const TOGGLE_GAP = 250;     // how long a close is remembered, so the click that
 // Module global: Carbon keeps a raw pointer, so a collected callback is a crash later, not
 // an error now.
 let HOTKEY_HANDLER = null;
+
+function exists(path) {
+  try {
+    Deno.statSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /* `fn` is SCHEDULED and never called in the handler, and that is the whole of what makes
  * the hotkey work rather than kill the app.
@@ -288,6 +299,7 @@ class Model {
     this.redraw = redraw;
     this.close = close;
     this.quit = quit;
+    this.muted = exists(MUTED);
   }
 
   // discover() is async, so the interval does not wait for the poll it started; the guard
@@ -303,7 +315,7 @@ class Model {
     } finally {
       this.polling = false;
     }
-    if (this.clock.woke.length) play();   // busy -> wait: a turn ended or a prompt is up
+    if (this.clock.woke.length && !this.muted) play();   // busy -> wait: a turn ended or a prompt is up
     this.refresh();
   }
 
@@ -672,14 +684,29 @@ export async function runSystray(argv = Deno.args) {
   tray.setTooltip("ccx");
   // The only way out other than the panel's own quit key. It opens on right click, which
   // the OS reserves and never reports, so nothing here can open or suppress it.
-  tray.setMenu([
-    {item: {id: "about", label: `ccx  ·  ${HOTKEY_NAME}`, enabled: false,
-      accelerator: null, checked: false, tooltip: null}},
-    {separator: null},
-    {item: {id: "quit", label: "Quit", enabled: true, accelerator: null, checked: false,
-      tooltip: null}},
-  ]);
-  tray.onmenuclick = () => model.quit();   // Quit is the only thing in it that can be hit
+  function menu() {
+    tray.setMenu([
+      {item: {id: "about", label: `ccx  ·  ${HOTKEY_NAME}`, enabled: false,
+        accelerator: null, checked: false, tooltip: null}},
+      {separator: null},
+      {item: {id: "bell", label: "Sound", enabled: true, accelerator: null,
+        checked: !model.muted, tooltip: null}},
+      {separator: null},
+      {item: {id: "quit", label: "Quit", enabled: true, accelerator: null, checked: false,
+        tooltip: null}},
+    ]);
+  }
+  menu();
+  // the event's shape is undocumented in 2.9.7, so the id is taken from any of the three
+  tray.onmenuclick = (e) => {
+    const id = e?.detail?.id ?? e?.id ?? e;
+    if (id === "quit") return model.quit();
+    if (id !== "bell") return;
+    model.muted = !model.muted;
+    if (model.muted) Deno.writeTextFileSync(MUTED, "");
+    else Deno.removeSync(MUTED);
+    menu();
+  };
 
   /* The panel is a window we own, shown, hidden and placed by hand. `tray.attachPanel` is
    * documented as the menu bar popover primitive and in 2.9.6 is not one: a plain titled
