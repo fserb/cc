@@ -23,7 +23,8 @@ echo "$(tail -n 1 "$h" 2>/dev/null) - $v" | awk '
   exit 0
 now=$(date +%s)
 echo "$now $v" >> "$h"
-# trimmed to 8 days once the oldest line is 9 days old, so not on every append
+# trimmed to 22 days once the oldest line is 23 days old, so not on every append: last
+# week's whole log stays for ccx burn
 first=$(head -n 1 "$h" | cut -d' ' -f1)
-[ $((now - ${first:-$now})) -gt 777600 ] || exit 0
-awk -v c=$((now - 691200)) '$1 >= c' "$h" > "$h.$$" && command mv -f "$h.$$" "$h"
+[ $((now - ${first:-$now})) -gt 1987200 ] || exit 0
+awk -v c=$((now - 1900800)) '$1 >= c' "$h" > "$h.$$" && command mv -f "$h.$$" "$h"

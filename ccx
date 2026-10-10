@@ -12,8 +12,8 @@ import {jump, kittyWindowTitle, raiseTarget, tmuxWindowName, typeInto} from "./j
 import {Online} from "./online.js";
 import {byDay, HISTORY, readUsage, usageLine, USAGE} from "./usage.js";
 import {close, expandDir, paneIn, spawn} from "./spawn.js";
-import {base, bestUsage, call, discoverAll, HOSTS, jumpRemote, label, others, Remotes, SELF}
-  from "./remote.js";
+import {base, burnReport, call, discoverAll, HOSTS, jumpRemote, label, mergedUsage, others,
+  Remotes, SELF} from "./remote.js";
 
 // `peer.js` and `chat.js` load on use, not at startup: a missing one must cost `ccx send`
 // its error line and nothing else. A static import would take `list`, `doctor` and the TUI
@@ -808,7 +808,7 @@ async function cmdList() {
 // ccx usage
 // The seven-day line, then the week so far a local day per row
 async function cmdUsage() {
-  const u = await bestUsage(), line = usageLine(u);
+  const u = await mergedUsage(), line = usageLine(u);
   if (!line) {
     console.log(u ? "the week in ccx-usage.json is over" : `${USAGE} missing or unreadable; ` +
       "statusLine in ~/.claude/settings.json writes it");
@@ -820,6 +820,70 @@ async function cmdUsage() {
     console.log(`${day}  ${`${Math.round(d.used)}%`.padStart(4)}  ` +
       `${`+${Math.round(d.added)}%`.padStart(4)}  ` +
       (d.samples ? `${d.samples} samples` : "no samples, interpolated"));
+  }
+}
+
+// ccx burn [hours] [--top N] [--json]
+// Who used the limit, every host's transcripts: with no hours, last week, this week and
+// this week's days per project, as % of the limit; with hours, the last N per project and
+// session with their tokens. Asks this host's daemon, which keeps the hourly store, and
+// reads the transcripts here itself when it does not answer
+async function cmdBurn(...args) {
+  let hours = 0, top = 12, raw = false;
+  for (let n = 0; n < args.length; n++) {
+    if (args[n] === "--json") raw = true;
+    else if (args[n] === "--top" && Number(args[n + 1]) > 0) top = Number(args[++n]);
+    else if (Number(args[n]) > 0) hours = Number(args[n]);
+    else usage();
+  }
+  let [r, err] = await call(SELF, `/api/burn${hours ? `?hours=${hours}` : ""}`, undefined, 120_000);
+  if (err) {
+    const {localRows} = await import("./burn.js");
+    console.error(`${SELF}: ${err}; reading the transcripts here`);
+    r = await burnReport(hours, (f, t) => localRows(f, t, {write: false}));
+  }
+  if (raw) return console.log(JSON.stringify(r));
+  if (r.error) {
+    console.error(r.error);
+    return Deno.exit(1);
+  }
+  reportDown(r.down ?? []);
+  const pct = (q) => q == null ? "" : `${q < 10 ? q.toFixed(1) : Math.round(q)}%`;
+  const tok = (n) => n >= 1e9 ? `${(n / 1e9).toFixed(1)}G` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M`
+    : n >= 1e3 ? `${Math.round(n / 1e3)}k` : `${n}`;
+  const when = (t) => new Date(t).toLocaleString("en-US", {weekday: "short", hour: "numeric",
+    minute: "2-digit"});
+  if (hours) {
+    console.log(`burn ${hours}h (${when(r.from)} - ${when(r.to)}): ${tok(r.w)} weighted tok, ` +
+      (r.used == null ? `~${pct(r.est)} of the week at 14M/% (no log for this window)`
+        : `the log added ${pct(r.used)} of the week`));
+    const row = (name, t) => console.log(`${(t.q == null ? `${pct(t.share)}*` : pct(t.q))
+      .padStart(6)}  ${name.padEnd(22)} out ` +
+      `${tok(t.out).padStart(5)}  cw ${tok(t.cw).padStart(5)}  cr ${tok(t.cr).padStart(6)}  ` +
+      `${t.m} msgs`);
+    console.log("== projects");
+    for (const p of r.projects) row(p.p, p);
+    console.log("== sessions");
+    const ss = r.projects.flatMap((p) => p.sessions).sort((a, b) => b.w - a.w).slice(0, top);
+    for (const s of ss) row(s.n, s);
+    return;
+  }
+  // a column per window, a row per project, % of the limit; a window with no usage log
+  // shows each one's share of its tokens instead, starred
+  const cols = [...r.weeks, ...r.days.filter((d) => d.from >= r.weeks[1].from)];
+  const names = r.weeks[1].projects.concat(r.weeks[0].projects).map((p) => p.p)
+    .filter((p, n, a) => a.indexOf(p) === n).slice(0, top);
+  const cell = (w, p) => {
+    const x = w.projects.find((x) => x.p === p);
+    return (w.used == null ? `${pct(x?.share ?? 0)}*` : pct(x?.q ?? 0)).padStart(7);
+  };
+  console.log(`${"".padEnd(18)}${["last", "this", ...cols.slice(2).map((d) => d.label)]
+    .map((l) => l.padStart(7)).join("")}`);
+  console.log(`${"used".padEnd(18)}${cols.map((w) => (w.used == null ? "?" : pct(w.used))
+    .padStart(7)).join("")}`);
+  for (const p of names) console.log(`${p.slice(0, 17).padEnd(18)}${cols.map((w) => cell(w, p)).join("")}`);
+  if (cols.some((w) => w.used == null)) {
+    console.log("* no usage log for that window: the share of its tokens, not of the limit");
   }
 }
 
@@ -1041,6 +1105,12 @@ async function cmdHost(...args) {
   const watching = watchSessions(repoll);
   setInterval(() => net.tick(), 5000);
   net.tick();
+  // the burn store takes each hour as it settles, so api/burn seldom scans more than the
+  // hour in progress; an empty store fills from transcripts here, ~15 days of them
+  const {settle} = await import("./burn.js");
+  const settleNow = () => settle().catch((e) => console.error(`burn store: ${e.message}`));
+  setInterval(settleNow, 10 * 60_000);
+  settleNow();
   // a notice goes to a local subscriber's socket, or to its host's daemon. The listener runs
   // inside clock.update(), so `instances` is still the poll before, which is fine: a
   // subscriber had to exist to subscribe
@@ -1330,6 +1400,7 @@ const COMMANDS = {
   ps: [cmdUi, 0],
   list: [cmdList, 0],
   usage: [cmdUsage, 0],
+  burn: [cmdBurn, -1],
   doctor: [cmdDoctor, 0],
   focus: [cmdFocus, 1],
   new: [cmdNew, -1],
@@ -1358,6 +1429,8 @@ const HELP = [
   ["  ps", "the listing as a TUI, and enter to jump to an instance"],
   ["  list", "the same listing, one line each, no UI"],
   ["  usage", "the seven-day limit, the last 6h against what is left, the week by day"],
+  ["  burn [hours] [--top N]", "who used it: last week, this week and its days by project; or the"],
+  ["", "last N hours by project and session. --json for the data"],
   ["  doctor", "what resolves, and the kitty match it would use"],
   ["  focus <target>", "jump to one instance without the UI, on any host"],
   ["  new [host:]<dir> [name...]", "a claude in dir: beside one already there, else a kitty window; none if name is there"],

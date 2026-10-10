@@ -52,7 +52,7 @@ export function readHistory(path = HISTORY) {
 }
 
 // What was used at `t`, between the samples either side of it.
-function usedAt(samples, t) {
+export function usedAt(samples, t) {
   let prev = samples[0];
   for (const s of samples) {
     if (s.at >= t) {
@@ -67,7 +67,7 @@ function usedAt(samples, t) {
 // This week's samples to `now`: 0 at its start, the history's lines in it, then `u` itself
 // at `now`, sorted, with a running max applied, since an instance holding older numbers can
 // write them after newer ones and within a week the figure only goes up.
-function weekSamples(u, now) {
+export function weekSamples(u, now) {
   const start = u.resetsAt - WEEK, samples = [{at: start, used: 0}];
   for (const h of u.history ?? []) {
     if (h.resetsAt !== u.resetsAt || h.at <= start || h.at >= now) continue;

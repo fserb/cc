@@ -20,7 +20,9 @@ import {parseDialog, pick, screen} from "./dialog.js";
 import {select, sendKeys, tmuxBackground, typeInto} from "./jump.js";
 import {close, expandDir, paneIn, spawn} from "./spawn.js";
 import {sendPeer} from "./peer.js";
-import {readUsage} from "./usage.js";
+import {byDay, pace, readUsage} from "./usage.js";
+import {localRows} from "./burn.js";
+import {burnReport, mergedUsage} from "./remote.js";
 import {STATES} from "./subs.js";
 import PAGE from "./page.html" with {type: "text"};
 
@@ -190,6 +192,33 @@ export class Server {
     this.sessions = new Set();            // api/s/<pid>/events clients
     this.lastList = "";
     this.timer = 0;
+    this.cache = new Map();               // api/usage and api/burn answers, a minute each
+  }
+
+  // `f()`, or what it gave under `key` in the last minute
+  async cached(key, f) {
+    const hit = this.cache.get(key);
+    if (hit && Date.now() - hit.at < 60_000) return await hit.body;
+    const body = f();
+    this.cache.set(key, {at: Date.now(), body});
+    body.catch(() => this.cache.delete(key));
+    return await body;
+  }
+
+  // api/usage: this host's reading with `local=1`, which the others ask for; otherwise every
+  // host's merged, with the pace and the days worked out here, so the page and `ccx usage`
+  // say the same thing
+  async usage(url) {
+    if (url.searchParams.get("local")) return readUsage();
+    return await this.cached("usage", async () => {
+      const u = await mergedUsage();
+      return u && {...u, pace: pace(u), days: byDay(u)};
+    });
+  }
+
+  // api/burn: who used the limit, every host merged (remote.js burnReport)
+  async burn(hours) {
+    return await this.cached(`burn ${hours}`, () => burnReport(hours, localRows));
   }
 
   find(pid) {
@@ -334,7 +363,13 @@ export class Server {
     }
     if (get && path === "/api/list") return json(this.listBody());
     if (get && path === "/api/events") return this.listEvents();
-    if (get && path === "/api/usage") return json({usage: readUsage()});
+    if (get && path === "/api/usage") return json({usage: await this.usage(url)});
+    if (get && path === "/api/burn/rows") {
+      const n = (k) => Number(url.searchParams.get(k));
+      if (!(n("from") < n("to"))) return json({error: "from < to, in ms"}, 400);
+      return json({rows: await localRows(n("from"), n("to"))});
+    }
+    if (get && path === "/api/burn") return json(await this.burn(Number(url.searchParams.get("hours")) || 0));
     if (post && path === "/api/relay") {
       if (!this.relay) return json({error: "no relay here; it runs under ccx host"}, 409);
       return answer(await this.relay.deliver(await req.json().catch(() => ({}))));
