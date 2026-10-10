@@ -12,7 +12,7 @@ import {jump, kittyWindowTitle, raiseTarget, tmuxWindowName, typeInto} from "./j
 import {Online} from "./online.js";
 import {byDay, HISTORY, readUsage, usageLine, USAGE} from "./usage.js";
 import {close, expandDir, paneIn, spawn} from "./spawn.js";
-import {base, bestUsage, call, discoverAll, HOSTS, jumpRemote, label, others, Remotes, SELF}
+import {attachSession, base, bestUsage, call, discoverAll, HOSTS, jumpRemote, label, others, Remotes, SELF}
   from "./remote.js";
 
 // `peer.js` and `chat.js` load on use, not at startup: a missing one must cost `ccx send`
@@ -885,6 +885,16 @@ async function cmdFocus(spec) {
   Deno.exit(1);
 }
 
+// ccx attach [host:]<session> [dir]
+// A kitty window on a tmux session, on this host or another, the session made in dir if
+// there is none. dir is the host's own: ~ and a relative path are its home's
+async function cmdAttach(spec, dir = "") {
+  if (!spec || spec.endsWith(":")) usage();
+  const [host, session] = splitHost(spec);
+  // a local tmux gets no shell to expand ~
+  await attachSession(host, session, host || !dir ? dir : expandDir(dir));
+}
+
 // ccx new [host:]<dir> [name]
 // The same spawn() as the page's +: a new tmux window after an instance already in `dir`,
 // else a new kitty window, or a detached tmux session on a host with no kitty attached
@@ -908,6 +918,18 @@ async function cmdNew(dir, ...words) {
     }
     console.log(`started ${host}:${r.pid} in ${host}:${rest}, ` +
       (r.after ? `tmux window after ${r.after}` : `tmux pane ${r.pane}`));
+    // then its window, as a local new opens one; the host's listing polls every 1.5s
+    for (let n = 0; n < 20; n++) {
+      const {instances} = await discoverAll(new StateClock());
+      const i = instances.find((i) => i.host === host && i.pid === r.pid);
+      if (i) {
+        const err = await jumpRemote(i);
+        if (err) console.error(`new: ${err}`);
+        return;
+      }
+      await new Promise((ok) => setTimeout(ok, 500));
+    }
+    console.error(`new: ${host}:${r.pid} never showed in its host's listing; not focused`);
     return;
   }
   let path = expandDir(dir);
@@ -1194,6 +1216,7 @@ const COMMANDS = {
   usage: [cmdUsage, 0],
   doctor: [cmdDoctor, 0],
   focus: [cmdFocus, 1],
+  attach: [cmdAttach, -1],
   new: [cmdNew, -1],
   delete: [cmdDelete, 1],
   send: [cmdSend, -1],               // -1: its own validation, since the message is the rest
@@ -1219,7 +1242,8 @@ const HELP = [
   ["  usage", "the seven-day limit, the last 6h against what is left, the week by day"],
   ["  doctor", "what resolves, and the kitty match it would use"],
   ["  focus <target>", "jump to one instance without the UI, on any host"],
-  ["  new [host:]<dir> [name...]", "a claude in dir: beside one already there, else a kitty window"],
+  ["  attach [host:]<session> [dir]", "a kitty window on a tmux session, made in dir if missing"],
+  ["  new [host:]<dir> [name...]", "a claude in dir: beside one already there, else a kitty window; focused"],
   ["  delete [host:]<name|pid>", "end one instance and close its tmux pane"],
   ["  send <target> <message...>", "a chat message to one or more instances"],
   ["  user <target> <text...>", "typed into an instance as its user, /commands included"],

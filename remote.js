@@ -131,30 +131,41 @@ export class Remotes {
   }
 }
 
-// The command a kitty window runs to show a remote tmux session: a plain attach of the
-// whole session, since a kitty window is a session and its tabs one piece of work. Closing
-// the window hangs the client up, and tmux keeps a session whose client got SIGHUP.
+// The command a kitty window runs to show a tmux session: a plain attach of the whole
+// session, since a kitty window is a session and its tabs one piece of work. Closing the
+// window hangs the client up, and tmux keeps a session whose client got SIGHUP.
+// new-session -A attaches, or makes the session in `dir` when it is gone.
 // -u: an ssh session on nadya has no LANG, so tmux fell back to line-drawing and dropped
 // every non-ASCII glyph, the powerline ones included
-const attachArgs = (i) => ["ssh", "-t", i.host, "tmux", "-u", "attach", "-t", i.session];
+function attachArgs(host, session, dir = "") {
+  const tmux = ["tmux", "-u", "new-session", "-A", "-s", session, ...(dir ? ["-c", dir] : [])];
+  return host && host !== SELF ? ["ssh", "-t", host, ...tmux] : tmux;
+}
 
-// Focus a remote instance: its host selects the window and pane, then the kitty window
-// already attached to that session comes to the front, or a new one opens attached.
-// An error message, or null
+// Focus a remote instance: its host selects the window and pane, then its session's window
+// comes up. An error message, or null
+export async function jumpRemote(i) {
+  if (!i.pane) return `${label(i)} is not inside tmux; nothing to focus`;
+  const [r, err] = await call(i.host, `/api/s/${i.pid}/select`, {});
+  if (err) return err;
+  await attachSession(i.host, i.session, "", r?.background);
+  return null;
+}
+
+// The kitty window already attached to a tmux session comes to the front, or a new one
+// opens attached, making the session in `dir` if there is none. A window is matched on the
+// command it runs, whatever dir it was opened with.
 //
 // The window takes the remote tmux's pane background, so the padding around it and the
 // title bar (`macos_titlebar_color background`) match what tmux paints: `color` when it is
 // made, `set-colors` on every focus after, so a theme changed since still lands
 const PAINTED = ["background", "active_border_color", "inactive_border_color"];
 
-export async function jumpRemote(i) {
-  if (!i.pane) return `${label(i)} is not inside tmux; nothing to focus`;
-  const [r, err] = await call(i.host, `/api/s/${i.pid}/select`, {});
-  if (err) return err;
-  const bg = /^#[0-9a-f]{6}$/.test(r?.background ?? "") ? r.background : "";
-  const want = attachArgs(i).join(" "), procs = await processes();
+export async function attachSession(host, session, dir = "", background = "") {
+  const bg = /^#[0-9a-f]{6}$/.test(background ?? "") ? background : "";
+  const want = attachArgs(host, session).join(" "), procs = await processes();
   for (const [pid, [, cmd]] of procs) {
-    if (cmd !== want) continue;
+    if (cmd !== want && !cmd.startsWith(`${want} -c `)) continue;
     const [child, kitty] = kittyOwner(pid, procs);
     if (!kitty) continue;
     if (bg) {
@@ -164,10 +175,9 @@ export async function jumpRemote(i) {
     }
     sendKitty("focus-window", {match: `pid:${child}`});
     if (MAC) await sh("open", "-a", "kitty");
-    return null;
+    return;
   }
-  sendKitty("launch", {args: attachArgs(i), type: "os-window",
+  sendKitty("launch", {args: attachArgs(host, session, dir), type: "os-window",
     ...(bg ? {color: PAINTED.map((c) => `${c}=${bg}`)} : {})});
   if (MAC) await sh("open", "-a", "kitty");
-  return null;
 }
