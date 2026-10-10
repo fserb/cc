@@ -82,6 +82,7 @@
   .bs { padding-left: 1rem; font-size: 0.88rem; } .bs small { color: var(--muted); }
   .bb { display: flex; height: 10px; border-radius: 3px; background: var(--track); overflow: hidden; } .bb i { display: block; height: 100%; background: var(--accent); } .bs .bb i { opacity: 0.55; } .bd > summary .bb { background: none; } .qw { display: flex; flex-wrap: wrap; justify-content: space-between; column-gap: 1rem; } .qw span:last-child:not(:first-child) { margin-left: auto; }
   .bp .bp { margin-left: 1rem; } .bp .bp summary { font-size: 0.9rem; }
+  .legend { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; font-size: 0.8rem; color: var(--muted); margin: 0.2rem 0 0.6rem; } .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 0.3rem; }
   .qh { font-size: 0.85rem; font-weight: 600; color: var(--muted); margin: 1.6rem 0 0.4rem; }
   .qg { max-width: 600px; margin: 0; } .qd { position: relative; height: 1.2em; font-size: 0.72rem; color: var(--muted); } .qd span { position: absolute; top: 0.1em; padding-left: 3px; }
   .rows li.go { cursor: pointer; } .rows li.go:hover span { color: var(--accent); }
@@ -453,7 +454,19 @@ document.addEventListener("submit", async (e) => {
 let qTab = "this";
 const qOpen = new Set();  // the open rows of the quota view, kept across redraws
 const TOPN = 5;  // projects with their own row in the usage breakdown; the rest go into "others"
-const PCOL = ["#0b7bd3", "#2f9e44", "#f59f00", "#ae3ec9", "#1098ad", "#e8590c"];  // by rank in each window
+// one color per project on the page: the PCOL.length busiest over all burn data (weeks and days) by rank, the rest gray.
+// Tableau 20 without its two grays (gray is "others"), the dark half first
+const PCOL = ["#4e79a7", "#f28e2b", "#59a14f", "#e15759", "#b07aa1", "#499894", "#b6992d", "#d37295", "#9d7660",
+  "#a0cbe8", "#ffbe7d", "#8cd17d", "#ff9d9a", "#d4a6c8", "#86bcb6", "#f1ce63", "#fabfd2", "#d7b5a6"];
+let pcolMap = null;
+function projColors(b) {
+  if (pcolMap) return pcolMap;
+  const tot = new Map();
+  for (const w of [...b.weeks, ...b.days]) for (const x of merged(w.projects ?? [])) tot.set(x.p, (tot.get(x.p) ?? 0) + x.w);
+  const ranked = [...tot].filter(([, w]) => w > 0).sort((a, b) => b[1] - a[1]);
+  pcolMap = new Map(ranked.slice(0, PCOL.length).map(([p], n) => [p, PCOL[n]]));
+  return pcolMap;
+}
 function quotaView() {
   const u = S.usage, p = pace();
   if (!u) return `<article><h1>quota</h1><p class="meta">no usage data</p></article>`;
@@ -485,11 +498,11 @@ function burnView() {
   const group = (w) => {
     const ps = merged(w.projects).filter((x) => x.w > 0).sort((a, b) => b.w - a.w);
     const shown = ps.slice(0, TOPN), rest = ps.slice(TOPN);
-    if (rest.length < 2) return shown.concat(rest).map((x, n) => ({...x, c: PCOL[n]}));
+    if (rest.length < 2) return shown.concat(rest);
     const sum = (f) => rest.reduce((a, x) => a + (x[f] ?? 0), 0);
-    return shown.map((x, n) => ({...x, c: PCOL[n]})).concat({p: "others", w: sum("w"), q: sum("q"), share: sum("share"), others: rest});
+    return shown.concat({p: "others", w: sum("w"), q: sum("q"), share: sum("share"), others: rest});
   };
-  const pcol = (x) => x.c ?? "var(--gray)";
+  const cmap = projColors(b), pcol = (x) => (!x.others && cmap.get(x.p)) || "var(--gray)";
   const list = (w, key) => {
     const max = Math.max(1, ...group(w).map((x) => x.w));
     const sub = (x) => x.others ? x.others.map((o) => ({n: o.p, w: o.w, q: o.q, share: o.share})) : x.sessions.filter((s) => s.w >= max / 1000);
@@ -501,14 +514,16 @@ function burnView() {
   const w = qTab === "24h" ? S.burn24 : b.weeks[qTab === "last" ? 0 : 1];
   const view = !w ? `<p class="meta">loading…</p>` : w.error ? `<p class="meta err">${esc(w.error)}</p>` : `${head(w)}${list(w, qTab)}`;
   // days: newest first, a stacked bar each (widths by weighted tokens, the busiest day full), its projects on tap
-  const days = [...b.days].reverse(), max = Math.max(1, ...days.map((d) => d.w));
+  const days = [...b.days].reverse(), max = Math.max(1, ...days.map((d) => d.w)), inBars = new Set();
   const rows = days.map((d) => {
     const k = `days/${d.from}`;
-    const segs = group(d).map((x) => `<i style="width:${(x.w / max * 100).toFixed(2)}%;background:${pcol(x)}" title="${esc(x.others ? `others (${x.others.length})` : x.p)}"></i>`).join("");
+    const segs = group(d).map((x) => (inBars.add(x.others ? "" : x.p), x)).map((x) => `<i style="width:${(x.w / max * 100).toFixed(2)}%;background:${pcol(x)}" title="${esc(x.others ? `others (${x.others.length})` : x.p)}"></i>`).join("");
     const label = `${d.label} ${new Date(d.from).getDate()}${d.from === b.weeks[1].from ? " ↻" : ""}`;
     return `<details class="bp bd" data-k="${esc(k)}" ${qOpen.has(k) ? "open" : ""}><summary><span class="nm">${esc(label)}</span><span class="bb">${segs}</span><b>${d.used == null ? "" : fmtQ(d.used)}</b></summary>${list(d, k)}</details>`;
   }).join("");
-  return `${tabs}${view}<h3 class="qh">by day</h3>${rows}<p class="meta">A bar is the day's weighted tokens; the % what the usage log added that day; tap a day for its projects. ↻ the weekly reset.</p>${down}`;
+  const lg = [...cmap.keys()].filter((p) => inBars.has(p)), gray = [...inBars].some((p) => !cmap.has(p));
+  const legend = `<div class="legend">${lg.map((p) => `<span><i style="background:${cmap.get(p)}"></i>${esc(p)}</span>`).join("")}${gray ? `<span><i style="background:var(--gray)"></i>others</span>` : ""}</div>`;
+  return `${tabs}${view}<h3 class="qh">by day</h3>${legend}${rows}<p class="meta">A bar is the day's weighted tokens; the % what the usage log added that day; tap a day for its projects. ↻ the weekly reset.</p>${down}`;
 }
 // a project's name as shown: a path's last part ("~/prj/bank" -> "bank"); /tmp dirs -> "tmp",
 // anything in .dotfiles or .claude -> "dotfiles" or "claude", "~/" -> "home", a dated dir -> its parent
