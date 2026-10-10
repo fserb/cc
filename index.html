@@ -125,11 +125,10 @@ const BLOG = "../blog/";
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
 const S = {rows: [], usage: null, burn: null, asks: [], posts: [], todo: [], ideas: [], log: [], screens: {}};
-// the open item (and the blog's filter) live in the URL, so a refresh reopens them: #blog/arc, #marx.1234
-const [hashCur, hashTab] = decodeURIComponent(location.hash.slice(1)).split("/");
+// the open item lives in the URL, so a refresh reopens it: #blog, #marx.1234 (an old #blog/arc opens the blog)
+const [hashCur] = decodeURIComponent(location.hash.slice(1)).split("/");
 let cur = hashCur || (innerWidth > 760 ? "nadya" : null);
-let blogTab = hashTab ?? "";
-function setHash() { if (cur) history.replaceState(history.state, "", cur === "blog" && blogTab ? `#blog/${blogTab}` : `#${cur}`); }
+function setHash() { if (cur) history.replaceState(history.state, "", `#${cur}`); }
 const sent = new Map();  // ask id / item -> what was sent, for "✓" lines
 
 // ---------- helpers
@@ -293,7 +292,7 @@ function drawView(soft) {
   let html, ph = "Message nadya";
   if (cur === "quota") html = quotaView();
   else if (!cur || cur === "nadya") html = nadyaView();
-  else if (cur === "blog") { html = `<iframe src="${BLOG}${blogTab ? `#${blogTab}` : ""}" title="blog"></iframe>`; ph = "Message nadya about the blog"; }
+  else if (cur === "blog") { html = `<iframe src="${BLOG}" title="blog"></iframe>`; ph = "Message nadya about the blog"; }
   else if (cur === "todo") { html = todoView(); ph = "Tell nadya a todo or an idea"; }
   else if (cur === "new") html = newView();
   else if (i?.r) { html = sessionView(i.r); ph = `Message ${i.r.name}`; }
@@ -303,7 +302,8 @@ function drawView(soft) {
   lastView = html;
   view.innerHTML = html;
   const frame = view.querySelector("iframe");
-  frame?.addEventListener("load", () => frame.contentWindow.addEventListener("hashchange", () => { blogTab = decodeURIComponent(frame.contentWindow.location.hash.slice(1)); setHash(); }));
+  // no project filter in cc: hide the blog's filter row; the colored project labels stay, not clickable
+  frame?.addEventListener("load", () => frame.contentDocument.head.insertAdjacentHTML("beforeend", "<style>#filter { display: none; } .meta a { pointer-events: none; }</style>"));
   $("#say").q.placeholder = ph;
   const chatty = !cur || cur === "nadya" || cur.includes(".");
   if (!soft) { pausedAt = 0; $("#newer").hidden = true; }
