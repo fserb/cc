@@ -1289,6 +1289,14 @@ async function notifyNew(n, who, words) {
   if (!ok) Deno.exit(1);
 }
 
+// "12:13 PM" today, "Sat Oct 17 12:13 PM" any other day
+function untilText(epoch) {
+  const d = new Date(epoch * 1000);
+  const time = d.toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
+  return d.toDateString() === new Date().toDateString() ? time
+    : `${d.toDateString().slice(0, 10)} ${time}`;
+}
+
 // ccx subs: every host's subscriptions
 async function cmdSubs() {
   const all = await Promise.all(HOSTS.map((h) => call(h, "/api/subs")));
@@ -1296,7 +1304,7 @@ async function cmdSubs() {
     const [body, err] = all[n];
     if (err) return console.error(`${h}: down, ${err}`);
     for (const s of body.subs) {
-      const until = s.until ? `until ${new Date(s.until * 1000).toLocaleTimeString()}` : "once";
+      const until = s.until ? `until ${untilText(s.until)}` : "once";
       console.log(`${`${h}:${s.id}`.padEnd(10)} ${`${s.who.host}:${s.who.name || s.who.pid}`
         .padEnd(18)} <- ${`${h}:${s.target.any ? "any" : s.target.name || s.target.pid}`
         .padEnd(18)} ` +
