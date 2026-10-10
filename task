@@ -10,7 +10,7 @@ test() {
   deno test -A --ext js "$ROOT/ccx_test.js" "$ROOT/chat_test.js" "$ROOT/peer_test.js" \
     "$ROOT/transcript_test.js" "$ROOT/dialog_test.js" \
     "$ROOT/spawn_test.js" "$ROOT/server_test.js" "$ROOT/usage_test.js" \
-    "$ROOT/relay_test.js" "$@"
+    "$ROOT/relay_test.js" "$ROOT/subs_test.js" "$@"
 }
 
 check() {

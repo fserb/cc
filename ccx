@@ -1008,8 +1008,8 @@ async function cmdHost(...args) {
     if (args[n] !== "--port" || !/^\d+$/.test(args[n + 1] ?? "")) usage();
     port = Number(args[++n]);
   }
-  const [srv, relayMod, remote] = await Promise.all([serverModule(), import("./relay.js"),
-    import("./remote.js")]);
+  const [srv, relayMod, remote, {Subs}, {sendPeer}] = await Promise.all([serverModule(),
+    import("./relay.js"), import("./remote.js"), import("./subs.js"), peerModule()]);
   port ??= srv.PORT;
   const clock = new StateClock(remote.SELF), net = new Online();
   let instances = [], polling = false;
@@ -1023,12 +1023,24 @@ async function cmdHost(...args) {
       polling = false;
     }
   };
+  // a notice goes to a local subscriber's socket, or to its host's daemon. The listener runs
+  // inside clock.update(), so `instances` is still the poll before, which is fine: a
+  // subscriber had to exist to subscribe
+  const subs = new Subs(remote.SELF, async (who, text) => {
+    if (who.host !== remote.SELF) {
+      return (await remote.call(who.host, `/api/s/${who.pid}/send`, {text, from: "ccx"}))[1];
+    }
+    const inst = instances.find((i) => i.pid === who.pid);
+    return inst ? await sendPeer(inst, text, "ccx") : `no claude instance with pid ${who.pid}`;
+  });
+  clock.on((events) => subs.onEvents(events));
   await poll();
   setInterval(poll, 1500);
   relayMod.clearStandIns(remote.SELF);
   const relay = new relayMod.Relay(remote.SELF, async (host, body) =>
     (await remote.call(host, "/api/relay", body))[1]);
-  const r = srv.runServer({source: () => ({instances, net}), port, hostname: "0.0.0.0", relay});
+  const r = srv.runServer({source: () => ({instances, net}), port, hostname: "0.0.0.0", relay,
+    subs});
   if (r.error) {
     console.error(`host: ${r.error}`);
     Deno.exit(1);
@@ -1193,6 +1205,73 @@ async function cmdChat(...args) {
   await new Promise(() => {});       // ctrl+c is the way out, the same as `tail -f`
 }
 
+// Exactly one instance for `spec`, `me` being the one we run inside; exits otherwise
+function onlyOne(cmd, instances, spec) {
+  const self = selfPid();
+  const hits = spec === "me" ? instances.filter((i) => !i.host && i.pid === self)
+    : resolveTarget(instances, spec, self);
+  if (hits.length === 1) return hits[0];
+  console.error(spec === "me" && !self ? `${cmd}: "me" only means something inside a claude`
+    : hits.length ? `${cmd}: ${JSON.stringify(spec)} is ${hits.map(label).join(", ")}; name one`
+    : `${cmd}: no instance matches ${JSON.stringify(spec)}`);
+  Deno.exit(1);
+}
+
+const where = (i) => `${i.host || SELF}:${i.name || i.pid}`;
+
+// ccx notify <who> when <agent> [is <state>] [for <duration>]
+// Registered with the daemon of the host <agent> runs on, which messages <who> from `ccx`
+async function cmdNotify(...words) {
+  const {parseNotify} = await import("./subs.js");
+  const n = parseNotify(words);
+  if (n.error) {
+    console.error(`notify: ${n.error}`);
+    Deno.exit(2);
+  }
+  const {instances, down} = await discoverAll(new StateClock());
+  reportDown(down);
+  const who = onlyOne("notify", instances, n.who);
+  const target = onlyOne("notify", instances, n.target);
+  const host = target.host || SELF;
+  const [r, err] = await call(host, "/api/subs", {pid: target.pid, state: n.state,
+    secs: n.secs, who: {host: who.host || SELF, pid: who.pid, name: who.name}});
+  if (err) {
+    console.error(`notify: ${err}`);
+    Deno.exit(1);
+  }
+  const what = n.state ? `is ${n.state}` : "changes state";
+  const until = n.secs ? `, every time for ${words.at(-1)}` : ", once";
+  const now = n.state && r.state === n.state ? `; it is ${r.state} already, so the next time`
+    : `; now ${r.state}`;
+  console.log(`${host}:${r.id}: tell ${where(who)} when ${where(target)} ${what}${until}${now}`);
+}
+
+// ccx subs: every host's subscriptions
+async function cmdSubs() {
+  const all = await Promise.all(HOSTS.map((h) => call(h, "/api/subs")));
+  HOSTS.forEach((h, n) => {
+    const [body, err] = all[n];
+    if (err) return console.error(`${h}: down, ${err}`);
+    for (const s of body.subs) {
+      const until = s.until ? `until ${new Date(s.until * 1000).toLocaleTimeString()}` : "once";
+      console.log(`${`${h}:${s.id}`.padEnd(10)} ${`${s.who.host}:${s.who.name || s.who.pid}`
+        .padEnd(18)} <- ${`${h}:${s.target.name || s.target.pid}`.padEnd(18)} ` +
+        `${(s.state || "any").padEnd(5)} ${until}`);
+    }
+  });
+}
+
+// ccx unsub [host:]<id>, this host's id without one
+async function cmdUnsub(spec) {
+  const m = /^(?:([^:]+):)?(\d+)$/.exec(spec);
+  if (!m || (m[1] && !HOSTS.includes(m[1]))) usage();
+  const [, err] = await call(m[1] ?? SELF, "/api/unsub", {id: Number(m[2])});
+  if (err) {
+    console.error(`unsub: ${err}`);
+    Deno.exit(1);
+  }
+}
+
 const COMMANDS = {
   ps: [cmdUi, 0],
   list: [cmdList, 0],
@@ -1204,6 +1283,9 @@ const COMMANDS = {
   send: [cmdSend, -1],               // -1: its own validation, since the message is the rest
   user: [cmdUser, -1],
   chat: [cmdChat, -1],
+  notify: [cmdNotify, -1],
+  subs: [cmdSubs, 0],
+  unsub: [cmdUnsub, 1],
   serve: [cmdServe, -1],
   host: [cmdHost, -1],
   help: [cmdHelp, 0],
@@ -1229,6 +1311,11 @@ const HELP = [
   ["  send <target> <message...>", "a chat message to one or more instances"],
   ["  user <target> <text...>", "typed into an instance as its user, /commands included"],
   ["  chat [--no-follow]", "what the agents here have said to each other"],
+  ["  notify <who> when <target>", "message who (`me` inside a claude) from `ccx` when target's"],
+  ["  [is <state>] [for <time>]", "state changes, or goes to wait|busy|hold|free|gone; once,"],
+  ["", "or every time for 30m, 2h, 1d. Lives in target's host daemon"],
+  ["  subs", "every host's subscriptions"],
+  ["  unsub <host:id>", "drop one"],
   ["  serve [--port N]", "the web page and its API on 127.0.0.1, port 7681"],
   ["  host [--port N]", "the daemon: serve on the tailnet, and relay SendMessage between hosts"],
   ["  help", "this, which is also what `ccx` alone prints"],

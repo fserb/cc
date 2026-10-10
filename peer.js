@@ -22,8 +22,11 @@ export const SENDER = "user";
 // since it tells the receiver which permission mode the sender is in and ccx is not in one.
 // `from-name` is the part that gets displayed, and it is the only part we can answer for.
 //
-export function envelope(text) {
-  return `<${TAG} from-name="${SENDER}">\n${text}\n</${TAG}>`;
+// `ccx` names the notify daemon, the only other sender ccx has.
+export const SENDERS = [SENDER, "ccx"];
+
+export function envelope(text, from = SENDER) {
+  return `<${TAG} from-name="${from}">\n${text}\n</${TAG}>`;
 }
 
 // Whether this text is safe to put in an envelope, which it is not if it contains one.
@@ -74,8 +77,9 @@ async function peerToken(pid, sock) {
 // There is no reply and no ack. The receiver answers on the sender's own socket, which ccx
 // does not have, so delivered means the bytes were accepted, not that its Claude has read
 // them; a session in a stricter permission mode holds the message for its user first.
-export async function sendPeer(inst, text) {
+export async function sendPeer(inst, text, from = SENDER) {
   if (!text) return "nothing to send";
+  if (!SENDERS.includes(from)) return `from-name is one of ${SENDERS.join(", ")}`;
   if (forges(text)) return `a message may not contain a <${TAG}> envelope`;
   const sock = inst.sock || `${SOCKS}/${inst.pid}.sock`;
   const token = await peerToken(inst.pid, sock);
@@ -85,14 +89,14 @@ export async function sendPeer(inst, text) {
   // a write blocks if the receiver stops reading, and the TUI calls this on the same task
   // as its input loop, so the whole exchange is raced and not the connect alone
   return await Promise.race([
-    deliver(sock, token, text),
+    deliver(sock, token, text, from),
     new Promise((ok) =>
       setTimeout(() => ok(`${sock}: no answer in ${TIMEOUT}ms`), TIMEOUT)
     ),
   ]);
 }
 
-async function deliver(sock, token, text) {
+async function deliver(sock, token, text, from) {
   let conn;
   try {
     conn = await Deno.connect({ transport: "unix", path: sock });
@@ -108,7 +112,7 @@ async function deliver(sock, token, text) {
       // queues the message the way a typed prompt queues, rather than cutting into a turn.
       priority: "next",
       msg_id: `cc-msg-${crypto.randomUUID().replaceAll("-", "")}`,
-      message: { content: envelope(text) },
+      message: { content: envelope(text, from) },
     });
   } catch (e) {
     return `${sock}: ${e.message}`;

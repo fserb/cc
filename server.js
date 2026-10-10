@@ -21,6 +21,7 @@ import {select, sendKeys, tmuxBackground, typeInto} from "./jump.js";
 import {close, expandDir, paneIn, spawn} from "./spawn.js";
 import {sendPeer} from "./peer.js";
 import {readUsage} from "./usage.js";
+import {STATES} from "./subs.js";
 import PAGE from "./page.html" with {type: "text"};
 
 export const PORT = 7681;
@@ -180,10 +181,11 @@ export function ownHost(host, port, self = HOSTNAME) {
 }
 
 export class Server {
-  constructor(source, port = PORT, relay = null) {
+  constructor(source, port = PORT, relay = null, subs = null) {
     this.source = source;                 // () => {instances, net}
     this.port = port;
     this.relay = relay;                   // a Relay, under `ccx host`
+    this.subs = subs;                     // a Subs, under `ccx host`
     this.lists = new Set();               // api/events clients
     this.sessions = new Set();            // api/s/<pid>/events clients
     this.lastList = "";
@@ -334,6 +336,24 @@ export class Server {
       if (!this.relay) return json({error: "no relay here; it runs under ccx host"}, 409);
       return answer(await this.relay.deliver(await req.json().catch(() => ({}))));
     }
+    if (path === "/api/subs" || path === "/api/unsub") {
+      if (!this.subs) return json({error: "no subscriptions here; they run under ccx host"}, 409);
+      if (get && path === "/api/subs") return json({subs: this.subs.list()});
+      if (!post) return json({error: "not found"}, 404);
+      const body = await req.json().catch(() => ({}));
+      if (path === "/api/unsub") {
+        return this.subs.remove(Number(body.id)) ? json({ok: true})
+          : json({error: `no subscription ${body.id}`}, 404);
+      }
+      const {who, state = "", secs = 0} = body, pid = Number(body.pid);
+      if (!who?.host || !Number.isInteger(who.pid) || !STATES.includes(state || "wait") ||
+        typeof secs !== "number" || secs < 0) return json({error: "malformed subscription"}, 400);
+      const inst = this.find(pid);
+      if (!inst) return json({error: `no claude instance with pid ${pid}`}, 404);
+      const id = this.subs.add({who: {host: String(who.host), pid: who.pid,
+        name: String(who.name ?? "")}, target: {pid, name: inst.name}, state, secs});
+      return json({id, state: inst.state});
+    }
     if (get && path === "/api/dirs") return json(dirsUnder(url.searchParams.get("prefix") ?? ""));
     if (post && path === "/api/spawn") {
       const body = await req.json().catch(() => ({}));
@@ -376,7 +396,7 @@ export class Server {
     const body = await req.json().catch(() => ({}));
     if (verb === "send") {
       if (typeof body.text !== "string" || !body.text.trim()) return json({error: "no text"}, 400);
-      return answer(await sendPeer(inst, body.text));
+      return answer(await sendPeer(inst, body.text, body.from ?? undefined));
     }
     if (verb === "type") {
       if (typeof body.text !== "string" || !body.text.trim()) return json({error: "no text"}, 400);
@@ -397,8 +417,9 @@ export class Server {
 
 // Start serving. {server, stop} or {error}: a port already taken is reported, not thrown,
 // so a caller can say why.
-export function runServer({source, port = PORT, hostname = "127.0.0.1", relay = null}) {
-  const s = new Server(source, port, relay);
+export function runServer({source, port = PORT, hostname = "127.0.0.1", relay = null,
+  subs = null}) {
+  const s = new Server(source, port, relay, subs);
   let http;
   try {
     http = Deno.serve({port, hostname, onListen() {}}, (req, info) => s.handle(req, info).catch((e) =>
