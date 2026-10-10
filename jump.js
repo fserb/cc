@@ -35,6 +35,21 @@ export function sendKitty(command, payload, tty = null) {
   }
 }
 
+// A tty to write kitty commands to when we have no terminal of our own, as when Raycast or
+// launchd runs us: a kitty window's tmux client, whose tty kitty reads like its own pane.
+// null when /dev/tty or tmux will carry them, "" when nothing can
+export async function kittyTty() {
+  if (Deno.env.get("TMUX")) return null;
+  try {
+    Deno.openSync("/dev/tty", {write: true}).close();
+    return null;
+  } catch {
+    // no controlling terminal
+  }
+  return (await sh("tmux", "list-clients", "-F", "#{client_tty}\t#{client_session}"))
+    .split("\n").map((l) => l.split("\t")).find(([, s]) => s?.startsWith("kitty-"))?.[0] ?? "";
+}
+
 // The niri window id for a process, or null. A kitty process owns exactly one OS window,
 // so its pid identifies the window; `single_instance` or `kitty @ launch --type=os-window`
 // would break that and raise whichever of them niri lists first.

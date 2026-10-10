@@ -3,7 +3,7 @@
 // the CLI works with no daemon here.
 
 import {discover, Instance, kittyOwner, processes} from "./claudes.js";
-import {sendKitty} from "./jump.js";
+import {kittyTty, sendKitty} from "./jump.js";
 import {MAC, sh} from "./sh.js";
 import {readUsage} from "./usage.js";
 
@@ -144,8 +144,7 @@ export async function jumpRemote(i) {
   if (!i.pane) return `${label(i)} is not inside tmux; nothing to focus`;
   const [r, err] = await call(i.host, `/api/s/${i.pid}/select`, {});
   if (err) return err;
-  await attachSession(i.host, i.session, r?.background);
-  return null;
+  return await attachSession(i.host, i.session, r?.background);
 }
 
 // The kitty window already attached to a remote tmux session comes to the front, or a new
@@ -157,6 +156,8 @@ export async function jumpRemote(i) {
 const PAINTED = ["background", "active_border_color", "inactive_border_color"];
 
 async function attachSession(host, session, background = "") {
+  const tty = await kittyTty();
+  if (tty === "") return "no terminal of our own and no kitty window in tmux to reach kitty by";
   const bg = /^#[0-9a-f]{6}$/.test(background ?? "") ? background : "";
   const want = attachArgs(host, session).join(" "), procs = await processes();
   for (const [pid, [, cmd]] of procs) {
@@ -166,23 +167,26 @@ async function attachSession(host, session, background = "") {
     if (bg) {
       const rgb = parseInt(bg.slice(1), 16);
       sendKitty("set-colors", {match_window: `pid:${child}`,
-        colors: Object.fromEntries(PAINTED.map((c) => [c, rgb]))});
+        colors: Object.fromEntries(PAINTED.map((c) => [c, rgb]))}, tty);
     }
-    sendKitty("focus-window", {match: `pid:${child}`});
+    if (!sendKitty("focus-window", {match: `pid:${child}`}, tty)) return "cannot reach kitty";
     if (MAC) await sh("open", "-a", "kitty");
-    return;
+    return null;
   }
   // launch's `color` reaches the window's profile and not the title bar, which kitty worked
   // out when it made the window, still black; set-colors recomputes it (kitty 0.49.2,
   // launch.py apply_colors against colors.py patch_colors). The user var is how the
   // set-colors finds a window that has no process to look up yet
   const tag = `${host}.${session}`;
-  sendKitty("launch", {args: attachArgs(host, session), type: "os-window",
-    var: [`ccx_remote=${tag}`], ...(bg ? {color: PAINTED.map((c) => `${c}=${bg}`)} : {})});
+  if (!sendKitty("launch", {args: attachArgs(host, session), type: "os-window",
+    var: [`ccx_remote=${tag}`], ...(bg ? {color: PAINTED.map((c) => `${c}=${bg}`)} : {})}, tty)) {
+    return "cannot reach kitty";
+  }
   if (bg) {
     const rgb = parseInt(bg.slice(1), 16);
     sendKitty("set-colors", {match_window: `var:ccx_remote=^${tag.replace(/[.\\^$*+?()[\]{}|]/g, "\\$&")}$`,
-      colors: Object.fromEntries(PAINTED.map((c) => [c, rgb]))});
+      colors: Object.fromEntries(PAINTED.map((c) => [c, rgb]))}, tty);
   }
   if (MAC) await sh("open", "-a", "kitty");
+  return null;
 }
