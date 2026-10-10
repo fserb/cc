@@ -55,6 +55,7 @@
   .opts button { font: inherit; text-align: left; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: 6px; padding: 0.35rem 0.9rem; cursor: pointer; }
   .opts button:first-child { background: var(--accent); color: var(--on-accent); }
   .opts button:disabled { opacity: 0.5; cursor: default; }
+  .need .free { display: flex; gap: 0.4rem; margin: 0.5rem 0 0; } .need .free input { flex: 1; min-width: 0; font: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 0.35rem 0.7rem; } .need .free button { font: inherit; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: 6px; padding: 0.35rem 0.9rem; cursor: pointer; }
   .done { color: var(--green); font-weight: 600; } .err { color: var(--red); }
   .msgs { display: flex; flex-direction: column; gap: 0.5rem; }
   .m { max-width: 85%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--bubble); overflow-wrap: anywhere; } .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); }
@@ -330,7 +331,7 @@ function nadyaView() {
   return `<article>${chat(n)}${dialogBox(n)}${nAsks.map(askBox).join("")}</article>`;
 }
 function askBox(a) {
-  return `<div class="need"><b>${esc(a.project)} · ${esc(a.from)} asks</b> <small class="meta">${esc(a.when)}</small><p>${esc(a.text)}</p>${a.suggest ? `<p class="suggest">nadya suggests: ${esc(a.suggest)}</p>` : ""}${sent.has(a.id) ? `<p class="done">✓ ${esc(sent.get(a.id))}</p>` : `<div class="opts" data-ask="${esc(a.id)}">${a.options.map((o) => `<button>${esc(o)}</button>`).join("")}</div>`}</div>`;
+  return `<div class="need"><b>${esc(a.project)} · ${esc(a.from)} asks</b> <small class="meta">${esc(a.when)}</small><p>${esc(a.text)}</p>${a.suggest ? `<p class="suggest">nadya suggests: ${esc(a.suggest)}</p>` : ""}${sent.has(a.id) ? `<p class="done">✓ ${esc(sent.get(a.id))}</p>` : `<div class="opts" data-ask="${esc(a.id)}">${a.options.map((o) => `<button>${esc(o)}</button>`).join("")}</div><form class="free" data-ask="${esc(a.id)}"><input name="a" placeholder="Other answer" aria-label="Other answer" autocomplete="off"><button>Send</button></form>`}</div>`;
 }
 function dialogBox(r) {
   const dg = r.state === "wait" && stream?.pid === r.pid ? S.screens[r.pid]?.dialog : null;
@@ -364,6 +365,19 @@ async function dirHints(f) {
   $("#dirs").innerHTML = d.dirs.map((x) => `<option value="${esc(x.slice(x.indexOf(":") + 1))}/">`).join("");
 }
 document.addEventListener("input", (e) => { if (e.target.form?.id === "new" && e.target.name !== "name") dirHints(e.target.form); });
+// an ask's free-text answer goes the same way as its option buttons
+document.addEventListener("submit", async (e) => {
+  const f = e.target;
+  if (!f.matches?.("form.free[data-ask]")) return;
+  e.preventDefault();
+  const answer = f.a.value.trim(); if (!answer) return;
+  [...f.elements].forEach((x) => x.disabled = true);
+  try {
+    await post(`${BLOG}answer`, {id: f.dataset.ask, answer});
+    sent.set(f.dataset.ask, `answered: ${answer}`);
+    draw(); drawView(true);
+  } catch (err) { f.insertAdjacentHTML("afterend", `<p class="err">${esc(err.message)}</p>`); [...f.elements].forEach((x) => x.disabled = false); }
+});
 document.addEventListener("submit", async (e) => {
   if (e.target.id !== "new") return;
   e.preventDefault();
