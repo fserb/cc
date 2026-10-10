@@ -1,7 +1,8 @@
 // `deno test -A --ext js spawn_test.js`. Only what is decided before tmux is touched; the
 // spawning itself opens windows on the desk, so it was checked by hand (see spawn.js).
 
-import {expandDir, spawn} from "./spawn.js";
+import {expandDir, spawn, trustYes} from "./spawn.js";
+import {parseDialog} from "./dialog.js";
 import {HOME} from "./sh.js";
 
 function eq(got, want, what) {
@@ -23,4 +24,15 @@ Deno.test("spawn: a bad directory is refused before tmux is touched", async () =
   const file = Deno.makeTempFileSync();
   eq(await spawn({dir: file, mkdir: true}).then((r) => r.error.startsWith("cannot create")),
     true, "a file in the way");
+});
+
+const dialog = (name) => parseDialog(Deno.readTextFileSync(
+  new URL(`fixtures/dialog/${name}.txt`, import.meta.url)));
+
+Deno.test("trustYes: the folder-trust dialog's Yes, and no other dialog", () => {
+  eq(trustYes(dialog("trust")), 1, "trust: the second option, under the default No");
+  for (const name of ["bash", "write", "plan", "question", "question-multi", "idle"]) {
+    eq(trustYes(dialog(name)), -1, name);
+  }
+  eq(trustYes(null), -1, "no dialog");
 });

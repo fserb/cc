@@ -11,10 +11,14 @@
 //   after it and renumbers the rest; `-d` keeps the desk on the window it is showing
 // - a new directory opens on the folder-trust dialog, which writes no session record until
 //   it is answered, so the pid is found by the process in the pane, not by a record
+// - starting a claude in a directory is the trust decision (user, 2026-10-10), so spawn()
+//   answers that dialog, and only that one, "Yes, I trust this folder". It reads the pane
+//   until the session writes its record (a trusted dir, ~600ms) or the dialog shows
 
 import {HOME, MAC, run, sh} from "./sh.js";
-import {sendKitty, typeInto} from "./jump.js";
+import {sendKeys, sendKitty, typeInto} from "./jump.js";
 import {discover} from "./claudes.js";
+import {parseDialog, pickKeys, screen} from "./dialog.js";
 
 const TMUX_ERR = (r) => `tmux: ${r.err.trim() || `exit ${r.code}`}`;
 
@@ -25,6 +29,14 @@ export function expandDir(dir) {
 function isDir(dir) {
   try {
     return Deno.statSync(dir).isDirectory;
+  } catch {
+    return false;
+  }
+}
+
+function isFile(path) {
+  try {
+    return Deno.statSync(path).isFile;
   } catch {
     return false;
   }
@@ -95,6 +107,35 @@ export async function claudeIn(pane, wait = 10000) {
   return 0;
 }
 
+// The index of "Yes, I trust this folder" when `dialog` is the folder-trust dialog, else -1.
+export function trustYes(dialog) {
+  if (dialog?.title !== "Accessing workspace:") return -1;
+  return dialog.options.findIndex((o) => o.n === null && o.label === "Yes, I trust this folder");
+}
+
+// Answer the folder-trust dialog on `pane` if it comes up before claude `pid` writes its
+// session record. Keys sent as soon as the dialog is drawn can be lost (seen on nadya,
+// 2.1.296: drawn 0.3s after start, Down Enter did nothing), so it reads on until the
+// record shows and picks again, from wherever the cursor is then, once a second while the
+// dialog is still up. An error message, or null.
+export async function trustFolder(pid, pane, wait = 10000) {
+  let sent = 0;
+  for (const end = Date.now() + wait; Date.now() < end;) {
+    if (isFile(`${HOME}/.claude/sessions/${pid}.json`)) return null;
+    const text = await screen(pane);
+    const dialog = text === null ? null : parseDialog(text);
+    const yes = trustYes(dialog);
+    if (yes >= 0 && Date.now() - sent >= 1000) {
+      const err = await sendKeys({pid, pane}, pickKeys(dialog, yes));
+      if (err) return err;
+      sent = Date.now();
+    }
+    await new Promise((ok) => setTimeout(ok, 250));
+  }
+  return sent ? `the trust dialog was answered, but no session record after ${wait / 1000}s`
+    : `no session record and no trust dialog after ${wait / 1000}s`;
+}
+
 // The pane of the last instance in `dir`, the one the page's per-directory + goes after, or
 // "" when no instance there is in tmux.
 export async function paneIn(dir) {
@@ -132,7 +173,9 @@ export async function spawn({dir, after = "", mkdir = false, name = ""}) {
     name ? `claude -n ${shQuote(name)}` : "claude");
   if (err) return {error: err, pane: made.pane};
   const pid = await claudeIn(made.pane);
-  return pid ? {pid, pane: made.pane} : {error: "claude did not start", pane: made.pane};
+  if (!pid) return {error: "claude did not start", pane: made.pane};
+  const trust = await trustFolder(pid, made.pane);
+  return trust ? {pid, pane: made.pane, warning: trust} : {pid, pane: made.pane};
 }
 
 function alive(pid) {

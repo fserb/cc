@@ -245,7 +245,7 @@ async function spawn(req) {
     const r = await fetch(upstream(host, "/api/spawn"), {method: "POST",
       headers: {"content-type": "application/json",
         "sec-fetch-site": req.headers.get("sec-fetch-site") ?? "same-origin"},
-      body: JSON.stringify(body), signal: AbortSignal.timeout(20000)});
+      body: JSON.stringify(body), signal: AbortSignal.timeout(30000)});
     const out = await r.json();
     if (out.pid) out.pid = `${host}.${out.pid}`;
     if (out.pane) out.pane = `${host}/${out.pane}`;

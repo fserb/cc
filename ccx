@@ -900,12 +900,13 @@ async function cmdNew(dir, ...words) {
       console.error(`new: ${host}: give an absolute or ~ path, not ${JSON.stringify(rest)}`);
       Deno.exit(1);
     }
-    // spawn() waits up to 5s for a window and 10s for claude
-    const [r, err] = await call(host, "/api/spawn", {dir: rest, name, beside: true}, 20000);
+    // spawn() waits up to 5s for a window, 10s for claude and 10s for its trust dialog
+    const [r, err] = await call(host, "/api/spawn", {dir: rest, name, beside: true}, 30000);
     if (err) {
       console.error(`new: ${host}: ${err}`);
       Deno.exit(1);
     }
+    if (r.warning) console.error(`new: ${host}: ${r.warning}`);
     console.log(r.existing ? `${host}:${r.pid} already running in ${host}:${rest}`
       : `started ${host}:${r.pid} in ${host}:${rest}, ` +
         (r.after ? `tmux window after ${r.after}` : `tmux pane ${r.pane}`));
@@ -924,6 +925,7 @@ async function cmdNew(dir, ...words) {
     console.error(`new: ${r.error}`);
     Deno.exit(1);
   }
+  if (r.warning) console.error(`new: ${r.warning}`);
   console.log(r.existing ? `${r.pid} already running in ${path.replace(HOME, "~")}`
     : `started ${r.pid} in ${path.replace(HOME, "~")}, ` +
       (after ? `tmux window after ${after}` : "new kitty window"));
