@@ -126,7 +126,7 @@
 // A static page (no box): everything it shows comes from these, all same origin:
 //   ../ccx/api/...        sessions on every host: list + events (SSE), log, screen, pick, type
 //   ../blog/              the blog (its #posts are inserted here), asks.json, POST answer
-//   ../cc-files/          todo.md and ideas/: links to ~/nadya (outside the box, so caddy lists ideas/)
+//   files/                todo.md, ideas/, research/: links to ~/nadya (caddy lists ideas/)
 const CCX = "../ccx/api";
 const BLOG = "../blog/";
 const $ = (s) => document.querySelector(s);
@@ -226,15 +226,15 @@ async function loadBlog() {
   draw();
 }
 async function loadTodo() {
-  const text = await fetch("../cc-files/todo.md", {cache: "no-cache"}).then((r) => r.ok ? r.text() : "").catch(() => "");
+  const text = await fetch("files/todo.md", {cache: "no-cache"}).then((r) => r.ok ? r.text() : "").catch(() => "");
   S.todo = [...text.matchAll(/^- \[(.)\] (?:(\d{4}-\d\d-\d\d)(?: (\d\d:\d\d))? )?(.*)$/gm)].map(([, mark, date, time, rest]) => {
     const due = date ? new Date(`${date}T${time ?? "09:00"}`) : null;
     return {mark, date, time, due, text: rest.split(/\. |\(user/)[0].trim(), full: rest};
   }).filter((t) => t.mark !== "x");
-  const list = await fetch("../cc-files/ideas/", {cache: "no-cache"}).then((r) => r.ok ? r.text() : "").catch(() => "");
+  const list = await fetch("files/ideas/", {cache: "no-cache"}).then((r) => r.ok ? r.text() : "").catch(() => "");
   const files = [...new Set([...list.matchAll(/href="(?:\.\/)?([\w.-]+\.md)"/g)].map((m) => m[1]))];
   S.ideas = await Promise.all(files.map(async (f) => {
-    const t = await fetch(`../cc-files/ideas/${f}`, {cache: "no-cache"}).then((r) => r.text()).catch(() => "");
+    const t = await fetch(`files/ideas/${f}`, {cache: "no-cache"}).then((r) => r.text()).catch(() => "");
     return {file: f, text: t, title: t.match(/^# (.+)$/m)?.[1] ?? f, status: t.match(/^Status: ([^.(]+)/m)?.[1]?.trim() ?? ""};
   }));
   draw();
