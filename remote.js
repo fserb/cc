@@ -141,20 +141,33 @@ const attachArgs = (i) => ["ssh", "-t", i.host, "tmux", "-u", "attach", "-t", i.
 // Focus a remote instance: its host selects the window and pane, then the kitty window
 // already attached to that session comes to the front, or a new one opens attached.
 // An error message, or null
+//
+// The window takes the remote tmux's pane background, so the padding around it and the
+// title bar (`macos_titlebar_color background`) match what tmux paints: `color` when it is
+// made, `set-colors` on every focus after, so a theme changed since still lands
+const PAINTED = ["background", "active_border_color", "inactive_border_color"];
+
 export async function jumpRemote(i) {
   if (!i.pane) return `${label(i)} is not inside tmux; nothing to focus`;
-  const [, err] = await call(i.host, `/api/s/${i.pid}/select`, {});
+  const [r, err] = await call(i.host, `/api/s/${i.pid}/select`, {});
   if (err) return err;
+  const bg = /^#[0-9a-f]{6}$/.test(r?.background ?? "") ? r.background : "";
   const want = attachArgs(i).join(" "), procs = await processes();
   for (const [pid, [, cmd]] of procs) {
     if (cmd !== want) continue;
     const [child, kitty] = kittyOwner(pid, procs);
     if (!kitty) continue;
+    if (bg) {
+      const rgb = parseInt(bg.slice(1), 16);
+      sendKitty("set-colors", {match_window: `pid:${child}`,
+        colors: Object.fromEntries(PAINTED.map((c) => [c, rgb]))});
+    }
     sendKitty("focus-window", {match: `pid:${child}`});
     if (MAC) await sh("open", "-a", "kitty");
     return null;
   }
-  sendKitty("launch", {args: attachArgs(i), type: "os-window"});
+  sendKitty("launch", {args: attachArgs(i), type: "os-window",
+    ...(bg ? {color: PAINTED.map((c) => `${c}=${bg}`)} : {})});
   if (MAC) await sh("open", "-a", "kitty");
   return null;
 }

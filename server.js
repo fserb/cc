@@ -17,7 +17,7 @@
 import {byCodePoint, HOME} from "./sh.js";
 import {logPath, readFrom, readPage} from "./transcript.js";
 import {parseDialog, pick, screen} from "./dialog.js";
-import {select, sendKeys, typeInto} from "./jump.js";
+import {select, sendKeys, tmuxBackground, typeInto} from "./jump.js";
 import {close, expandDir, paneIn, spawn} from "./spawn.js";
 import {sendPeer} from "./peer.js";
 import {readUsage} from "./usage.js";
@@ -387,7 +387,9 @@ export class Server {
       return answer(await pick(inst, Number(body.i), body.labels));
     }
     if (verb === "esc") return answer(await sendKeys(inst, ["Escape"]));
-    if (verb === "select") return answer(await select(inst));
+    if (verb === "select") {
+      return answer(await select(inst), {ok: true, background: await tmuxBackground()});
+    }
     if (verb === "close") return answer(await close(inst));
     return json({error: "not found"}, 404);
   }

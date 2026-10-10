@@ -99,6 +99,16 @@ export async function select(inst) {
   return r.code === 0 ? null : `tmux: ${r.err.trim() || `exit ${r.code}`}`;
 }
 
+// The background tmux paints panes with here, `#rrggbb`, or "" when it leaves the terminal's
+// own: window-active-style, then window-style, as `bg=#282828` in either
+export async function tmuxBackground() {
+  for (const opt of ["window-active-style", "window-style"]) {
+    const bg = (await sh("tmux", "show", "-gwv", opt)).match(/bg=(#[0-9a-fA-F]{6})\b/)?.[1];
+    if (bg) return bg.toLowerCase();
+  }
+  return "";
+}
+
 // Name our own tmux window for as long as the app runs. Returns the restore.
 // automatic-rename otherwise shows the pane's foreground command, `deno`. `allow-rename`
 // is off by default, so ESC k is ignored and only `rename-window` works; that turns
