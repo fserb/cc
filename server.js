@@ -211,14 +211,17 @@ export class Server {
     for (const c of [...this.lists, ...this.sessions]) c.close();
   }
 
+  // the list to its streams if it changed; `ccx host` also calls it after each poll
+  pushList() {
+    if (!this.lists.size) return;
+    const body = this.listBody(), text = JSON.stringify(body);
+    if (text === this.lastList) return;
+    this.lastList = text;
+    for (const c of this.lists) c.send("list", body);
+  }
+
   async tick() {
-    if (this.lists.size) {
-      const body = this.listBody(), text = JSON.stringify(body);
-      if (text !== this.lastList) {
-        this.lastList = text;
-        for (const c of this.lists) c.send("list", body);
-      }
-    }
+    this.pushList();
     // one capture per pane per tick, however many clients watch it
     const screens = new Map();
     for (const c of this.sessions) {

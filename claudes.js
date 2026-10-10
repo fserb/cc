@@ -115,6 +115,31 @@ export function sessionRecords() {
   return records;
 }
 
+// Calls onChange whenever a session record is written or removed: Claude Code writes
+// `<pid>.json` ~0.3s after start, on every status change, and deletes it on exit, and
+// writes nothing while every session stays as it is. Skips the `.key` files and the
+// stand-ins relay.js writes, pids from 90M up. Returns stop(), or null if it cannot watch.
+export function watchSessions(onChange) {
+  let watcher;
+  try {
+    watcher = Deno.watchFs(SESSIONS, {recursive: false});
+  } catch {
+    return null;
+  }
+  (async () => {
+    try {
+      for await (const e of watcher) {
+        if (e.kind === "access") continue;
+        if (e.paths.some((p) => {
+          const m = /\/(\d+)\.json$/.exec(p);
+          return m && Number(m[1]) < 90_000_000;
+        })) onChange();
+      }
+    } catch { /* closed */ }
+  })();
+  return () => watcher.close();
+}
+
 // [state, epoch it started], or ["", 0] with no record. An empty session is free unless a
 // dialog is up: an unanswered trust prompt wants you, empty or not.
 function recordState(rec) {
@@ -475,6 +500,8 @@ function peerOf(rec) {
 // task with the input loop: `ps` and the tmux listing overlap instead of adding up, and so
 // do the record-less screen scrapes.
 export async function discover() {
+  // read first, so a watched change is seen as it was and not after ps and tmux return
+  const records = sessionRecords();
   const [procs, tmux] = await Promise.all([
     processes(),
     tmuxTables([
@@ -483,7 +510,6 @@ export async function discover() {
       ["c", "list-clients", ["client_tty", "client_pid", "client_session"]],
     ]),
   ]);
-  const records = sessionRecords();
   const [panes, clients] = [tmux.p, tmux.c];
   const paneByPid = new Map(panes.map((p) => [Number(p.pane_pid), p]));
   const clientBySession = new Map(clients.map((c) => [c.client_session, c]));

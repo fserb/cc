@@ -5,7 +5,7 @@
 // on PATH work: deno resolves a relative import against the path it was handed, so
 // ~/bin/ccx -> here looks for claudes.js in ~/bin and dies.
 
-import {discover, fmtAge, sessionRecords, StateClock} from "./claudes.js";
+import {discover, fmtAge, sessionRecords, StateClock, watchSessions} from "./claudes.js";
 import {HOME, ON_EXIT, sh} from "./sh.js";
 import {fuzzy, NUMBERS, PALETTE, rank, SORTS, stateOf} from "./view.js";
 import {jump, kittyWindowTitle, raiseTarget, tmuxWindowName, typeInto} from "./jump.js";
@@ -1012,17 +1012,33 @@ async function cmdHost(...args) {
     import("./relay.js"), import("./remote.js"), import("./subs.js"), peerModule()]);
   port ??= srv.PORT;
   const clock = new StateClock(remote.SELF), net = new Online();
-  let instances = [], polling = false;
+  // A poll runs when a session record is written, and otherwise once a minute for titles
+  // and tmux moves, which no record shows. A write during a poll runs one more after it.
+  // With no watch, or an instance with no record (its state is read off the pane), every
+  // 1.5s as before
+  let instances = [], polling = false, again = false, timer = 0, server = null;
   const poll = async () => {
-    net.tick();
-    if (polling) return;
+    if (polling) {
+      again = true;
+      return;
+    }
     polling = true;
     try {
-      instances = clock.update(await discover());
+      do {
+        again = false;
+        instances = clock.update(await discover());
+      } while (again);
+      server?.pushList();
     } finally {
       polling = false;
+      clearTimeout(timer);
+      timer = setTimeout(repoll, !watching || instances.some((i) => !i.peer) ? 1500 : 60000);
     }
   };
+  const repoll = () => poll().catch((e) => console.error(e));
+  const watching = watchSessions(repoll);
+  setInterval(() => net.tick(), 5000);
+  net.tick();
   // a notice goes to a local subscriber's socket, or to its host's daemon. The listener runs
   // inside clock.update(), so `instances` is still the poll before, which is fine: a
   // subscriber had to exist to subscribe
@@ -1035,7 +1051,6 @@ async function cmdHost(...args) {
   });
   clock.on((events) => subs.onEvents(events));
   await poll();
-  setInterval(poll, 1500);
   relayMod.clearStandIns(remote.SELF);
   const relay = new relayMod.Relay(remote.SELF, async (host, body) =>
     (await remote.call(host, "/api/relay", body))[1]);
@@ -1045,6 +1060,7 @@ async function cmdHost(...args) {
     console.error(`host: ${r.error}`);
     Deno.exit(1);
   }
+  server = r.server;
   const stops = remote.others().map((h) => remote.follow(h, (rows) => relay.sync(h, rows)));
   const quit = () => {
     for (const stop of stops) stop();
