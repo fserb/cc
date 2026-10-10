@@ -79,7 +79,7 @@
   .bp summary .nm::before { content: "▸ "; color: var(--muted); } .bp[open] > summary .nm::before { content: "▾ "; }
   .bp .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .bp b { text-align: right; font-weight: 600; } .bs b { font-weight: 400; color: var(--muted); }
   .bs { padding-left: 1rem; font-size: 0.88rem; } .bs small { color: var(--muted); }
-  .bb { display: flex; height: 10px; border-radius: 3px; background: var(--track); overflow: hidden; } .bb i { display: block; height: 100%; background: var(--accent); } .bs .bb i { opacity: 0.55; } .bd > summary .bb { background: none; } .bb { position: relative; } .bb s { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--muted); opacity: 0.7; }
+  .bb { display: flex; height: 10px; border-radius: 3px; background: var(--track); overflow: hidden; } .bb i { display: block; height: 100%; background: var(--accent); } .bs .bb i { opacity: 0.55; } .bd > summary .bb { background: none; } .bb { position: relative; } .bb s { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text); box-shadow: 0 0 0 1px var(--bg); }
   .bp .bp { margin-left: 1rem; } .bp .bp summary { font-size: 0.9rem; }
   .legend { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; font-size: 0.8rem; color: var(--muted); margin: 0.2rem 0 0.6rem; } .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 0.3rem; }
   .qh { font-size: 0.85rem; font-weight: 600; color: var(--muted); margin: 1.6rem 0 0.4rem; }
@@ -439,7 +439,7 @@ function burnView() {
   const down = b.down?.length ? `<p class="meta err">${b.down.map(([host, e]) => esc(`${host}: ${e}`)).join("<br>")}</p>` : "";
   // projects under MINQ (of the limit, or of the tokens with no log) go into one "others" row, last
   const group = (w) => {
-    const v = (x) => (w.used == null ? x.share : x.q) ?? 0;
+    const v = (x) => (w.used == null ? x.share : x.q * perDay(w)) ?? 0;
     const shown = w.projects.filter((x) => v(x) >= MINQ), rest = w.projects.filter((x) => v(x) < MINQ && x.w > 0);
     if (rest.length < 2) return shown.concat(rest);
     const sum = (f) => rest.reduce((a, x) => a + (x[f] ?? 0), 0);
@@ -447,9 +447,9 @@ function burnView() {
   };
   const pcol = (x) => x.others ? "var(--gray)" : color(x.p);
   const list = (w, key) => {
-    // last 24h: the bar scale is at least a day's share (its weighted tokens), marked where 100% of a day is when a value goes past it
+    // last 24h: a mark where 100% of a day's share is (its weighted tokens), when the busiest passes it
     const dayW = perDay(w) > 1 && w.used > 0 ? w.w / w.used * 100 / 7 : 0;
-    const max = Math.max(1, dayW, ...w.projects.map((x) => x.w));
+    const max = Math.max(1, ...w.projects.map((x) => x.w));
     const mark = dayW && dayW < max ? `<s style="left:${(dayW / max * 100).toFixed(1)}%"></s>` : "";
     const sub = (x) => x.others ? x.others.map((o) => ({n: o.p, w: o.w, q: o.q, share: o.share})) : x.sessions.filter((s) => s.w >= max / 1000);
     return group(w).map((x) => { const k = `${key}/${x.p}`; return `<details class="bp" data-k="${esc(k)}" ${qOpen.has(k) ? "open" : ""}><summary><span class="nm">${x.others ? `<i>others</i> <small>${x.others.length}</small>` : esc(x.p)}</span><span class="bb"><i style="width:${(x.w / max * 100).toFixed(1)}%;background:${pcol(x)}"></i>${mark}</span><b>${val(w, x)}</b></summary>${sub(x).map((s) => `<div class="bs"><span class="nm">${esc(s.n)} <small>${esc(s.host ?? "")}</small></span><span class="bb"><i style="width:${(s.w / max * 100).toFixed(1)}%;background:${pcol(x)}"></i>${mark}</span><b>${val(w, s)}</b></div>`).join("")}</details>`; }).join("") || `<p class="meta">nothing used</p>`;
