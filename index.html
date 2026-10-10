@@ -286,7 +286,7 @@ function items() {
   const fresh = S.posts.filter((x) => Date.parse(x.time) > seen).length;
   it.push({id: "blog", d: fresh ? "green" : "", unread: fresh, title: "blog", sub: top?.title ?? "", t: fresh ? `${fresh} new` : top?.time?.slice(11) ?? ""});
   const due = dueTodos();
-  it.push({id: "todo", d: due.length ? "blue" : "", hot: due.length, title: "ideas & todo", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : `${S.todo.length} todo · ${S.ideas.length} ideas`, t: ""});
+  it.push({id: "todo", d: due.length ? "blue" : "", hot: due.length, title: "plan", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : `${S.todo.length} todo · ${S.ideas.length} ideas`, t: ""});
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, asks: asksFor(r.name), dialog: hasDialog(r)}));
   ss.sort((a, b) => (b.dialog ? 2 : b.asks.length ? 1 : 0) - (a.dialog ? 2 : a.asks.length ? 1 : 0));
   for (const {r, asks, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "red" : asks.length ? "blue" : {busy: "green", wait: "", hold: "yel", free: "gray"}[r.state] ?? "gray", hot: dialog || asks.length,
@@ -393,13 +393,13 @@ function sessionView(r) {
 }
 function todoView() {
   const due = dueTodos();
-  return `<article><h1>ideas &amp; todo</h1>${due.map((t) => `<div class="need"><b>${esc(t.text)}</b><p>due ${esc(t.date)} ${esc(t.time ?? "")}</p>${sent.has("todo:" + t.full) ? `<p class="done">✓ ${esc(sent.get("todo:" + t.full))}</p>` : `<div class="opts" data-todo="${esc(t.full)}"><button>done</button><button>snooze 1 h</button></div>`}</div>`).join("")}
+  return `<article><h1>plan</h1>${due.map((t) => `<div class="need"><b>${esc(t.text)}</b><p>due ${esc(t.date)} ${esc(t.time ?? "")}</p>${sent.has("todo:" + t.full) ? `<p class="done">✓ ${esc(sent.get("todo:" + t.full))}</p>` : `<div class="opts" data-todo="${esc(t.full)}"><button>done</button><button>snooze 1 h</button></div>`}</div>`).join("")}
     <h2 class="h">todo</h2><ul class="rows">${S.todo.map((t) => `<li class="${t.mark === "!" ? "x" : ""}"><span>${esc(t.text)}</span><small>${t.date ? `${t.date}${t.time ? " " + t.time : ""}` : "note"}${t.mark === "!" ? " · reminded" : ""}</small></li>`).join("") || "<li><span class=meta>nothing</span></li>"}</ul>
     <h2 class="h">ideas</h2><ul class="rows">${S.ideas.map((x) => `<li class="go" data-go="idea/${esc(x.file)}"><span>${esc(x.title)}</span><small>${esc(x.status)}</small></li>`).join("")}</ul></article>`;
 }
 function ideaView(file) {
   const x = S.ideas.find((y) => y.file === file);
-  return `<article class="doc"><p class="meta"><a href="#todo" data-go="todo">← ideas</a> · ${esc(file)}</p>${x ? md(x.text, true) : `<p class="meta">${S.ideas.length ? "no such idea" : "loading…"}</p>`}</article>`;
+  return `<article class="doc"><p class="meta"><a href="#todo" data-go="todo">← plan</a> · ${esc(file)}</p>${x ? md(x.text, true) : `<p class="meta">${S.ideas.length ? "no such idea" : "loading…"}</p>`}</article>`;
 }
 const HOSTS = ["nadya", "marx"];
 function newView() {
@@ -544,7 +544,7 @@ async function toNadya(text) {
 function context() {
   if (!cur || cur === "nadya") return "";
   if (cur === "blog") return "about the blog";
-  if (cur === "todo") return "ideas & todo";
+  if (cur === "todo") return "plan";
   if (cur === "quota") return "about the quota";
   const r = S.rows.find((x) => x.pid === cur);
   return r ? `about ${r.name} (${r.pid})` : "";
