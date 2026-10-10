@@ -8,7 +8,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
   :root {
-    --bg: #fff; --text: #212529; --muted: #6c757d; --line: #e9ecef; --hover: #f3f4f6;
+    --bg: #fff; --text: #212529; --muted: #6c757d; --line: #e9ecef; --track: #f7f8f9; --hover: #f3f4f6;
     --accent: #0b7bd3; --on-accent: #fff; --red: #d63939; --green: #2f9e44; --yel: #f59f00; --gray: #ced4da;
     --cur: #e7f1fb; --hot: #fff4e6; --hot-red: #fdecec; --need: #f4f8fd; --need-red: #fdf3f3;
     --pre-bg: #1e1f22; --pre-fg: #ddd; --bubble: #f3f4f6;
@@ -78,9 +78,10 @@
   .bp summary .nm::before { content: "▸ "; color: var(--muted); } .bp[open] > summary .nm::before { content: "▾ "; }
   .bp .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .bp b { text-align: right; font-weight: 600; } .bs b { font-weight: 400; color: var(--muted); }
   .bs { padding-left: 1rem; font-size: 0.88rem; } .bs small { color: var(--muted); }
-  .bb { display: flex; height: 10px; border-radius: 3px; background: var(--line); overflow: hidden; } .bb i { display: block; height: 100%; background: var(--accent); } .bs .bb i { opacity: 0.55; }
+  .bb { display: flex; height: 10px; border-radius: 3px; background: var(--track); overflow: hidden; } .bb i { display: block; height: 100%; background: var(--accent); } .bs .bb i { opacity: 0.55; }
   .bp .bp { margin-left: 1rem; } .bp .bp summary { font-size: 0.9rem; }
   .legend { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; font-size: 0.8rem; color: var(--muted); margin: 0.2rem 0 0.6rem; } .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 0.3rem; }
+  .qh { font-size: 0.85rem; font-weight: 600; color: var(--muted); margin: 1.6rem 0 0.4rem; }
   .qg { max-width: 600px; margin: 0; } .qd { position: relative; height: 1.2em; font-size: 0.72rem; color: var(--muted); } .qd span { position: absolute; top: 0.1em; padding-left: 3px; }
   .rows li.x span { text-decoration: line-through; color: var(--muted); }
   .add { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 0.35rem 0; text-align: center; font-size: 1.3rem; line-height: 1.2; color: var(--muted); border: 1px dashed var(--gray); border-radius: 6px; cursor: pointer; }
@@ -166,7 +167,12 @@ const nadyaRow = () => S.rows.find((r) => r.name === "nadya" && r.pid.startsWith
 
 // ---------- data
 async function loadUsage() { S.usage = (await json(`${CCX}/usage`).catch(() => null))?.usage ?? S.usage; draw(); if (cur === "quota") loadBurn(); }
-async function loadBurn() { const b = await json(`${CCX}/burn`).catch((e) => ({error: e.message})); if (!b.error || !S.burn) S.burn = b; drawView(true); }
+async function loadBurn() {
+  const [b, d] = await Promise.all([`${CCX}/burn`, `${CCX}/burn?hours=24`].map((u) => json(u).catch((e) => ({error: e.message}))));
+  if (!b.error || !S.burn) S.burn = b;
+  if (!d.error || !S.burn24) S.burn24 = d;
+  drawView(true);
+}
 async function loadAsks() { S.asks = (await json(`${BLOG}asks.json`, {cache: "no-cache"}).catch(() => null))?.asks ?? S.asks; draw(); }
 async function loadBlog() {
   const html = await fetch(BLOG, {cache: "no-cache"}).then((r) => r.text()).catch(() => "");
@@ -400,7 +406,7 @@ document.addEventListener("submit", async (e) => {
 let qTab = "this";
 const qOpen = new Set();  // the open rows of the quota view, kept across redraws
 const MINQ = 1;  // % below which a project goes into "others" in the usage breakdown
-const PCOL = ["#0b7bd3", "#2f9e44", "#f59f00", "#ae3ec9", "#1098ad", "#e8590c"];
+const PCOL = ["#0b7bd3", "#2f9e44", "#f59f00", "#ae3ec9", "#1098ad", "#e8590c", "#d6336c", "#5c940d"];
 function quotaView() {
   const u = S.usage, p = pace();
   if (!u) return `<article><h1>quota</h1><p class="meta">no usage data</p></article>`;
@@ -416,15 +422,15 @@ function quotaView() {
     <div class="qd">${days.map((d) => `<span style="left:${(X(d) / W * 100).toFixed(2)}%">${d.toLocaleDateString(undefined, { weekday: "short" })}</span>`).join("")}</div></figure>
     <p class="meta">The dashed line is the even pace from the start of the week to the reset.</p>${burnView()}</article>`;
 }
-// who used it (ccx api/burn): last week | this week | days, a row per project, its sessions on tap.
+// who used it (ccx api/burn): last week | this week | last 24h, then the days below, a row per project, its sessions on tap.
 // A % is of the limit: a project's share of the window's weighted tokens times what the log added
 // over it; a window with no log shows the share of its tokens instead
 function burnView() {
   const b = S.burn;
-  const tabs = `<div class="tabs" role="group" aria-label="window">${[["last", "last week"], ["this", "this week"], ["days", "days"]].map(([k, l]) => `<button data-qt="${k}" aria-pressed="${qTab === k}">${l}</button>`).join("")}</div>`;
+  const tabs = `<div class="tabs" role="group" aria-label="window">${[["last", "last week"], ["this", "this week"], ["24h", "last 24h"]].map(([k, l]) => `<button data-qt="${k}" aria-pressed="${qTab === k}">${l}</button>`).join("")}</div>`;
   if (!b) return `${tabs}<p class="meta">loading…</p>`;
   if (b.error) return `${tabs}<p class="meta err">${esc(b.error)}</p>`;
-  const top = b.weeks[1].projects.concat(b.weeks[0].projects).map((x) => x.p).filter((x, n, a) => a.indexOf(x) === n).slice(0, PCOL.length);
+  const top = b.weeks[1].projects.concat(b.weeks[0].projects, S.burn24?.projects ?? []).map((x) => x.p).filter((x, n, a) => a.indexOf(x) === n).slice(0, PCOL.length);
   const color = (name) => PCOL[top.indexOf(name)] ?? "var(--gray)";
   const val = (w, x) => fmtQ(w.used == null ? x.share : x.q);
   const down = b.down?.length ? `<p class="meta err">${b.down.map(([host, e]) => esc(`${host}: ${e}`)).join("<br>")}</p>` : "";
@@ -443,7 +449,8 @@ function burnView() {
     return group(w).map((x) => { const k = `${key}/${x.p}`; return `<details class="bp" data-k="${esc(k)}" ${qOpen.has(k) ? "open" : ""}><summary><span class="nm">${x.others ? `<i>others</i> <small>${x.others.length}</small>` : esc(x.p)}</span><span class="bb"><i style="width:${(x.w / max * 100).toFixed(1)}%;background:${pcol(x)}"></i></span><b>${val(w, x)}</b></summary>${sub(x).map((s) => `<div class="bs"><span class="nm">${esc(s.n)} <small>${esc(s.host ?? "")}</small></span><span class="bb"><i style="width:${(s.w / max * 100).toFixed(1)}%;background:${pcol(x)}"></i></span><b>${val(w, s)}</b></div>`).join("")}</details>`; }).join("") || `<p class="meta">nothing used</p>`;
   };
   const head = (w) => `<p class="meta">${esc(new Date(w.from).toLocaleString("en-CA", {weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false}))} – ${esc(new Date(w.to).toLocaleString("en-CA", {weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false}))}${w.used == null ? "" : ` · ${fmtQ(w.used)} of the limit`}</p>`;
-  if (qTab !== "days") { const w = b.weeks[qTab === "last" ? 0 : 1]; return `${tabs}${head(w)}${list(w, qTab)}${down}`; }
+  const w = qTab === "24h" ? S.burn24 : b.weeks[qTab === "last" ? 0 : 1];
+  const view = !w ? `<p class="meta">loading…</p>` : w.error ? `<p class="meta err">${esc(w.error)}</p>` : `${head(w)}${list(w, qTab)}`;
   // days: newest first, a stacked bar each (widths by weighted tokens, the busiest day full), its projects on tap
   const days = [...b.days].reverse(), max = Math.max(1, ...days.map((d) => d.w));
   const legend = `<div class="legend">${top.map((x) => `<span><i style="background:${color(x)}"></i>${esc(x)}</span>`).join("")}<span><i style="background:var(--gray)"></i>others</span></div>`;
@@ -453,7 +460,7 @@ function burnView() {
     const label = `${d.label} ${new Date(d.from).getDate()}${d.from === b.weeks[1].from ? " ↻" : ""}`;
     return `<details class="bp" data-k="${esc(k)}" ${qOpen.has(k) ? "open" : ""}><summary><span class="nm">${esc(label)}</span><span class="bb">${segs}</span><b>${d.used == null ? "" : fmtQ(d.used)}</b></summary>${list(d, k)}</details>`;
   }).join("");
-  return `${tabs}${legend}${rows}<p class="meta">A bar is the day's weighted tokens; the % what the usage log added that day. ↻ the weekly reset.</p>${down}`;
+  return `${tabs}${view}<h3 class="qh">by day</h3>${legend}${rows}<p class="meta">A bar is the day's weighted tokens; the % what the usage log added that day. ↻ the weekly reset.</p>${down}`;
 }
 const fmtQ = (q) => q == null ? "" : q < 0.05 ? "<0.1%" : `${q < 10 ? q.toFixed(1) : Math.round(q)}%`;
 document.addEventListener("toggle", (e) => { const k = e.target.dataset?.k; if (k) e.target.open ? qOpen.add(k) : qOpen.delete(k); }, true);
