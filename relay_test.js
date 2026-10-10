@@ -29,20 +29,26 @@ Deno.test("deliverable: a socket in SOCKS and nothing else", () => {
   eq(deliverable(7), false, "not a string");
 });
 
-Deno.test("Relay.rewrite: a remote uds becomes ours, and our own relay unwraps", () => {
+Deno.test("relayName: a reply address Claude Code accepts, one per daemon, host and socket", () => {
+  const n = relayName("marx", "nadya", "/run/user/1000/cc-socks/42.sock");
+  eq(/^\d+-[0-9a-f]{8}\.sock$/.test(n.slice(SOCKS.length + 1)), true, "the shape");
+  eq(n === relayName("marx", "nadya", "/run/user/1000/cc-socks/43.sock"), false, "per socket");
+  eq(n === relayName("lenin", "nadya", "/run/user/1000/cc-socks/42.sock"), false, "per daemon");
+  eq(n, relayName("marx", "nadya", "/run/user/1000/cc-socks/42.sock"), "stable");
+});
+
+Deno.test("Relay.rewrite: every remote uds becomes our relay socket for it", () => {
   const r = new Relay("marx", () => null);
   const links = [];
   r.link = (host, sock) => (links.push([host, sock]), relayName("marx", host, sock));
   const line = JSON.stringify({from: "uds:/tmp/cc-socks/42.sock", message: {content:
     '<cross-session-message from="uds:/tmp/cc-socks/42.sock" from-name="x">\nhi\n</cross-session-message>'}});
   const out = JSON.parse(r.rewrite(line, "nadya"));
-  eq(out.from, "uds:/tmp/cc-socks/ccx-marx~nadya-42.sock", "top level");
-  eq(out.message.content.startsWith(
-    '<cross-session-message from="uds:/tmp/cc-socks/ccx-marx~nadya-42.sock" from-name="x">'),
-  true, "the envelope, attribute order kept");
+  const mine = `uds:${relayName("marx", "nadya", "/tmp/cc-socks/42.sock")}`;
+  eq(out.from, mine, "top level");
+  eq(out.message.content.startsWith(`<cross-session-message from="${mine}" from-name="x">`),
+    true, "the envelope, attribute order kept");
   eq(links, [["nadya", "/tmp/cc-socks/42.sock"], ["nadya", "/tmp/cc-socks/42.sock"]], "linked");
-  eq(r.rewrite('"from":"uds:/tmp/cc-socks/ccx-nadya~marx-7.sock"', "nadya"),
-    '"from":"uds:/tmp/cc-socks/7.sock"', "nadya's relay to our 7 is our 7");
 });
 
 Deno.test("Relay.deliver: refuses a bad request, writes rewritten lines to the socket", async () => {
@@ -63,7 +69,8 @@ Deno.test("Relay.deliver: refuses a bad request, writes rewritten lines to the s
   r.link = (host, sock) => relayName("marx", host, sock);
   eq(await r.deliver({from: "n", sock: path, lines: ['{"from":"uds:/tmp/cc-socks/3.sock"}']}),
     null, "delivered");
-  eq(await got, '{"from":"uds:/tmp/cc-socks/ccx-marx~n-3.sock"}\n', "the line, rewritten");
+  eq(await got, `{"from":"uds:${relayName("marx", "n", "/tmp/cc-socks/3.sock")}"}\n`,
+    "the line, rewritten");
   l.close();
 });
 

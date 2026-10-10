@@ -12,9 +12,11 @@
 //   `uds:<path>` in it becomes a socket on the receiving host that leads back, and the
 //   answer travels the same way. Those sockets have no record and need none
 //
-// A stand-in socket and a reply socket are the same thing, `ccx-<self>~<host>-<base>.sock`
-// for the socket `<base>.sock` on `<host>`, made by the daemon `<self>`; the stand-in is
-// that plus a record.
+// A stand-in socket and a reply socket are the same thing, `<tag>-<hash>.sock` for a socket
+// on another host; the stand-in is that plus a record. The name has to be one Claude Code
+// accepts as a reply address, `<digits>.sock`, `<digits>-<8 hex>.sock` or `<1-16 hex>.sock`,
+// or a subscription is dropped ("reply address unshaped", 2.1.296 on nadya) while a plain
+// reply still goes through. `<tag>` is above any pid and names the daemon that made it.
 
 import {BYTES, HOME, UTF8} from "./sh.js";
 
@@ -43,8 +45,17 @@ export function standInPid(host, pid) {
   return 90_000_000 + h * 5_000_000 + pid;
 }
 
+// FNV-1a, 8 hex digits
+function hash8(text) {
+  let h = 0x811c9dc5;
+  for (const c of BYTES.encode(text)) h = Math.imul(h ^ c, 0x01000193) >>> 0;
+  return h.toString(16).padStart(8, "0");
+}
+
+const daemonTag = (self) => standInPid(self, 0);
+
 export const relayName = (self, host, sock) =>
-  `${SOCKS}/ccx-${self}~${host}-${sock.slice(sock.lastIndexOf("/") + 1)}`;
+  `${SOCKS}/${daemonTag(self)}-${hash8(`${host}\n${sock}`)}.sock`;
 
 // Whether `sock` is a path a relayed line may be written to: a socket directly in one of
 // the two directories Claude Code keeps them in, SOCKS or /run/user/<uid>/cc-socks on Linux
@@ -110,14 +121,10 @@ export class Relay {
     if (err) console.error(`relay to ${host}:${sock}: ${err}`);
   }
 
-  // `uds:<path>` on host `from` as it should read here: our own relay socket for it, or,
-  // for a path that is itself `from`'s relay to one of ours, the socket of ours it means
+  // `uds:<path>` on host `from` as it should read here: our own relay socket for it. A path
+  // that is itself `from`'s relay to a third host is relayed again, one hop more
   rewrite(text, from) {
-    return text.replace(UDS, (_, p) => {
-      const base = p.slice(p.lastIndexOf("/") + 1), mine = `ccx-${from}~${this.self}-`;
-      if (base.startsWith(mine)) return `uds:${SOCKS}/${base.slice(mine.length)}`;
-      return `uds:${this.link(from, p)}`;
-    });
+    return text.replace(UDS, (_, p) => `uds:${this.link(from, p)}`);
   }
 
   // Lines from host `from` for the local socket `sock`. An error message, or null.
@@ -240,7 +247,7 @@ export function clearStandIns(self) {
   }
   try {
     for (const e of Deno.readDirSync(SOCKS)) {
-      if (e.name.startsWith(`ccx-${self}~`)) remove(`${SOCKS}/${e.name}`);
+      if (e.name.startsWith(`${daemonTag(self)}-`)) remove(`${SOCKS}/${e.name}`);
     }
   } catch {
     // no socket dir
