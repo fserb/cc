@@ -137,7 +137,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<"
 const S = {rows: [], usage: null, burn: null, asks: [], posts: [], todo: [], ideas: [], projects: [], log: [], screens: {}};
 // the open item lives in the URL, so a refresh reopens it: #blog, #marx.1234 (an old #blog/arc opens the blog)
 const hash = decodeURIComponent(location.hash.slice(1));
-const isDoc = (c) => /^(idea|project)\//.test(c ?? "");  // idea/<file>, project/<file>: opened from plan
+const isDoc = (c) => /^(idea|project)\//.test(c ?? "");  // idea/<file> opened from plan, project/<file> from projects
 const hashCur = isDoc(hash) ? hash : hash.split("/")[0];
 let cur = hashCur || (innerWidth > 760 ? "nadya" : null);
 const isPid = (c) => c?.includes(".") && !isDoc(c);  // marx.1234
@@ -294,7 +294,9 @@ function items() {
   const fresh = S.posts.filter((x) => Date.parse(x.time) > seen).length;
   it.push({id: "blog", d: fresh ? "green" : "", unread: fresh, title: "blog", sub: top?.title ?? "", t: fresh ? `${fresh} new` : top?.time?.slice(11) ?? ""});
   const due = dueTodos();
-  it.push({id: "plan", d: due.length ? "blue" : "", hot: due.length, title: "plan", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : `${S.projects.length} projects · ${S.todo.length} todo · ${S.ideas.length} ideas`, t: ""});
+  it.push({id: "plan", d: due.length ? "blue" : "", hot: due.length, title: "plan", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : `${S.todo.length} todo · ${S.ideas.length} ideas`, t: ""});
+  const run = projects().filter((x) => x.running).length;
+  it.push({id: "projects", d: run ? "green" : "", title: "projects", sub: `${run ? `${run} running · ` : ""}${S.projects.length} projects`, t: ""});
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, asks: asksFor(r.name), dialog: hasDialog(r)}));
   ss.sort((a, b) => (b.dialog ? 2 : b.asks.length ? 1 : 0) - (a.dialog ? 2 : a.asks.length ? 1 : 0));
   for (const {r, asks, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "red" : asks.length ? "blue" : {busy: "green", wait: "", hold: "yel", free: "gray"}[r.state] ?? "gray", hot: dialog || asks.length,
@@ -306,7 +308,7 @@ function draw() {
   let sec = null, html = "";
   for (const i of all) {
     if ((i.sec ?? "") !== sec) { sec = i.sec ?? ""; html += sec ? `<div class="sec">${sec}</div>` : `<div style="height:.4rem"></div>`; }
-    html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""}" data-id="${esc(i.id)}" aria-current="${i.id === (isDoc(cur) ? "plan" : cur)}"><span class="d ${i.d}"></span><span class="tx"><div>${esc(i.title)}</div><small>${esc(i.sub)}</small></span><time>${esc(i.t)}</time></div>`;
+    html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""}" data-id="${esc(i.id)}" aria-current="${i.id === (isDoc(cur) ? docParent(cur) : cur)}"><span class="d ${i.d}"></span><span class="tx"><div>${esc(i.title)}</div><small>${esc(i.sub)}</small></span><time>${esc(i.t)}</time></div>`;
   }
   if (S.offline) html += `<p class="meta" style="padding:0 1.1rem">${esc(S.offline)}</p>`;
   html += `<div class="addbar"><button class="add" id="add" aria-label="new session" title="start a new claude session" aria-current="${cur === "new"}">+</button></div>`;
@@ -316,7 +318,7 @@ function draw() {
   const even = u ? Math.min(100, Math.max(0, (u.at - (u.resetsAt - 7 * 86400e3)) / (7 * 86400e3) * 100)) : 0;
   const tip = u ? `quota ${u.used}% used${p ? `, ${p.x.toFixed(1)}x the pace that lasts to the reset` : ""}${p?.out ? `, runs out ${day(p.out)}` : ""}; reset ${day(new Date(u.resetsAt))}` : "no usage data";
   $("#sum").innerHTML = `<button id="qbtn" class="${p?.out ? "out" : p?.x > 1 ? "hi" : ""}" title="${esc(tip)}" aria-label="${esc(tip)}"><span class="bar"><i style="width:${u?.used ?? 0}%"></i>${u ? `<s style="left:${even.toFixed(1)}%"></s>` : ""}</span><b>${u ? u.used + "%" : "?"}</b>${p ? `<em>${p.x.toFixed(1)}x${p.out ? ` · out ${day(p.out)}` : ""}</em>` : ""}</button>`;
-  if (["nadya", "plan", "quota"].includes(cur) || cur?.includes(".")) drawView(true);  // a pid or idea/<file>
+  if (["nadya", "plan", "projects", "quota"].includes(cur) || cur?.includes(".")) drawView(true);  // a pid or idea/<file>
 }
 
 // ---------- center
@@ -346,6 +348,7 @@ function drawView(soft) {
   else if (!cur || cur === "nadya") html = nadyaView();
   else if (cur === "blog") html = `<iframe src="${BLOG}" title="blog"></iframe>`;
   else if (cur === "plan") html = todoView();
+  else if (cur === "projects") html = projectsView();
   else if (isDoc(cur)) html = docView(...cur.split("/"));
   else if (cur === "new") html = newView();
   else if (i?.r) { html = sessionView(i.r); ph = `Message ${i.r.name}`; }
@@ -402,10 +405,13 @@ function sessionView(r) {
 function todoView() {
   const due = dueTodos();
   return `<article><h1>plan</h1>${due.map((t) => `<div class="need"><b>${esc(t.text)}</b><p>due ${esc(t.date)} ${esc(t.time ?? "")}</p>${sent.has("todo:" + t.full) ? `<p class="done">✓ ${esc(sent.get("todo:" + t.full))}</p>` : `<div class="opts" data-todo="${esc(t.full)}"><button>done</button><button>snooze 1 h</button></div>`}</div>`).join("")}
-    <h2 class="h">projects</h2><ul class="rows">${projects().map((x) => `<li class="go${x.other ? " other" : ""}" data-go="project/${esc(x.file)}"><span>${esc(x.title)}</span><small>${x.running ? "running" : esc(x.status)}</small></li>`).join("") || "<li><span class=meta>none</span></li>"}</ul>
     <h2 class="h">todo</h2><ul class="rows">${S.todo.map((t) => `<li class="${t.mark === "!" ? "x" : ""}"><span>${esc(t.text)}</span><small>${t.date ? `${t.date}${t.time ? " " + t.time : ""}` : "note"}${t.mark === "!" ? " · reminded" : ""}</small></li>`).join("") || "<li><span class=meta>nothing</span></li>"}</ul>
     <h2 class="h">ideas</h2><ul class="rows">${S.ideas.map((x) => `<li class="go" data-go="idea/${esc(x.file)}"><span>${esc(x.title)}</span><small>${esc(x.status)}</small></li>`).join("")}</ul></article>`;
 }
+function projectsView() {
+  return `<article><h1>projects</h1><ul class="rows">${projects().map((x) => `<li class="go${x.other ? " other" : ""}" data-go="project/${esc(x.file)}"><span>${esc(x.title)}</span><small>${x.running ? "running" : esc(x.status)}</small></li>`).join("") || "<li><span class=meta>none</span></li>"}</ul></article>`;
+}
+const docParent = (c) => c.startsWith("project/") ? "projects" : "plan";
 function projects() {
   // running (a live <stem>-co, or <last part>-co: arcade-switch -> switch-co), then stopped/paused, then the rest, then Kind: other
   const live = new Set(S.rows.map((r) => r.name));
@@ -416,8 +422,8 @@ function projects() {
   }).sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title));
 }
 function docView(kind, file) {
-  const all = kind === "idea" ? S.ideas : S.projects, x = all.find((y) => y.file === file);
-  return `<article class="doc"><p class="meta"><a href="#plan" data-go="plan">← plan</a> · ${esc(file)}</p>${x ? md(x.text, true) : `<p class="meta">${all.length ? `no such ${kind}` : "loading…"}</p>`}</article>`;
+  const all = kind === "idea" ? S.ideas : S.projects, x = all.find((y) => y.file === file), up = docParent(`${kind}/`);
+  return `<article class="doc"><p class="meta"><a href="#${up}" data-go="${up}">← ${up}</a> · ${esc(file)}</p>${x ? md(x.text, true) : `<p class="meta">${all.length ? `no such ${kind}` : "loading…"}</p>`}</article>`;
 }
 const HOSTS = ["nadya", "marx"];
 function newView() {
@@ -577,6 +583,7 @@ function context() {
   if (!cur || cur === "nadya") return "";
   if (cur === "blog") return "about the blog";
   if (cur === "plan") return "plan";
+  if (cur === "projects") return "projects";
   if (cur === "quota") return "about the quota";
   const r = S.rows.find((x) => x.pid === cur);
   return r ? `about ${r.name} (${r.pid})` : "";
@@ -598,8 +605,8 @@ document.addEventListener("click", async (e) => {
   const qt = e.target.closest("[data-qt]"); if (qt) { qTab = qt.dataset.qt; drawView(true); return; }
   if (e.target.closest("#add")) { cur = "new"; push(); open(); dirHints($("#new")); return; }
   if (e.target.closest("#back, #title")) { if (history.state?.cc) history.back(); else document.body.classList.remove("view"); return; }
-  const row = e.target.closest(".it"); if (row) { cur = row.dataset.id; push(); if (cur === "blog") localStorage.cc_blog_seen = Date.now(); if (cur === "plan") loadTodo(); open(); if ((cur === "nadya" || cur.includes(".")) && matchMedia("(hover: hover) and (pointer: fine)").matches) $("#say").q.focus(); return; }
-  const go = e.target.closest("[data-go]"); if (go) { e.preventDefault(); cur = go.dataset.go; push(isDoc(cur)); if (cur === "plan") loadTodo(); open(); return; }
+  const row = e.target.closest(".it"); if (row) { cur = row.dataset.id; push(); if (cur === "blog") localStorage.cc_blog_seen = Date.now(); if (cur === "plan" || cur === "projects") loadTodo(); open(); if ((cur === "nadya" || cur.includes(".")) && matchMedia("(hover: hover) and (pointer: fine)").matches) $("#say").q.focus(); return; }
+  const go = e.target.closest("[data-go]"); if (go) { e.preventDefault(); cur = go.dataset.go; push(isDoc(cur)); if (cur === "plan" || cur === "projects") loadTodo(); open(); return; }
   const b = e.target.closest(".opts button"); if (!b) return;
   const box = b.parentElement; [...box.children].forEach((x) => x.disabled = true);
   try {
