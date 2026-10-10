@@ -102,6 +102,86 @@ uninstall() {
   echo "$LABEL unloaded and removed"
 }
 
+# `ccx host`, the daemon every machine with claudes runs: launchd on macOS, a
+# systemd user unit on Linux. PATH has to reach deno, tmux and ps, which neither
+# gives a job by default.
+HOST_LABEL=net.fserb.ccx-host
+HOST_PLIST="$HOME/Library/LaunchAgents/$HOST_LABEL.plist"
+HOST_UNIT="$HOME/.config/systemd/user/ccx-host.service"
+HOST_PATH="$(dirname "$(command -v deno)"):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+install-host() {
+  if [[ $(uname) == Darwin ]]; then
+    mkdir -p "$(dirname "$HOST_PLIST")"
+    cat > "$HOST_PLIST" <<PLISTEOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Written by \`./task install-host\`. Edit ./task and reinstall, not this file. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>$HOST_LABEL</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>$ROOT/ccx</string>
+		<string>host</string>
+	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>$HOST_PATH</string>
+		<key>HOME</key>
+		<string>$HOME</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>StandardOutPath</key>
+	<string>$HOME/Library/Logs/ccx-host.log</string>
+	<key>StandardErrorPath</key>
+	<string>$HOME/Library/Logs/ccx-host.log</string>
+</dict>
+</plist>
+PLISTEOF
+    launchctl bootout "gui/$(id -u)/$HOST_LABEL" 2>/dev/null || true
+    launchctl bootstrap "gui/$(id -u)" "$HOST_PLIST"
+    echo "$HOST_LABEL loaded from $HOST_PLIST"
+  else
+    mkdir -p "$(dirname "$HOST_UNIT")"
+    cat > "$HOST_UNIT" <<UNITEOF
+# Written by \`./task install-host\`. Edit ./task and reinstall, not this file.
+[Unit]
+Description=ccx host
+
+[Service]
+ExecStart=$ROOT/ccx host
+Environment=PATH=$HOST_PATH
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+UNITEOF
+    systemctl --user daemon-reload
+    systemctl --user enable --now ccx-host.service
+    systemctl --user restart ccx-host.service
+    echo "ccx-host.service running from $HOST_UNIT"
+  fi
+}
+
+uninstall-host() {
+  if [[ $(uname) == Darwin ]]; then
+    launchctl bootout "gui/$(id -u)/$HOST_LABEL" 2>/dev/null || true
+    rm -f "$HOST_PLIST"
+  else
+    systemctl --user disable --now ccx-host.service 2>/dev/null || true
+    rm -f "$HOST_UNIT"
+    systemctl --user daemon-reload
+  fi
+  echo "ccx host removed"
+}
+
 function help {
   echo "$0 <task>   # everything else is ./ccx"
   compgen -A function | grep -v "^_" | cat -n

@@ -34,10 +34,12 @@ export function standInPid(host, pid) {
 export const relayName = (self, host, sock) =>
   `${SOCKS}/ccx-${self}~${host}-${sock.slice(sock.lastIndexOf("/") + 1)}`;
 
-// Whether `sock` is a path a relayed line may be written to: a socket in SOCKS, no `..`
+// Whether `sock` is a path a relayed line may be written to: a socket directly in one of
+// the two directories Claude Code keeps them in, SOCKS or /run/user/<uid>/cc-socks on Linux
 export function deliverable(sock) {
-  return typeof sock === "string" && sock.startsWith(`${SOCKS}/`) &&
-    SOCK_NAME.test(sock.slice(SOCKS.length + 1));
+  if (typeof sock !== "string") return false;
+  const m = sock.match(/^(\/tmp\/cc-socks|\/run\/user\/\d+\/cc-socks)\/([^/]+)$/);
+  return Boolean(m && SOCK_NAME.test(m[2]));
 }
 
 export class Relay {

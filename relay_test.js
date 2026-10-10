@@ -24,6 +24,8 @@ Deno.test("deliverable: a socket in SOCKS and nothing else", () => {
   eq(deliverable(`${SOCKS}/../etc.sock`), false, "a ..");
   eq(deliverable(`${SOCKS}/a/b.sock`), false, "a subdirectory");
   eq(deliverable("/var/run/docker.sock"), false, "elsewhere");
+  eq(deliverable("/run/user/1000/cc-socks/5.sock"), true, "Linux's runtime dir");
+  eq(deliverable("/run/user/x/cc-socks/5.sock"), false, "a uid that is not a number");
   eq(deliverable(7), false, "not a string");
 });
 

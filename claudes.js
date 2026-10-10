@@ -1,7 +1,7 @@
 // Every running Claude Code instance and what it is doing. No UI here, and no focusing
 // either: discover() is the listing, jump() in jump.js is the action.
 
-import {byCodePoint, HOME, sh, UTF8} from "./sh.js";
+import {byCodePoint, HOME, MAC, sh, UTF8} from "./sh.js";
 
 export class Instance {
   constructor(fields) {
@@ -344,7 +344,9 @@ const PS_LINE = /^\s*(\d+)\s+(\d+)\s+(.*)$/;
 // pid -> [ppid, command]
 export async function processes() {
   const table = new Map();
-  for (const line of (await sh("ps", "-axo", "pid=,ppid=,command=")).split("\n")) {
+  // procps has no -x; -e is every process on both, but BSD ps then drops the command column
+  const args = MAC ? ["-axo", "pid=,ppid=,command="] : ["-eo", "pid=,ppid=,args="];
+  for (const line of (await sh("ps", ...args)).split("\n")) {
     const m = PS_LINE.exec(line);
     if (m) table.set(Number(m[1]), [Number(m[2]), m[3]]);
   }
