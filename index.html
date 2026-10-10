@@ -302,9 +302,6 @@ function drawView(soft) {
   if (soft && cur === "blog") return;  // don't rebuild the blog under the reader
   lastView = html;
   view.innerHTML = html;
-  const frame = view.querySelector("iframe");
-  // no project filter in cc: hide the blog's filter row; the colored project labels stay, not clickable
-  frame?.addEventListener("load", () => frame.contentDocument.head.insertAdjacentHTML("beforeend", "<style>#filter { display: none; } .meta a { pointer-events: none; }</style>"));
   $("#say").q.placeholder = ph;
   $("#say").hidden = !(!cur || cur === "nadya" || i?.r);  // the prompt only where it talks to nadya or a session
   const chatty = !cur || cur === "nadya" || cur.includes(".");
