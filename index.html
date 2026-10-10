@@ -84,6 +84,12 @@
   .bp .bp { margin-left: 1rem; } .bp .bp summary { font-size: 0.9rem; }
   .qh { font-size: 0.85rem; font-weight: 600; color: var(--muted); margin: 1.6rem 0 0.4rem; }
   .qg { max-width: 600px; margin: 0; } .qd { position: relative; height: 1.2em; font-size: 0.72rem; color: var(--muted); } .qd span { position: absolute; top: 0.1em; padding-left: 3px; }
+  .rows li.go { cursor: pointer; } .rows li.go:hover span { color: var(--accent); }
+  .m h1, .m h2, .m h3, .m h4 { font-size: 1em; margin: 0 0 0.3rem; } .m ol { margin: 0.2rem 0 0.4rem; padding-left: 1.4rem; } .m .tbl { margin: 0.3rem 0; }
+  .doc h2 { font-size: 1.2rem; margin: 1.8rem 0 0.5rem; } .doc h3 { font-size: 1.02rem; margin: 1.4rem 0 0.4rem; } .doc h4 { font-size: 0.95rem; margin: 1.2rem 0 0.3rem; }
+  .doc p, .doc ul, .doc ol { margin: 0 0 0.8rem; } .doc ul, .doc ol { padding-left: 1.4rem; } .doc li { margin: 0.2rem 0; } .doc li > ul, .doc li > ol { margin: 0.2rem 0 0; }
+  .doc a { color: var(--accent); } .doc :not(pre) > code { font: 0.88em var(--mono); background: var(--hover); padding: 0.05em 0.25em; border-radius: 3px; }
+  .tbl { overflow-x: auto; margin: 0 0 1rem; } .tbl table { border-collapse: collapse; font-size: 0.86rem; } .tbl th, .tbl td { border: 1px solid var(--line); padding: 0.35rem 0.55rem; text-align: left; vertical-align: top; min-width: 7rem; } .tbl th { background: var(--track); }
   .rows li.x span { text-decoration: line-through; color: var(--muted); }
   .add { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 0.35rem 0; text-align: center; font-size: 1.3rem; line-height: 1.2; color: var(--muted); border: 1px dashed var(--gray); border-radius: 6px; cursor: pointer; }
   .add:hover, .add[aria-current=true] { color: var(--accent); border-color: var(--accent); background: var(--cur); }
@@ -127,8 +133,10 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
 const S = {rows: [], usage: null, burn: null, asks: [], posts: [], todo: [], ideas: [], log: [], screens: {}};
 // the open item lives in the URL, so a refresh reopens it: #blog, #marx.1234 (an old #blog/arc opens the blog)
-const [hashCur] = decodeURIComponent(location.hash.slice(1)).split("/");
+const hash = decodeURIComponent(location.hash.slice(1));
+const hashCur = hash.startsWith("idea/") ? hash : hash.split("/")[0];
 let cur = hashCur || (innerWidth > 760 ? "nadya" : null);
+const isPid = (c) => c?.includes(".") && !c.startsWith("idea/");  // marx.1234; an idea is idea/<file>
 function setHash() { if (cur) history.replaceState(history.state, "", `#${cur}`); }
 const sent = new Map();  // ask id / item -> what was sent, for "✓" lines
 
@@ -141,20 +149,55 @@ function ago(t) {
   return `${Math.floor(s / 86400)}d`;
 }
 const hhmm = (t) => new Date(t * 1000).toLocaleTimeString("en-CA", {hour: "2-digit", minute: "2-digit", hour12: false});
-function md(text) {
-  // a small markdown subset: paragraphs, - lists, **bold**, `code`, links
-  const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2">$1</a>');
-  const out = [];
-  let list = null, para = [];
-  const endPara = () => { if (para.length) out.push(`<p>${para.join("<br>")}</p>`); para = []; };
-  const endList = () => { if (list) out.push(`<ul>${list.join("")}</ul>`); list = null; };
-  for (const line of text.trim().split("\n")) {
-    if (!line.trim()) { endPara(); endList(); continue; }
-    const li = line.match(/^\s*[-*] (.*)$/);
-    if (li) { endPara(); (list ??= []).push(`<li>${inline(li[1])}</li>`); continue; }
-    endList(); para.push(inline(line));
+function md(text, doc) {
+  // a small markdown subset: # headings, paragraphs, - and 1. lists (nested by indent), ``` code, | tables,
+  // **bold**, *italic*, `code`, links. doc: hard-wrapped lines join into one paragraph (chat keeps its line breaks)
+  const link = (m, t, u) => /^https?:/.test(u) ? `<a href="${u}">${t}</a>` : doc && /^[\w.-]+\.md$/.test(u) ? `<a href="#idea/${u}" data-go="idea/${u}">${t}</a>` : t;
+  const inline = (s) => {
+    const code = [];  // code spans wait outside, so ** and _ inside them stay as typed
+    return esc(s).replace(/`([^`]+)`/g, (m, c) => `\0${code.push(c) - 1}\0`)
+      .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/(^|[^\w*])\*(?=\S)(.+?)\*(?!\w)/g, "$1<i>$2</i>").replace(/(^|\W)_(?=\S)(.+?)_(?!\w)/g, "$1<i>$2</i>")
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, link).replace(/\0(\d+)\0/g, (m, k) => `<code>${code[k]}</code>`);
+  };
+  const cells = (row) => row.trim().replace(/^\||\|$/g, "").split("|").map((c) => inline(c.trim()));
+  const out = [], lists = [];
+  let para = [];
+  const endPara = () => { if (para.length) out.push(`<p>${para.join(doc ? " " : "<br>")}</p>`); para = []; };
+  const endLists = (ind = -1) => { while (lists.length && lists.at(-1).ind > ind) out.push(`</li></${lists.pop().tag}>`); };
+  const lines = text.trim().split("\n");
+  for (let k = 0; k < lines.length; k++) {
+    const line = lines[k];
+    if (!line.trim()) { endPara(); if (!/^\s+\S/.test(lines[k + 1] ?? "")) endLists(); continue; }
+    if (line.startsWith("```")) {
+      endPara(); endLists();
+      const code = [];
+      while (++k < lines.length && !lines[k].startsWith("```")) code.push(lines[k]);
+      out.push(`<pre><code>${esc(code.join("\n"))}</code></pre>`); continue;
+    }
+    const h = line.match(/^(#{1,4}) (.*)$/);
+    if (h) { endPara(); endLists(); out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); continue; }
+    if (line.startsWith("|") && /^\|?[\s:|-]+$/.test(lines[k + 1] ?? "") && lines[k + 1].includes("-")) {
+      endPara(); endLists();
+      const head = cells(line), body = [];
+      for (k += 2; k < lines.length && lines[k].startsWith("|"); k++) body.push(cells(lines[k]));
+      k--;
+      out.push(`<div class="tbl"><table><thead><tr>${head.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`);
+      continue;
+    }
+    const li = line.match(/^(\s*)([-*]|\d+\.) (.*)$/);
+    if (li) {
+      endPara();
+      const ind = li[1].length, tag = /\d/.test(li[2]) ? "ol" : "ul";
+      endLists(ind);
+      const top = lists.at(-1);
+      if (top?.ind === ind && top.tag === tag) out.push("</li>");
+      else { if (top?.ind === ind) endLists(ind - 1); lists.push({ind, tag}); out.push(`<${tag}>`); }
+      out.push(`<li>${inline(li[3])}`); continue;
+    }
+    if (lists.length && /^\s/.test(line)) { out[out.length - 1] += `${doc ? " " : "<br>"}${inline(line.trim())}`; continue; }
+    endLists(); para.push(inline(line));
   }
-  endPara(); endList();
+  endPara(); endLists();
   return out.join("");
 }
 async function json(url, opts) {
@@ -192,7 +235,7 @@ async function loadTodo() {
   const files = [...new Set([...list.matchAll(/href="(?:\.\/)?([\w.-]+\.md)"/g)].map((m) => m[1]))];
   S.ideas = await Promise.all(files.map(async (f) => {
     const t = await fetch(`../cc-files/ideas/${f}`, {cache: "no-cache"}).then((r) => r.text()).catch(() => "");
-    return {file: f, title: t.match(/^# (.+)$/m)?.[1] ?? f, status: t.match(/^Status: ([^.(]+)/m)?.[1]?.trim() ?? ""};
+    return {file: f, text: t, title: t.match(/^# (.+)$/m)?.[1] ?? f, status: t.match(/^Status: ([^.(]+)/m)?.[1]?.trim() ?? ""};
   }));
   draw();
 }
@@ -255,7 +298,7 @@ function draw() {
   let sec = null, html = "";
   for (const i of all) {
     if ((i.sec ?? "") !== sec) { sec = i.sec ?? ""; html += sec ? `<div class="sec">${sec}</div>` : `<div style="height:.4rem"></div>`; }
-    html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""}" data-id="${esc(i.id)}" aria-current="${i.id === cur}"><span class="d ${i.d}"></span><span class="tx"><div>${esc(i.title)}</div><small>${esc(i.sub)}</small></span><time>${esc(i.t)}</time></div>`;
+    html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""}" data-id="${esc(i.id)}" aria-current="${i.id === (cur?.startsWith("idea/") ? "todo" : cur)}"><span class="d ${i.d}"></span><span class="tx"><div>${esc(i.title)}</div><small>${esc(i.sub)}</small></span><time>${esc(i.t)}</time></div>`;
   }
   if (S.offline) html += `<p class="meta" style="padding:0 1.1rem">${esc(S.offline)}</p>`;
   html += `<div class="addbar"><button class="add" id="add" aria-label="new session" title="start a new claude session" aria-current="${cur === "new"}">+</button></div>`;
@@ -265,7 +308,7 @@ function draw() {
   const even = u ? Math.min(100, Math.max(0, (u.at - (u.resetsAt - 7 * 86400e3)) / (7 * 86400e3) * 100)) : 0;
   const tip = u ? `quota ${u.used}% used${p ? `, ${p.x.toFixed(1)}x the pace that lasts to the reset` : ""}${p?.out ? `, runs out ${day(p.out)}` : ""}; reset ${day(new Date(u.resetsAt))}` : "no usage data";
   $("#sum").innerHTML = `<button id="qbtn" class="${p?.out ? "out" : p?.x > 1 ? "hi" : ""}" title="${esc(tip)}" aria-label="${esc(tip)}"><span class="bar"><i style="width:${u?.used ?? 0}%"></i>${u ? `<s style="left:${even.toFixed(1)}%"></s>` : ""}</span><b>${u ? u.used + "%" : "?"}</b>${p ? `<em>${p.x.toFixed(1)}x${p.out ? ` · out ${day(p.out)}` : ""}</em>` : ""}</button>`;
-  if (["nadya", "todo", "quota"].includes(cur) || cur?.includes(".")) drawView(true);
+  if (["nadya", "todo", "quota"].includes(cur) || cur?.includes(".")) drawView(true);  // a pid or idea/<file>
 }
 
 // ---------- center
@@ -295,6 +338,7 @@ function drawView(soft) {
   else if (!cur || cur === "nadya") html = nadyaView();
   else if (cur === "blog") html = `<iframe src="${BLOG}" title="blog"></iframe>`;
   else if (cur === "todo") html = todoView();
+  else if (cur.startsWith("idea/")) html = ideaView(cur.slice(5));
   else if (cur === "new") html = newView();
   else if (i?.r) { html = sessionView(i.r); ph = `Message ${i.r.name}`; }
   else html = `<article><p class="meta">gone</p></article>`;
@@ -304,7 +348,7 @@ function drawView(soft) {
   view.innerHTML = html;
   $("#say").q.placeholder = ph;
   $("#say").hidden = !(!cur || cur === "nadya" || i?.r);  // the prompt only where it talks to nadya or a session
-  const chatty = !cur || cur === "nadya" || cur.includes(".");
+  const chatty = !cur || cur === "nadya" || isPid(cur);
   if (!soft) { pausedAt = 0; $("#newer").hidden = true; }
   if (soft && pane) view.querySelector("details")?.setAttribute("open", "");
   if (chatty && (!soft || keep)) return toBottom();
@@ -351,7 +395,11 @@ function todoView() {
   const due = dueTodos();
   return `<article><h1>ideas &amp; todo</h1>${due.map((t) => `<div class="need"><b>${esc(t.text)}</b><p>due ${esc(t.date)} ${esc(t.time ?? "")}</p>${sent.has("todo:" + t.full) ? `<p class="done">✓ ${esc(sent.get("todo:" + t.full))}</p>` : `<div class="opts" data-todo="${esc(t.full)}"><button>done</button><button>snooze 1 h</button></div>`}</div>`).join("")}
     <h2 class="h">todo</h2><ul class="rows">${S.todo.map((t) => `<li class="${t.mark === "!" ? "x" : ""}"><span>${esc(t.text)}</span><small>${t.date ? `${t.date}${t.time ? " " + t.time : ""}` : "note"}${t.mark === "!" ? " · reminded" : ""}</small></li>`).join("") || "<li><span class=meta>nothing</span></li>"}</ul>
-    <h2 class="h">ideas</h2><ul class="rows">${S.ideas.map((x) => `<li><span>${esc(x.title)}</span><small>${esc(x.status)}</small></li>`).join("")}</ul></article>`;
+    <h2 class="h">ideas</h2><ul class="rows">${S.ideas.map((x) => `<li class="go" data-go="idea/${esc(x.file)}"><span>${esc(x.title)}</span><small>${esc(x.status)}</small></li>`).join("")}</ul></article>`;
+}
+function ideaView(file) {
+  const x = S.ideas.find((y) => y.file === file);
+  return `<article class="doc"><p class="meta"><a href="#todo" data-go="todo">← ideas</a> · ${esc(file)}</p>${x ? md(x.text, true) : `<p class="meta">${S.ideas.length ? "no such idea" : "loading…"}</p>`}</article>`;
 }
 const HOSTS = ["nadya", "marx"];
 function newView() {
@@ -504,7 +552,7 @@ function context() {
 $("#say").onsubmit = async (e) => {
   e.preventDefault();
   const q = e.target.q.value.trim(); if (!q) return;
-  const r = cur?.includes(".") ? S.rows.find((x) => x.pid === cur) : null;
+  const r = isPid(cur) ? S.rows.find((x) => x.pid === cur) : null;
   const c = context();
   try {
     if (r) await post(`${CCX}/s/${r.pid}/type`, {text: q});
@@ -519,6 +567,7 @@ document.addEventListener("click", async (e) => {
   if (e.target.closest("#add")) { cur = "new"; push(); open(); dirHints($("#new")); return; }
   if (e.target.closest("#back, #title")) { if (history.state?.cc) history.back(); else document.body.classList.remove("view"); return; }
   const row = e.target.closest(".it"); if (row) { cur = row.dataset.id; push(); if (cur === "blog") localStorage.cc_blog_seen = Date.now(); if (cur === "todo") loadTodo(); open(); if ((cur === "nadya" || cur.includes(".")) && matchMedia("(hover: hover) and (pointer: fine)").matches) $("#say").q.focus(); return; }
+  const go = e.target.closest("[data-go]"); if (go) { e.preventDefault(); cur = go.dataset.go; push(cur.startsWith("idea/")); if (cur === "todo") loadTodo(); open(); return; }
   const b = e.target.closest(".opts button"); if (!b) return;
   const box = b.parentElement; [...box.children].forEach((x) => x.disabled = true);
   try {
@@ -531,9 +580,9 @@ document.addEventListener("click", async (e) => {
 });
 // phone: opening an item is a history entry, so the browser's back (and the swipe) returns to the list
 const narrow = () => matchMedia("(max-width: 760px)").matches;
-function push() {
+function push(deeper) {
   if (!narrow()) return;
-  if (history.state?.cc) history.replaceState({cc: cur}, "");
+  if (history.state?.cc && !deeper) history.replaceState({cc: cur}, "");
   else history.pushState({cc: cur}, "");
 }
 addEventListener("popstate", (e) => {
@@ -543,7 +592,7 @@ addEventListener("popstate", (e) => {
 function open() {
   document.body.classList.add("view");
   setHash();
-  const pid = cur === "nadya" || cur === null ? nadyaRow()?.pid : cur?.includes(".") ? cur : null;
+  const pid = cur === "nadya" || cur === null ? nadyaRow()?.pid : isPid(cur) ? cur : null;
   follow(pid);
   draw(); drawView();
 }
