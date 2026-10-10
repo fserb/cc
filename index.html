@@ -433,7 +433,9 @@ function burnView() {
   if (b.error) return `${tabs}<p class="meta err">${esc(b.error)}</p>`;
   const top = b.weeks[1].projects.concat(b.weeks[0].projects, S.burn24?.projects ?? []).map((x) => x.p).filter((x, n, a) => a.indexOf(x) === n).slice(0, PCOL.length);
   const color = (name) => PCOL[top.indexOf(name)] ?? "var(--gray)";
-  const val = (w, x) => fmtQ(w.used == null ? x.share : x.q);
+  // last 24h: % of a day's even share (the limit / 7), so 100% is on pace
+  const perDay = (w) => w === S.burn24 && w.used != null ? 7 : 1;
+  const val = (w, x) => fmtQ(w.used == null ? x.share : x.q * perDay(w));
   const down = b.down?.length ? `<p class="meta err">${b.down.map(([host, e]) => esc(`${host}: ${e}`)).join("<br>")}</p>` : "";
   // projects under MINQ (of the limit, or of the tokens with no log) go into one "others" row, last
   const group = (w) => {
@@ -449,7 +451,7 @@ function burnView() {
     const sub = (x) => x.others ? x.others.map((o) => ({n: o.p, w: o.w, q: o.q, share: o.share})) : x.sessions.filter((s) => s.w >= max / 1000);
     return group(w).map((x) => { const k = `${key}/${x.p}`; return `<details class="bp" data-k="${esc(k)}" ${qOpen.has(k) ? "open" : ""}><summary><span class="nm">${x.others ? `<i>others</i> <small>${x.others.length}</small>` : esc(x.p)}</span><span class="bb"><i style="width:${(x.w / max * 100).toFixed(1)}%;background:${pcol(x)}"></i></span><b>${val(w, x)}</b></summary>${sub(x).map((s) => `<div class="bs"><span class="nm">${esc(s.n)} <small>${esc(s.host ?? "")}</small></span><span class="bb"><i style="width:${(s.w / max * 100).toFixed(1)}%;background:${pcol(x)}"></i></span><b>${val(w, s)}</b></div>`).join("")}</details>`; }).join("") || `<p class="meta">nothing used</p>`;
   };
-  const head = (w) => `<p class="meta">${esc(new Date(w.from).toLocaleString("en-CA", {weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false}))} – ${esc(new Date(w.to).toLocaleString("en-CA", {weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false}))}${w.used == null ? "" : ` · ${fmtQ(w.used)} of the limit · ${(w.used / ((w.to - w.from) / 3600_000 / 168 * 100)).toFixed(1)}x`}</p>`;
+  const head = (w) => `<p class="meta">${esc(new Date(w.from).toLocaleString("en-CA", {weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false}))} – ${esc(new Date(w.to).toLocaleString("en-CA", {weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false}))}${w.used == null ? "" : perDay(w) > 1 ? ` · ${fmtQ(w.used * 7)} of a day's share (${fmtQ(w.used)} of the limit)` : ` · ${fmtQ(w.used)} of the limit · ${(w.used / ((w.to - w.from) / 3600_000 / 168 * 100)).toFixed(1)}x`}</p>`;
   const w = qTab === "24h" ? S.burn24 : b.weeks[qTab === "last" ? 0 : 1];
   const view = !w ? `<p class="meta">loading…</p>` : w.error ? `<p class="meta err">${esc(w.error)}</p>` : `${head(w)}${list(w, qTab)}`;
   // days: newest first, a stacked bar each (widths by weighted tokens, the busiest day full), its projects on tap
