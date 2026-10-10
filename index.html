@@ -319,7 +319,7 @@ function chat(r) {
   const sc = S.screens[r.pid] ?? {};
   const log = stream?.pid === r.pid ? S.log : [];
   const out = []; let tools = 0;
-  const flush = (busy) => { if (tools) out.push(`<div class="tools">· ${tools} tool call${tools > 1 ? "s" : ""}${busy ? " · working" : ""}</div>`); tools = 0; };
+  const flush = (busy) => { if (tools) out.push(`<div class="tools">${tools} tool call${tools > 1 ? "s" : ""}${busy ? " · working" : ""}</div>`); tools = 0; };
   for (const e of log) {
     if (e.type === "tool") { tools++; continue; }
     if (e.type !== "user" && e.type !== "text") continue;
