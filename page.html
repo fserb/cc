@@ -386,7 +386,7 @@ function eventHtml(e) {
 
 function sessionView(pid, tab) {
   const s = {pid, tab, events: [], start: 0, end: null, screen: "", dialog: null,
-    gone: false, stream: null, row: rows.find((r) => r.pid === pid)};
+    gone: false, stream: null, row: rows.find((r) => String(r.pid) === pid)};
   let drawn = false;
 
   const nearBottom = () => {
@@ -593,7 +593,7 @@ function sessionView(pid, tab) {
   return {
     s, older, open, draw,
     onList() {
-      const r = rows.find((r) => r.pid === pid);
+      const r = rows.find((r) => String(r.pid) === pid);
       if (r && !s.row) {
         s.row = r;
         draw();
@@ -719,7 +719,7 @@ function route() {
   if (!key) view = listView();
   else if (key === "new") view = newView();
   else if (key === "starting") view = startingView();
-  else view = sessionView(Number(key), tab === "screen" ? "screen" : "log");
+  else view = sessionView(key, tab === "screen" ? "screen" : "log");
 }
 
 function spawnBeside(button) {

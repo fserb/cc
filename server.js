@@ -139,11 +139,30 @@ function stream(onClose) {
   return {response: new Response(body, {headers: SSE_HEADERS}), send, close};
 }
 
-// Who may connect, by address: this machine, or the tailnet (100.64.0.0/10 and
-// fd7a:115c:a1e0::/48). `ccx host` listens on every interface, so this is the boundary
-export function tailnetOrLocal(addr) {
+const ip4 = (a) => a.split(".").reduce((n, o) => n * 256 + Number(o), 0);
+
+// The IPv4 subnets of this machine's docker bridges, `docker0` and `br-*`: a container on
+// one, the lemon app among them, arrives from its bridge address and not the tailnet's
+function bridges() {
+  try {
+    return Deno.networkInterfaces().filter((i) => i.family === "IPv4" &&
+      /^(docker\d+|br-)/.test(i.name)).map((i) => {
+      const bits = Number(i.cidr.split("/")[1]), mask = bits ? 2 ** 32 - 2 ** (32 - bits) : 0;
+      return [ip4(i.address) & mask, mask];
+    });
+  } catch {
+    return [];
+  }
+}
+
+// Who may connect, by address: this machine, its docker bridges, or the tailnet
+// (100.64.0.0/10 and fd7a:115c:a1e0::/48). `ccx host` listens on every interface, so this
+// is the boundary
+export function tailnetOrLocal(addr, nets = bridges()) {
   const a = addr.toLowerCase().replace(/^::ffff:/, "");
   if (a === "::1" || a.startsWith("127.")) return true;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(a) &&
+    nets.some(([net, mask]) => ((ip4(a) & mask) >>> 0) === (net >>> 0))) return true;
   if (a.startsWith("fd7a:115c:a1e0:")) return true;
   const m = a.match(/^100\.(\d+)\./);
   return Boolean(m && Number(m[1]) >= 64 && Number(m[1]) < 128);

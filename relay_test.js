@@ -78,8 +78,11 @@ Deno.test("tailnetOrLocal: loopback and the tailnet ranges only", () => {
   for (const a of ["127.0.0.1", "::1", "100.64.0.1", "100.127.255.1", "::ffff:100.100.1.2",
     "fd7a:115c:a1e0::1"]) eq(tailnetOrLocal(a), true, a);
   for (const a of ["100.63.0.1", "100.128.0.1", "192.168.1.2", "10.0.0.1", "fd7a:115c:a1e1::1"]) {
-    eq(tailnetOrLocal(a), false, a);
+    eq(tailnetOrLocal(a, []), false, a);
   }
+  const docker = [[(172 << 24 | 17 << 16) >>> 0, (2 ** 32 - 2 ** 16)]];
+  eq(tailnetOrLocal("172.17.0.5", docker), true, "a container on a docker bridge");
+  eq(tailnetOrLocal("172.18.0.5", docker), false, "another subnet");
 });
 
 Deno.test("ownHost: our names and addresses on our port, nobody else's name", () => {
