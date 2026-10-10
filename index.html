@@ -23,10 +23,11 @@
   .sum { margin-left: auto; color: var(--muted); font-size: 0.82rem; white-space: nowrap; }
   #qbtn { all: unset; cursor: pointer; display: flex; align-items: center; gap: 0.55rem; padding: 0.3rem 0.6rem; border-radius: 999px; font-variant-numeric: tabular-nums; } #qbtn:hover { background: var(--hover); }
   #qbtn .bar { position: relative; width: 84px; height: 6px; border-radius: 3px; background: var(--line); }
-  #qbtn .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--accent); }
-  #qbtn .bar s { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--muted); opacity: 0.6; }
+  #qbtn { --qc: var(--accent); } #qbtn.hi { --qc: var(--yel); } #qbtn.out { --qc: var(--red); }
+  #qbtn .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--qc); }
+  #qbtn .bar s { position: absolute; top: calc(100% + 1px); width: 0; height: 0; margin-left: -4px; border: 4px solid transparent; border-top: 0; border-bottom: 5px solid var(--qc); }
   #qbtn b { color: var(--text); font-weight: 600; }
-  #qbtn.hi .bar i { background: var(--yel); } #qbtn.out .bar i { background: var(--red); } #qbtn.out b, #qbtn.out em { color: var(--red); }
+  #qbtn.out b, #qbtn.out em { color: var(--red); }
   #qbtn em { font-style: normal; }
   #home { display: grid; grid-template-columns: 320px minmax(0, 1fr); min-height: 0; }
   #left { border-right: 1px solid var(--line); overflow: auto; padding: 0.4rem 0 0; display: flex; flex-direction: column; }
