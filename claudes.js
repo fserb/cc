@@ -31,6 +31,11 @@ export class Instance {
     Object.assign(this, fields);
   }
 
+  // what names it across hosts, where pids repeat
+  get key() {
+    return `${this.host}:${this.pid}`;
+  }
+
   get match() {
     return this.kittyPid ? `pid:${this.kittyPid}` : null;
   }

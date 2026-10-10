@@ -90,6 +90,15 @@ export async function jump(inst) {
   return null;
 }
 
+// The instance's window and pane made current in its session, and nothing else: what a
+// client attached to it from another machine then shows. An error message, or null
+export async function select(inst) {
+  if (!inst.pane) return `pid ${inst.pid} is not inside tmux; nothing to select`;
+  const r = await run("tmux", "select-window", "-t", `${inst.session}:${inst.window}`, ";",
+    "select-pane", "-t", inst.pane);
+  return r.code === 0 ? null : `tmux: ${r.err.trim() || `exit ${r.code}`}`;
+}
+
 // Name our own tmux window for as long as the app runs. Returns the restore.
 // automatic-rename otherwise shows the pane's foreground command, `deno`. `allow-rename`
 // is off by default, so ESC k is ignored and only `rename-window` works; that turns

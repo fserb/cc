@@ -13,7 +13,8 @@ import {jump, kittyWindowTitle, raiseTarget, tmuxWindowName, typeInto} from "./j
 import {Online} from "./online.js";
 import {byDay, HISTORY, readUsage, usageLine, USAGE} from "./usage.js";
 import {close, expandDir, paneIn, spawn} from "./spawn.js";
-import {call, discoverAll, HOSTS, label, SELF} from "./remote.js";
+import {base, bestUsage, call, discoverAll, HOSTS, jumpRemote, label, others, Remotes, SELF}
+  from "./remote.js";
 
 // `peer.js` and `chat.js` load on use, not at startup: a missing one must cost `ccx send`
 // its error line and nothing else. A static import would take `list`, `doctor` and the TUI
@@ -356,13 +357,14 @@ const SHORT_CWD = CWD.replace(HOME, "~");
 
 const app = {
   clock: new StateClock(),
+  remotes: {instances: () => []},   // a Remotes once the UI runs; never in a snapshot
   net: new Online(),
   usage: null,
   instances: [],
   ranked: [],
   filter: "",
   sort: SORTS[0],
-  cursorPid: null,
+  cursorKey: null,
   cursor: 0,
   offset: 0,
   toast: null,
@@ -414,7 +416,7 @@ async function reload() {
   if (polling) return;         // once one has failed, and never blocks the listing
   polling = true;
   try {
-    app.instances = app.clock.update(await discover());
+    app.instances = [...app.clock.update(await discover()), ...app.remotes.instances()];
   } finally {
     polling = false;
   }
@@ -423,9 +425,9 @@ async function reload() {
 
 function refresh() {
   app.ranked = rank(app.instances, needle(), app.sort);
-  const at = app.ranked.findIndex((i) => i.pid === app.cursorPid);
+  const at = app.ranked.findIndex((i) => i.key === app.cursorKey);
   app.cursor = at >= 0 ? at : 0;
-  app.cursorPid = app.ranked[app.cursor]?.pid ?? null;
+  app.cursorKey = app.ranked[app.cursor]?.key ?? null;
   const room = tableRoom();
   app.offset = Math.max(0, Math.min(app.offset, app.ranked.length - room, app.cursor));
   app.offset = Math.max(app.offset, app.cursor - room + 1);
@@ -497,15 +499,15 @@ function closeChat() {
 function move(delta) {
   if (!app.ranked.length) return;
   app.cursor = Math.max(0, Math.min(app.ranked.length - 1, app.cursor + delta));
-  app.cursorPid = app.ranked[app.cursor].pid;
+  app.cursorKey = app.ranked[app.cursor].key;
 }
 
 // not awaited: enter keeps the app up, so the jump runs while the TUI draws and toasts
 async function jumpRow(n) {
   if (n < 0 || n >= app.ranked.length) return;
   app.cursor = n;
-  app.cursorPid = app.ranked[n].pid;
-  const err = await jump(app.ranked[n]);
+  app.cursorKey = app.ranked[n].key;
+  const err = await (app.ranked[n].host ? jumpRemote(app.ranked[n]) : jump(app.ranked[n]));
   if (err) {
     toast(err);
     draw();                                    // the draw for this keystroke already ran
@@ -661,6 +663,7 @@ async function cmdUi() {
     refresh();
     draw();
   });
+  app.remotes = new Remotes();
   await reload();
   draw();
   setInterval(async () => {
@@ -806,8 +809,8 @@ async function cmdList() {
 
 // ccx usage
 // The seven-day line, then the week so far a local day per row
-function cmdUsage() {
-  const u = readUsage(), line = usageLine(u);
+async function cmdUsage() {
+  const u = await bestUsage(), line = usageLine(u);
   if (!line) {
     console.log(u ? "the week in ccx-usage.json is over" : `${USAGE} missing or unreadable; ` +
       "statusLine in ~/.claude/settings.json writes it");
@@ -852,6 +855,12 @@ async function cmdDoctor() {
   } catch (e) {
     console.log(`serve 127.0.0.1:7681 not answering: ${e.name}: ${e.message}`);
   }
+  console.log(`hosts ${HOSTS.join(", ")}, this one ${SELF}`);
+  await Promise.all(others().map(async (h) => {
+    const [body, err] = await call(h, "/api/list");
+    console.log(err ? `  ${h} ${base(h)} DOWN: ${err}`
+      : `  ${h} ${base(h)} up, ${body.rows.length} rows`);
+  }));
   const records = sessionRecords();
   for (const i of await discover()) {
     const rec = records[i.pid] ?? {};
@@ -862,15 +871,19 @@ async function cmdDoctor() {
   }
 }
 
-async function cmdFocus(pid) {
-  for (const i of await discover()) {
-    if (String(i.pid) !== pid) continue;
-    const err = await jump(i);
-    if (!err) return;
-    console.error(err);
+// ccx focus <target>, one instance on any host
+async function cmdFocus(spec) {
+  const {instances, down} = await discoverAll(new StateClock());
+  reportDown(down);
+  const hits = resolveTarget(instances, spec, 0);
+  if (hits.length !== 1) {
+    console.error(hits.length ? `focus: ${JSON.stringify(spec)} names ${hits.length}: ` +
+      hits.map(label).join(", ") : `focus: no instance matches ${JSON.stringify(spec)}`);
     Deno.exit(1);
   }
-  console.error(`no claude instance with pid ${pid}`);
+  const err = await (hits[0].host ? jumpRemote(hits[0]) : jump(hits[0]));
+  if (!err) return;
+  console.error(err);
   Deno.exit(1);
 }
 
@@ -1204,7 +1217,7 @@ const HELP = [
   ["  list", "the same listing, one line each, no UI"],
   ["  usage", "the seven-day limit, the last 6h against what is left, the week by day"],
   ["  doctor", "what resolves, and the kitty match it would use"],
-  ["  focus <pid>", "jump to an instance without the UI"],
+  ["  focus <target>", "jump to one instance without the UI, on any host"],
   ["  new <dir> [name...]", "a claude in dir: beside one already there, else a kitty window"],
   ["  delete <name|pid>", "end one instance and close its tmux pane"],
   ["  send <target> <message...>", "a chat message to one or more instances"],
@@ -1215,7 +1228,8 @@ const HELP = [
   ["  systray", "the menu bar app, needs ./task build"],
   ["  help", "this, which is also what `ccx` alone prints"],
   "",
-  ["  <target>", "a pid, a session name, `all`, or part of either"],
+  ["  <target>", "a pid, a session name, `all`, or part of either; `host:` before it"],
+  ["", "picks that host's instances only"],
   ["", "`send` and `user` take a comma-separated list of them"],
 ];
 

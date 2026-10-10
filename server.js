@@ -18,7 +18,7 @@
 import {byCodePoint, HOME} from "./sh.js";
 import {logPath, readFrom, readPage} from "./transcript.js";
 import {parseDialog, pick, screen} from "./dialog.js";
-import {sendKeys, typeInto} from "./jump.js";
+import {select, sendKeys, typeInto} from "./jump.js";
 import {expandDir, spawn} from "./spawn.js";
 import {appIconPng} from "./icon.js";
 import {sendPeer} from "./peer.js";
@@ -323,7 +323,7 @@ export class Server {
         mkdir: body.mkdir === true, name: String(body.name ?? "")});
       return r.error ? json(r, r.pane ? 502 : 409) : json(r);
     }
-    const m = path.match(/^\/api\/s\/(\d+)\/(log|events|type|pick|esc|screen|send)$/);
+    const m = path.match(/^\/api\/s\/(\d+)\/(log|events|type|pick|esc|screen|send|select)$/);
     if (!m) return json({error: "not found"}, 404);
     const [, pidText, verb] = m, pid = Number(pidText);
     // the pid has to be a claude in the current poll: a pane whose claude exited types
@@ -360,6 +360,7 @@ export class Server {
       return answer(await pick(inst, Number(body.i), body.labels));
     }
     if (verb === "esc") return answer(await sendKeys(inst, ["Escape"]));
+    if (verb === "select") return answer(await select(inst));
     return json({error: "not found"}, 404);
   }
 }
