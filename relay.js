@@ -18,7 +18,19 @@
 
 import {BYTES, HOME, UTF8} from "./sh.js";
 
-export const SOCKS = "/tmp/cc-socks";
+// where this machine's claudes keep their sockets, and so where ours go: /tmp/cc-socks on
+// macOS, the runtime dir on Linux (2.1.296 on nadya: /run/user/1000/cc-socks)
+function socksDir() {
+  if (Deno.build.os !== "linux") return "/tmp/cc-socks";
+  const run = `${Deno.env.get("XDG_RUNTIME_DIR") ?? `/run/user/${Deno.uid()}`}/cc-socks`;
+  try {
+    if (Deno.statSync(run).isDirectory) return run;
+  } catch {
+    // no runtime dir
+  }
+  return "/tmp/cc-socks";
+}
+export const SOCKS = socksDir();
 const SESSIONS = `${HOME}/.claude/sessions`;
 const UDS = /uds:(\/[^"\s<>]+?\.sock)/g;
 const SOCK_NAME = /^[\w.~-]+\.sock$/;
@@ -93,6 +105,7 @@ export class Relay {
   }
 
   async send(host, sock, lines) {
+    for (const l of lines) console.log(`relay -> ${host}:${sock} ${brief(l)}`);
     const err = await this.post(host, {from: this.self, sock, lines});
     if (err) console.error(`relay to ${host}:${sock}: ${err}`);
   }
@@ -119,7 +132,10 @@ export class Relay {
       return `${sock}: ${e.message}`;
     }
     try {
-      for (const l of lines) await conn.write(BYTES.encode(`${this.rewrite(l, from)}\n`));
+      for (const l of lines) {
+        console.log(`relay <- ${from} to ${sock} ${brief(l)}`);
+        await conn.write(BYTES.encode(`${this.rewrite(l, from)}\n`));
+      }
     } catch (e) {
       return `${sock}: ${e.message}`;
     } finally {
@@ -180,6 +196,16 @@ function standIn(host, pid, r, sock) {
     statusUpdatedAt: r.statusUpdatedAt, ccxHost: host};
   if (r.status === "waiting" && r.asking) rec.waitingFor = r.asking;
   return rec;
+}
+
+// one line's kind for the log, never its text
+function brief(line) {
+  try {
+    const o = JSON.parse(line);
+    return [o.type, o.action, o.msg_id].filter((x) => x).join(" ");
+  } catch {
+    return `${line.length} bytes, not JSON`;
+  }
 }
 
 function writeAtomic(path, text) {
