@@ -885,12 +885,31 @@ async function cmdFocus(spec) {
   Deno.exit(1);
 }
 
-// ccx new <dir> [name]
+// ccx new [host:]<dir> [name]
 // The same spawn() as the page's +: a new tmux window after an instance already in `dir`,
-// else a new kitty window
+// else a new kitty window, or a detached tmux session on a host with no kitty attached
 async function cmdNew(dir, ...words) {
   if (!dir) usage();
   const name = words.join(" ");
+  const colon = dir.indexOf(":");
+  const host = colon > 0 ? dir.slice(0, colon) : "";
+  if (host && HOSTS.includes(host) && host !== SELF) {
+    // the remote's own ~ and realpath; a relative dir would mean ours
+    const rest = dir.slice(colon + 1);
+    if (!rest.startsWith("/") && !rest.startsWith("~")) {
+      console.error(`new: ${host}: give an absolute or ~ path, not ${JSON.stringify(rest)}`);
+      Deno.exit(1);
+    }
+    // spawn() waits up to 5s for a window and 10s for claude
+    const [r, err] = await call(host, "/api/spawn", {dir: rest, name, beside: true}, 20000);
+    if (err) {
+      console.error(`new: ${host}: ${err}`);
+      Deno.exit(1);
+    }
+    console.log(`started ${host}:${r.pid} in ${host}:${rest}, ` +
+      (r.after ? `tmux window after ${r.after}` : `tmux pane ${r.pane}`));
+    return;
+  }
   let path = expandDir(dir);
   if (!path.startsWith("/")) path = `${CWD}/${path}`;
   try {
@@ -1186,7 +1205,7 @@ const HELP = [
   ["  usage", "the seven-day limit, the last 6h against what is left, the week by day"],
   ["  doctor", "what resolves, and the kitty match it would use"],
   ["  focus <target>", "jump to one instance without the UI, on any host"],
-  ["  new <dir> [name...]", "a claude in dir: beside one already there, else a kitty window"],
+  ["  new [host:]<dir> [name...]", "a claude in dir: beside one already there, else a kitty window"],
   ["  delete <name|pid>", "end one instance and close its tmux pane"],
   ["  send <target> <message...>", "a chat message to one or more instances"],
   ["  user <target> <text...>", "typed into an instance as its user, /commands included"],

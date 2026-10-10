@@ -22,8 +22,8 @@ export const others = () => HOSTS.filter((h) => h !== SELF);
 export const base = (host) => `http://${ADDR.get(host) ?? `${host}:${PORT}`}`;
 
 // GET or POST json. [body, null] or [null, error message]
-export async function call(host, path, body = undefined) {
-  const init = {signal: AbortSignal.timeout(TIMEOUT)};
+export async function call(host, path, body = undefined, timeout = TIMEOUT) {
+  const init = {signal: AbortSignal.timeout(timeout)};
   if (body !== undefined) {
     Object.assign(init, {method: "POST", body: JSON.stringify(body),
       headers: {"content-type": "application/json"}});
@@ -33,7 +33,7 @@ export async function call(host, path, body = undefined) {
     const j = await r.json().catch(() => ({}));
     return r.ok ? [j, null] : [null, j.error ?? `${r.status}`];
   } catch (e) {
-    return [null, e.name === "TimeoutError" ? `${host}: no answer in ${TIMEOUT}ms`
+    return [null, e.name === "TimeoutError" ? `${host}: no answer in ${timeout}ms`
       : `${host}: ${e.message}`];
   }
 }

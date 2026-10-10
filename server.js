@@ -18,7 +18,7 @@ import {byCodePoint, HOME} from "./sh.js";
 import {logPath, readFrom, readPage} from "./transcript.js";
 import {parseDialog, pick, screen} from "./dialog.js";
 import {select, sendKeys, typeInto} from "./jump.js";
-import {expandDir, spawn} from "./spawn.js";
+import {expandDir, paneIn, spawn} from "./spawn.js";
 import {sendPeer} from "./peer.js";
 import {readUsage} from "./usage.js";
 import PAGE from "./page.html" with {type: "text"};
@@ -337,9 +337,18 @@ export class Server {
     if (get && path === "/api/dirs") return json(dirsUnder(url.searchParams.get("prefix") ?? ""));
     if (post && path === "/api/spawn") {
       const body = await req.json().catch(() => ({}));
-      const r = await spawn({dir: String(body.dir ?? ""), after: String(body.after ?? ""),
+      // `beside`: after the last claude already in dir, what `ccx new` does on its own host
+      let after = String(body.after ?? "");
+      if (!after && body.beside === true) {
+        try {
+          after = await paneIn(Deno.realPathSync(expandDir(String(body.dir ?? ""))));
+        } catch {
+          // no such dir: spawn() says so
+        }
+      }
+      const r = await spawn({dir: String(body.dir ?? ""), after,
         mkdir: body.mkdir === true, name: String(body.name ?? "")});
-      return r.error ? json(r, r.pane ? 502 : 409) : json(r);
+      return r.error ? json(r, r.pane ? 502 : 409) : json({...r, after});
     }
     const m = path.match(/^\/api\/s\/(\d+)\/(log|events|type|pick|esc|screen|send|select)$/);
     if (!m) return json({error: "not found"}, 404);
