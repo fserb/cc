@@ -177,7 +177,17 @@ export async function attachSession(host, session, dir = "", background = "") {
     if (MAC) await sh("open", "-a", "kitty");
     return;
   }
+  // launch's `color` reaches the window's profile and not the title bar, which kitty worked
+  // out when it made the window, still black; set-colors recomputes it (kitty 0.49.2,
+  // launch.py apply_colors against colors.py patch_colors). The user var is how the
+  // set-colors finds a window that has no process to look up yet
+  const tag = `${host || SELF}.${session}`;
   sendKitty("launch", {args: attachArgs(host, session, dir), type: "os-window",
-    ...(bg ? {color: PAINTED.map((c) => `${c}=${bg}`)} : {})});
+    var: [`ccx_remote=${tag}`], ...(bg ? {color: PAINTED.map((c) => `${c}=${bg}`)} : {})});
+  if (bg) {
+    const rgb = parseInt(bg.slice(1), 16);
+    sendKitty("set-colors", {match_window: `var:ccx_remote=^${tag.replace(/[.\\^$*+?()[\]{}|]/g, "\\$&")}$`,
+      colors: Object.fromEntries(PAINTED.map((c) => [c, rgb]))});
+  }
   if (MAC) await sh("open", "-a", "kitty");
 }
