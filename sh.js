@@ -17,8 +17,8 @@ export async function sh(...args) {
   return r.code === 0 ? r.out : "";
 }
 
-// tmux decides UTF-8 from LANG/LC_*, and the launchd plist sets neither, so under the
-// systray it printed every tab in a -F format as `_` and no pane was ever found. -u forces
+// tmux decides UTF-8 from LANG/LC_*, and the launchd plist sets neither, so under launchd
+// it printed every tab in a -F format as `_` and no pane was ever found. -u forces
 // it; it also keeps the glyphs capture-pane and pane_title are read for.
 const argv = (args) => args[0] === "tmux" ? ["-u", ...args.slice(1)] : args.slice(1);
 

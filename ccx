@@ -3,8 +3,7 @@
 // Two lines, two languages. sh runs line 2 and never reaches line 3; deno strips the
 // hashbang and reads line 2 as a string then a comment. The re-exec is what makes a symlink
 // on PATH work: deno resolves a relative import against the path it was handed, so
-// ~/bin/ccx -> here looks for claudes.js in ~/bin and dies. Passing the realpath also gets
-// `import.meta.dirname` right, which is where BUNDLE looks for ccx.app.
+// ~/bin/ccx -> here looks for claudes.js in ~/bin and dies.
 
 import {discover, fmtAge, sessionRecords, StateClock} from "./claudes.js";
 import {HOME, ON_EXIT, sh} from "./sh.js";
@@ -18,7 +17,7 @@ import {base, bestUsage, call, discoverAll, HOSTS, jumpRemote, label, others, Re
 
 // `peer.js` and `chat.js` load on use, not at startup: a missing one must cost `ccx send`
 // its error line and nothing else. A static import would take `list`, `doctor` and the TUI
-// down with it, which is the same reason `systray.js` is reached this way.
+// down with it.
 const peerModule = () => import("./peer.js");
 const chatModule = () => import("./chat.js");
 const serverModule = () => import("./server.js");
@@ -624,8 +623,7 @@ function handle(chunk) {
   }
 }
 
-// the alternate screen also hides the two lines the bundle prints at startup; wrap off
-// (?7l), or writing the last cell of the last row scrolls the frame
+// wrap off (?7l), or writing the last cell of the last row scrolls the frame
 function enter() {
   Deno.stdin.setRaw(true);
   write(`${ESC}[?1049h${ESC}[?25l${ESC}[?7l${ESC}[?1000h${ESC}[?1006h${ESC}[2J`);
@@ -846,7 +844,7 @@ async function cmdDoctor() {
       `usage ${HISTORY}: ${u.history.length} lines` +
       (u.history.length ? ` from ${new Date(u.history[0].at).toISOString()}` : "")
     : `usage ${USAGE} missing or unreadable; statusLine in ~/.claude/settings.json writes it`);
-  // the server is in whichever process started it, the systray or `ccx serve`, so it is
+  // the server is in whichever process started it, `ccx host` or `ccx serve`, so it is
   // asked over HTTP rather than looked up
   try {
     const r = await fetch("http://127.0.0.1:7681/api/list", {signal: AbortSignal.timeout(2000)});
@@ -927,7 +925,8 @@ async function cmdDelete(spec) {
 }
 
 // ccx serve [--port N]
-// The HTTP server alone, with its own poll; `ccx systray` runs the same server off its own.
+// The HTTP server alone on 127.0.0.1, with its own poll; `ccx host` is the same on the
+// tailnet, plus the relay.
 async function cmdServe(...args) {
   let port;
   for (let n = 0; n < args.length; n++) {
@@ -1010,36 +1009,6 @@ async function cmdHost(...args) {
   console.log(`ccx host ${remote.SELF} on :${port}, following ${remote.others().join(", ") ||
     "no other host"}`);
   await new Promise(() => {});
-}
-
-const BUNDLE = `${import.meta.dirname}/ccx.app`;
-
-// Deno.Tray is undefined under `deno run`: with the desktop globals this *is* the tray,
-// without them it launches the bundle that has them. Dynamic import, or the script path
-// would load systray.js
-async function cmdSystray(...args) {
-  if (typeof Deno.Tray === "function") {
-    const {runSystray} = await import("./systray.js");
-    await runSystray(args);
-    // never returns: runSystray() comes back as soon as the tray is up, and exiting here
-    // kills the app before an icon is drawn
-    await new Promise(() => {});
-  }
-  // fixed name: CFBundleExecutable is literally `laufey_webview`
-  if (!(await Deno.stat(`${BUNDLE}/Contents/MacOS/laufey_webview`).catch(() => null))) {
-    console.error("no ccx.app yet; run ./task build");
-    Deno.exit(1);
-  }
-  Deno.exit(await launch(args));
-}
-
-// detached by LaunchServices (ppid 1, no tty); a plain exec of the inner binary would die
-// with this pane. Never -n: a second `open` activates the running copy, new args and all
-async function launch(args) {
-  const {code} = await new Deno.Command("open", {
-    args: ["-a", BUNDLE, "--args", "systray", ...args],
-  }).spawn().status;
-  return code;
 }
 
 // targets
@@ -1199,7 +1168,6 @@ const COMMANDS = {
   chat: [cmdChat, -1],
   serve: [cmdServe, -1],
   host: [cmdHost, -1],
-  systray: [cmdSystray, -1],         // -1: passes its own flags through to the bundle
   help: [cmdHelp, 0],
   "-h": [cmdHelp, 0],
   "--help": [cmdHelp, 0],
@@ -1225,7 +1193,6 @@ const HELP = [
   ["  chat [--no-follow]", "what the agents here have said to each other"],
   ["  serve [--port N]", "the web page and its API on 127.0.0.1, port 7681"],
   ["  host [--port N]", "the daemon: serve on the tailnet, and relay SendMessage between hosts"],
-  ["  systray", "the menu bar app, needs ./task build"],
   ["  help", "this, which is also what `ccx` alone prints"],
   "",
   ["  <target>", "a pid, a session name, `all`, or part of either; `host:` before it"],
@@ -1257,11 +1224,9 @@ function usage() {
   Deno.exit(2);
 }
 
-// everything but `systray` runs as this script, never the bundle: the desktop runtime
-// prints two lines to stdout before user code, ahead of a listing. Do not always exec
 const [name = "help", ...rest] = Deno.args;
 const cmd = COMMANDS[name];
 if (!cmd || (cmd[1] >= 0 && rest.length !== cmd[1])) usage();
 await cmd[0](...rest);
-// the built runtime does not exit when the module finishes
+// an open follow() stream or a probe timer would otherwise keep the process alive
 Deno.exit(0);

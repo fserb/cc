@@ -77,7 +77,7 @@ export async function jump(inst) {
     ? ["switch-client", "-c", inst.clientTty, "-t", inst.session, ";"]
     : Deno.env.get("TMUX") ? ["switch-client", "-t", inst.session, ";"] : [];
   // tmux stops at the first command that fails, so a session gone since the last poll
-  // moves nothing; say so, or the systray closes its panel as if the jump worked
+  // moves nothing; say so, or the caller reports a jump that did not happen
   const r = await run("tmux", ...client,
     "select-window", "-t", `${inst.session}:${inst.window}`, ";",
     "select-pane", "-t", inst.pane);

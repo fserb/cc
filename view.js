@@ -74,12 +74,10 @@ export function stateOf(inst) {
 }
 
 // Out of ~/.config/kitty/kitty.conf, so the tools look like the terminal they run in:
-// #ceaadf is color13, #b8a0be is color5. `bar` and `panelBg` are two surfaces and the one
-// shade between them is not a mistake: the TUI's top bar sits on a #000 screen, while the
-// systray panel floats over the desktop.
+// #ceaadf is color13, #b8a0be is color5. `bar` is the TUI's top bar, on a #000 screen.
 export const PALETTE = {
   accent: "#ceaadf", mauve: "#b8a0be", dim: "#626262", text: "#d6d6dc",
-  bg: "#000000", bar: "#181020", panelBg: "#0e0b12", edge: "#35284a", cursor: "#2a1e38",
+  bg: "#000000", bar: "#181020", cursor: "#2a1e38",
   gold: "#ffd500", idle: "#82828a", hint: "#4a4a55", error: "#df6565",
   warn: "#e8965a",
 };

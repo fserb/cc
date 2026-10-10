@@ -1,13 +1,12 @@
 // ccx over HTTP, for a phone on the tailnet: the listing, one instance's conversation and
-// screen, typing into it, answering its dialogs, and starting new ones. No auth: it binds
-// 127.0.0.1 and caddy puts it on the tailnet name, which is the boundary. See server.md.
+// screen, typing into it, answering its dialogs, and starting new ones. No auth: `ccx
+// serve` binds 127.0.0.1, `ccx host` every interface with tailnetOrLocal() as the boundary.
+// See server.md.
 //
 // - every URL the page uses is relative, since caddy's `handle_path /ccx*` strips the
 //   prefix: the server sees `/api/list` for `https://<host>/ccx/api/list`
 // - one 1.5s tick drives every SSE stream. It reads `source()`, the instances the caller
-//   already polled, so inside the systray there is one discover() per tick and not two
-// - **inside the bundle the first `Deno.serve` loses its port** to the runtime's startup
-//   window, so the systray has to start this after its own
+//   already polled, so there is one discover() per tick and not two
 // - `type` runs whatever it is given, so two checks come before any route. The Host has to
 //   be 127.0.0.1 or localhost on our port: a page that rebinds a name of its own onto
 //   127.0.0.1 arrives with that name, and caddy is told to send the upstream's
@@ -20,7 +19,6 @@ import {logPath, readFrom, readPage} from "./transcript.js";
 import {parseDialog, pick, screen} from "./dialog.js";
 import {select, sendKeys, typeInto} from "./jump.js";
 import {expandDir, spawn} from "./spawn.js";
-import {appIconPng} from "./icon.js";
 import {sendPeer} from "./peer.js";
 import {readUsage} from "./usage.js";
 import PAGE from "./page.html" with {type: "text"};
@@ -38,9 +36,10 @@ const MANIFEST = JSON.stringify({name: "ccx", short_name: "ccx", start_url: "./"
   icons: [192, 512].map((n) => ({src: `icon-${n}.png`, sizes: `${n}x${n}`,
     type: "image/png", purpose: "any maskable"}))});
 
-// drawn once, on first ask: the 512 is ~100ms of supersampling
-const ICONS = new Map();
-const iconOf = (px) => ICONS.get(px) ?? ICONS.set(px, appIconPng(px)).get(px);
+// the page's home-screen icons, read once
+const ICONS = new Map([192, 512].map((px) =>
+  [px, Deno.readFileSync(new URL(`./icon-${px}.png`, import.meta.url))]));
+const iconOf = (px) => ICONS.get(px);
 
 const HOSTNAME = Deno.hostname().split(".")[0];
 
@@ -385,7 +384,7 @@ export class Server {
 }
 
 // Start serving. {server, stop} or {error}: a port already taken is reported, not thrown,
-// so the systray carries on without it.
+// so a caller can say why.
 export function runServer({source, port = PORT, hostname = "127.0.0.1", relay = null}) {
   const s = new Server(source, port, relay);
   let http;
