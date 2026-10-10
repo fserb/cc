@@ -193,6 +193,8 @@ const STATE = {
 };
 const ORDER = ["wait", "busy", "hold", "free"];
 
+// Claude Code wraps pasted text in <pasted_content id="..."> ... </pasted_content id="...">: show only the text
+const unpaste = (t) => String(t ?? "").replace(/<\/?pasted_content(?: id="[^"]*")?>\n?/g, "");
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
   ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
 const stateOf = (r) => r.state === "wait" && r.asking ? STATE.ask : STATE[r.state] ?? STATE.free;
@@ -373,7 +375,7 @@ function md(text) {
 
 function eventHtml(e) {
   switch (e.type) {
-    case "user": return `<div class="you">${esc(e.text)}${e.images ? `<span class="img">${e.text ? "\n" : ""}[${e.images} image${e.images > 1 ? "s" : ""}]</span>` : ""}</div>`;
+    case "user": return `<div class="you">${esc(unpaste(e.text))}${e.images ? `<span class="img">${e.text ? "\n" : ""}[${e.images} image${e.images > 1 ? "s" : ""}]</span>` : ""}</div>`;
     case "peer": return `<div class="peer"><span class="from">from ${esc(e.from)}</span>${esc(e.text)}</div>`;
     case "text": return `<div class="said">${md(e.text)}</div>`;
     case "tool": return `<details class="tool" data-tool="${esc(e.id)}"><summary><b>${esc(e.name)}</b> ${esc(e.arg)}</summary><pre class="in">${esc(e.input)}</pre></details>`;
