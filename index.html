@@ -79,7 +79,7 @@
   .bp summary .nm::before { content: "▸ "; color: var(--muted); } .bp[open] > summary .nm::before { content: "▾ "; }
   .bp .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .bp b { text-align: right; font-weight: 600; } .bs b { font-weight: 400; color: var(--muted); }
   .bs { padding-left: 1rem; font-size: 0.88rem; } .bs small { color: var(--muted); }
-  .bb { display: flex; height: 10px; border-radius: 3px; background: var(--track); overflow: hidden; } .bb i { display: block; height: 100%; background: var(--accent); } .bs .bb i { opacity: 0.55; } .bd > summary .bb { background: none; }
+  .bb { display: flex; height: 10px; border-radius: 3px; background: var(--track); overflow: hidden; } .bb i { display: block; height: 100%; background: var(--accent); } .bs .bb i { opacity: 0.55; } .bd > summary .bb { background: none; } .qw { display: flex; flex-wrap: wrap; justify-content: space-between; column-gap: 1rem; } .qw span:last-child:not(:first-child) { margin-left: auto; }
   .bp .bp { margin-left: 1rem; } .bp .bp summary { font-size: 0.9rem; }
   .legend { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; font-size: 0.8rem; color: var(--muted); margin: 0.2rem 0 0.6rem; } .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 0.3rem; }
   .qh { font-size: 0.85rem; font-weight: 600; color: var(--muted); margin: 1.6rem 0 0.4rem; }
@@ -451,7 +451,9 @@ function burnView() {
     const sub = (x) => x.others ? x.others.map((o) => ({n: o.p, w: o.w, q: o.q, share: o.share})) : x.sessions.filter((s) => s.w >= max / 1000);
     return group(w).map((x) => { const k = `${key}/${x.p}`; return `<details class="bp" data-k="${esc(k)}" ${qOpen.has(k) ? "open" : ""}><summary><span class="nm">${x.others ? `<i>others</i> <small>${x.others.length}</small>` : esc(x.p)}</span><span class="bb"><i style="width:${(x.w / max * 100).toFixed(1)}%;background:${pcol(x)}"></i></span><b>${val(w, x)}</b></summary>${sub(x).map((s) => `<div class="bs"><span class="nm">${esc(s.n)} <small>${esc(s.host ?? "")}</small></span><span class="bb"><i style="width:${(s.w / max * 100).toFixed(1)}%;background:${pcol(x)}"></i></span><b>${val(w, s)}</b></div>`).join("")}</details>`; }).join("") || `<p class="meta">nothing used</p>`;
   };
-  const head = (w) => `<p class="meta">${esc(new Date(w.from).toLocaleString("en-CA", {weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false}))} – ${esc(new Date(w.to).toLocaleString("en-CA", {weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false}))}${w.used == null ? "" : perDay(w) > 1 ? ` · ${fmtQ(w.used * 7)} of a day's share · ${(w.used / ((w.to - w.from) / 3600_000 / 168 * 100)).toFixed(1)}x pace` : ` · ${fmtQ(w.used)} of the limit · ${(w.used / ((w.to - w.from) / 3600_000 / 168 * 100)).toFixed(1)}x`}</p>`;
+  const when = (t) => esc(new Date(t).toLocaleString("en-CA", {weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false}));
+  const pace = (w) => (w.used / ((w.to - w.from) / 3600_000 / 168 * 100)).toFixed(1);
+  const head = (w) => `<p class="meta qw"><span>${when(w.from)} – ${when(w.to)}</span>${w.used == null ? "" : `<span>${perDay(w) > 1 ? `${fmtQ(w.used * 7)} of a day` : `${fmtQ(w.used)} of limit`} · ${pace(w)}x</span>`}</p>`;
   const w = qTab === "24h" ? S.burn24 : b.weeks[qTab === "last" ? 0 : 1];
   const view = !w ? `<p class="meta">loading…</p>` : w.error ? `<p class="meta err">${esc(w.error)}</p>` : `${head(w)}${list(w, qTab)}`;
   // days: newest first, a stacked bar each (widths by weighted tokens, the busiest day full), its projects on tap
