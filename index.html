@@ -406,7 +406,7 @@ document.addEventListener("submit", async (e) => {
 
 let qTab = "this";
 const qOpen = new Set();  // the open rows of the quota view, kept across redraws
-const MINQ = 1;  // % below which a project goes into "others" in the usage breakdown
+const TOPN = 5;  // projects with their own row in the usage breakdown; the rest go into "others"
 const PCOL = ["#0b7bd3", "#2f9e44", "#f59f00", "#ae3ec9", "#1098ad", "#e8590c", "#d6336c", "#5c940d"];
 function quotaView() {
   const u = S.usage, p = pace();
@@ -437,17 +437,17 @@ function burnView() {
   const perDay = (w) => w === S.burn24 && w.used != null ? 7 : 1;
   const val = (w, x) => fmtQ(w.used == null ? x.share : x.q * perDay(w));
   const down = b.down?.length ? `<p class="meta err">${b.down.map(([host, e]) => esc(`${host}: ${e}`)).join("<br>")}</p>` : "";
-  // projects under MINQ (of the limit, or of the tokens with no log) go into one "others" row, last
+  // the TOPN busiest projects of the window, the rest in one "others" row, last
   const group = (w) => {
-    const v = (x) => (w.used == null ? x.share : x.q * perDay(w)) ?? 0;
-    const shown = w.projects.filter((x) => v(x) >= MINQ), rest = w.projects.filter((x) => v(x) < MINQ && x.w > 0);
+    const ps = w.projects.filter((x) => x.w > 0).sort((a, b) => b.w - a.w);
+    const shown = ps.slice(0, TOPN), rest = ps.slice(TOPN);
     if (rest.length < 2) return shown.concat(rest);
     const sum = (f) => rest.reduce((a, x) => a + (x[f] ?? 0), 0);
     return shown.concat({p: "others", w: sum("w"), q: sum("q"), share: sum("share"), others: rest});
   };
   const pcol = (x) => x.others ? "var(--gray)" : color(x.p);
   const list = (w, key) => {
-    const max = Math.max(1, ...w.projects.map((x) => x.w));
+    const max = Math.max(1, ...group(w).map((x) => x.w));
     const sub = (x) => x.others ? x.others.map((o) => ({n: o.p, w: o.w, q: o.q, share: o.share})) : x.sessions.filter((s) => s.w >= max / 1000);
     return group(w).map((x) => { const k = `${key}/${x.p}`; return `<details class="bp" data-k="${esc(k)}" ${qOpen.has(k) ? "open" : ""}><summary><span class="nm">${x.others ? `<i>others</i> <small>${x.others.length}</small>` : esc(x.p)}</span><span class="bb"><i style="width:${(x.w / max * 100).toFixed(1)}%;background:${pcol(x)}"></i></span><b>${val(w, x)}</b></summary>${sub(x).map((s) => `<div class="bs"><span class="nm">${esc(s.n)} <small>${esc(s.host ?? "")}</small></span><span class="bb"><i style="width:${(s.w / max * 100).toFixed(1)}%;background:${pcol(x)}"></i></span><b>${val(w, s)}</b></div>`).join("")}</details>`; }).join("") || `<p class="meta">nothing used</p>`;
   };
