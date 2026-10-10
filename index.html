@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nadya</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+  :root {
+    --bg: #fff; --text: #212529; --muted: #6c757d; --line: #e9ecef; --hover: #f3f4f6;
+    --accent: #0b7bd3; --on-accent: #fff; --red: #d63939; --green: #2f9e44; --yel: #f59f00; --gray: #ced4da;
+    --cur: #e7f1fb; --hot: #fff4e6; --hot-red: #fdecec; --need: #f4f8fd; --need-red: #fdf3f3;
+    --pre-bg: #1e1f22; --pre-fg: #ddd; --bubble: #f3f4f6;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--font); display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100vh; height: 100dvh; overflow: hidden; }
+  body > header { display: flex; align-items: center; gap: 1.2rem; padding: 0 1.2rem; height: 48px; border-bottom: 1px solid var(--line); }
+  body > header > b { font-size: 1.05rem; cursor: pointer; }
+  body > header > b, #back { user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+  .sum { margin-left: auto; color: var(--muted); font-size: 0.82rem; white-space: nowrap; }
+  #qbtn { all: unset; cursor: pointer; display: flex; align-items: center; gap: 0.55rem; padding: 0.3rem 0.6rem; border-radius: 999px; font-variant-numeric: tabular-nums; } #qbtn:hover { background: var(--hover); }
+  #qbtn .bar { position: relative; width: 84px; height: 6px; border-radius: 3px; background: var(--line); }
+  #qbtn .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--accent); }
+  #qbtn .bar s { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--muted); opacity: 0.6; }
+  #qbtn b { color: var(--text); font-weight: 600; }
+  #qbtn.hi .bar i { background: var(--yel); } #qbtn.out .bar i { background: var(--red); } #qbtn.out b, #qbtn.out em { color: var(--red); }
+  #qbtn em { font-style: normal; }
+  #home { display: grid; grid-template-columns: 320px minmax(0, 1fr); min-height: 0; }
+  #left { border-right: 1px solid var(--line); overflow: auto; padding: 0.4rem 0 0; display: flex; flex-direction: column; }
+  #left > * { flex-shrink: 0; }
+  .addbar { position: sticky; bottom: 0; margin-top: auto; background: var(--bg); padding: 0.6rem 1.1rem calc(0.6rem + env(safe-area-inset-bottom)); }
+  .sec { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 0.8rem 1.1rem 0.25rem; }
+  .it { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 0 0.7rem; padding: 0.45rem 1.1rem; cursor: pointer; align-items: baseline; }
+  .it:hover { background: var(--hover); }
+  .it[aria-current=true] { background: var(--cur); }
+  .it.hot { background: var(--hot); } .it.hot.red { background: var(--hot-red); } .it.hot[aria-current=true] { box-shadow: inset 3px 0 0 var(--accent); }
+  .it .d { width: 8px; height: 8px; border-radius: 50%; align-self: center; }
+  .d.red { background: var(--red); } .d.blue { background: var(--accent); } .d.green { background: var(--green); } .d.yel { background: var(--yel); } .d.gray { background: var(--gray); }
+  .it .tx div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .it .tx small { display: block; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.82rem; }
+  .it.hot .tx div, .it.unread .tx div { font-weight: 600; }
+  .it time { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+  #center { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+  #view { overflow: auto; grid-area: 1 / 1; }
+  #newer { grid-area: 1 / 1; align-self: end; justify-self: center; margin-bottom: 0.8rem; border: 0; background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 0.35rem 1rem; font: inherit; font-size: 0.85rem; cursor: pointer; box-shadow: 0 1px 4px #0003; }
+  article { max-width: 46rem; margin: 0 auto; padding: 1.6rem 2rem 2rem; }
+  article h1 { font-size: 1.55rem; line-height: 1.25; margin: 0 0 0.3rem; }
+  .meta { color: var(--muted); margin-bottom: 1rem; font-size: 0.88rem; }
+  article img, article video { max-width: 100%; height: auto; border-radius: 6px; display: block; margin-bottom: 1rem; }
+  pre { background: var(--pre-bg); color: var(--pre-fg); padding: 0.8rem 1rem; border-radius: 6px; font: 12.5px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .need { border-left: 4px solid var(--accent); background: var(--need); border-radius: 0 6px 6px 0; padding: 0.7rem 0.9rem; margin: 1rem 0; } .need.red { border-color: var(--red); background: var(--need-red); } .need p { margin: 0.2rem 0 0; }
+  .opts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0 0; }
+  .opts button { font: inherit; text-align: left; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: 6px; padding: 0.35rem 0.9rem; cursor: pointer; }
+  .opts button:first-child { background: var(--accent); color: var(--on-accent); }
+  .opts button:disabled { opacity: 0.5; cursor: default; }
+  .done { color: var(--green); font-weight: 600; } .err { color: var(--red); }
+  .msgs { display: flex; flex-direction: column; gap: 0.5rem; }
+  .m { max-width: 85%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--bubble); overflow-wrap: anywhere; } .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); }
+  .m small { display: block; font-size: 0.72rem; opacity: 0.7; }
+  .m p { margin: 0 0 0.4rem; } .m p:last-child { margin: 0; } .m ul { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; } .m code { font: 0.88em var(--mono); }
+  .tools { align-self: flex-start; font-size: 0.78rem; color: var(--muted); padding: 0 0.8rem; }
+  #say { display: flex; gap: 0.5rem; padding: 0.7rem 2rem 0.9rem; border-top: 1px solid var(--line); }
+  #say input { flex: 1; font: inherit; border: 1px solid var(--line); border-radius: 999px; padding: 0.55rem 1rem; }
+  #say button { border: 0; background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 0 1.1rem; cursor: pointer; font: inherit; }
+  #say .note { font-size: 0.78rem; color: var(--muted); align-self: center; }
+  #back { display: none; }
+  details summary { cursor: pointer; }
+  .big { font-size: 2.2rem; font-weight: 700; line-height: 1.1; }
+  .meter { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin: 0.4rem 0 1rem; } .meter i { display: block; height: 100%; }
+  .h { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 1.4rem 0 0.4rem; }
+  .rows { list-style: none; padding: 0; margin: 0; } .rows li { display: flex; gap: 0.8rem; align-items: baseline; padding: 0.45rem 0; border-bottom: 1px solid var(--line); } .rows li small { margin-left: auto; color: var(--muted); white-space: nowrap; }
+  .rows li.x span { text-decoration: line-through; color: var(--muted); }
+  .add { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 0.35rem 0; text-align: center; font-size: 1.3rem; line-height: 1.2; color: var(--muted); border: 1px dashed var(--gray); border-radius: 6px; cursor: pointer; }
+  .add:hover, .add[aria-current=true] { color: var(--accent); border-color: var(--accent); background: var(--cur); }
+  #new { display: grid; gap: 0.9rem; max-width: 28rem; }
+  #new label { display: grid; gap: 0.2rem; font-size: 0.85rem; color: var(--muted); }
+  #new input, #new select { font: inherit; font-size: 16px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 0.5rem 0.7rem; }
+  .seg { border: 0; padding: 0; margin: 0; display: flex; } .seg legend { padding: 0; margin-bottom: 0.2rem; font-size: 0.85rem; color: var(--muted); }
+  #new .seg label { display: block; flex: 1; font-size: 15px; } #new .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg span { display: block; text-align: center; padding: 0.5rem 0.7rem; border: 1px solid var(--line); color: var(--text); cursor: pointer; user-select: none; }
+  .seg label:first-of-type span { border-radius: 6px 0 0 6px; } .seg label:last-of-type span { border-radius: 0 6px 6px 0; border-left: 0; }
+  .seg input:checked + span { background: var(--accent); border-color: var(--accent); color: var(--on-accent); } .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #new button { justify-self: start; font: inherit; border: 0; background: var(--accent); color: var(--on-accent); border-radius: 6px; padding: 0.5rem 1.4rem; cursor: pointer; }
+  #new button:disabled { opacity: 0.5; cursor: default; }
+  #view iframe { display: block; width: 100%; height: 100%; border: 0; }
+  #view:has(iframe) { overflow: hidden; }
+  @media (max-width: 760px) {
+    body > header { gap: 0.5rem; padding: 0 0.6rem; } #qbtn .bar { width: 56px; }
+    #home { display: block; position: relative; }
+    #left, #center { position: absolute; inset: 0; } #center { display: none; }
+    body.view #center { display: grid; } body.view #left { display: none; }
+    #back { display: inline-flex; all: unset; cursor: pointer; font-size: 1.4rem; padding: 0 0.3rem; } body:not(.view) #back { visibility: hidden; }
+    #left { border-right: 0; } .addbar { padding: 0; } .add { border-width: 1px 0 0; border-radius: 0; padding: 0.6rem 0 calc(0.6rem + env(safe-area-inset-bottom)); }
+    article { padding: 1rem; } #say { padding: 0.6rem 0.8rem calc(0.7rem + env(safe-area-inset-bottom)); }
+  }
+</style>
+</head>
+<body>
+<header><button id="back" aria-label="back">‹</button><b id="title">nadya</b><span class="sum" id="sum"></span></header>
+<section id="home">
+  <nav id="left"></nav>
+  <section id="center"><div id="view"></div><button id="newer" hidden>↓ new</button><form id="say"><input name="q" autocomplete="off"><button>send</button></form></section>
+</section>
+<script type="module">
+// A static page (no box): everything it shows comes from these, all same origin:
+//   ../ccx/api/...        sessions on every host: list + events (SSE), log, screen, pick, type
+//   ../blog/              the blog (its #posts are inserted here), asks.json, POST answer
+//   ../cc-files/          todo.md and ideas/: links to ~/nadya (outside the box, so caddy lists ideas/)
+const CCX = "../ccx/api";
+const BLOG = "../blog/";
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
+const S = {rows: [], usage: null, asks: [], posts: [], todo: [], ideas: [], log: [], screens: {}};
+// the open item (and the blog's filter) live in the URL, so a refresh reopens them: #blog/arc, #marx.1234
+const [hashCur, hashTab] = decodeURIComponent(location.hash.slice(1)).split("/");
+let cur = hashCur || (innerWidth > 760 ? "nadya" : null);
+let blogTab = hashTab ?? "";
+function setHash() { if (cur) history.replaceState(history.state, "", cur === "blog" && blogTab ? `#blog/${blogTab}` : `#${cur}`); }
+const sent = new Map();  // ask id / item -> what was sent, for "✓" lines
+
+// ---------- helpers
+function ago(t) {
+  const s = Math.max(0, Date.now() / 1000 - t);
+  if (s < 60) return `${Math.round(s)}s`;
+  if (s < 3600) return `${Math.round(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ${Math.round(s % 3600 / 60)}m`;
+  return `${Math.floor(s / 86400)}d`;
+}
+const hhmm = (t) => new Date(t * 1000).toLocaleTimeString("en-CA", {hour: "2-digit", minute: "2-digit", hour12: false});
+function md(text) {
+  // a small markdown subset: paragraphs, - lists, **bold**, `code`, links
+  const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2">$1</a>');
+  const out = [];
+  let list = null, para = [];
+  const endPara = () => { if (para.length) out.push(`<p>${para.join("<br>")}</p>`); para = []; };
+  const endList = () => { if (list) out.push(`<ul>${list.join("")}</ul>`); list = null; };
+  for (const line of text.trim().split("\n")) {
+    if (!line.trim()) { endPara(); endList(); continue; }
+    const li = line.match(/^\s*[-*] (.*)$/);
+    if (li) { endPara(); (list ??= []).push(`<li>${inline(li[1])}</li>`); continue; }
+    endList(); para.push(inline(line));
+  }
+  endPara(); endList();
+  return out.join("");
+}
+async function json(url, opts) {
+  const r = await fetch(url, opts);
+  if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+  return r.json();
+}
+const post = (url, body) => json(url, {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body)});
+const nadyaRow = () => S.rows.find((r) => r.name === "nadya" && r.pid.startsWith("nadya."));
+
+// ---------- data
+async function loadUsage() { S.usage = (await json(`${CCX}/usage`).catch(() => null))?.usage ?? S.usage; draw(); }
+async function loadAsks() { S.asks = (await json(`${BLOG}asks.json`, {cache: "no-cache"}).catch(() => null))?.asks ?? S.asks; draw(); }
+async function loadBlog() {
+  const html = await fetch(BLOG, {cache: "no-cache"}).then((r) => r.text()).catch(() => "");
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const posts = doc.querySelector("#posts");
+  if (!posts) return;
+  S.posts = [...posts.querySelectorAll("article")].map((a) => ({title: a.querySelector("h2")?.textContent.trim(), time: a.querySelector("time")?.textContent.trim()}));
+  draw();
+}
+async function loadTodo() {
+  const text = await fetch("../cc-files/todo.md", {cache: "no-cache"}).then((r) => r.ok ? r.text() : "").catch(() => "");
+  S.todo = [...text.matchAll(/^- \[(.)\] (?:(\d{4}-\d\d-\d\d)(?: (\d\d:\d\d))? )?(.*)$/gm)].map(([, mark, date, time, rest]) => {
+    const due = date ? new Date(`${date}T${time ?? "09:00"}`) : null;
+    return {mark, date, time, due, text: rest.split(/\. |\(user/)[0].trim(), full: rest};
+  }).filter((t) => t.mark !== "x");
+  const list = await fetch("../cc-files/ideas/", {cache: "no-cache"}).then((r) => r.ok ? r.text() : "").catch(() => "");
+  const files = [...new Set([...list.matchAll(/href="(?:\.\/)?([\w.-]+\.md)"/g)].map((m) => m[1]))];
+  S.ideas = await Promise.all(files.map(async (f) => {
+    const t = await fetch(`../cc-files/ideas/${f}`, {cache: "no-cache"}).then((r) => r.text()).catch(() => "");
+    return {file: f, title: t.match(/^# (.+)$/m)?.[1] ?? f, status: t.match(/^Status: ([^.(]+)/m)?.[1]?.trim() ?? ""};
+  }));
+  draw();
+}
+function listen() {
+  const es = new EventSource(`${CCX}/events`);
+  es.addEventListener("list", (e) => { S.rows = JSON.parse(e.data).rows ?? []; S.offline = JSON.parse(e.data).offline; draw(); drawView(true); });
+  es.onerror = () => { S.offline = "events stream lost, retrying"; draw(); };
+}
+// one session stream at a time: the open one (log for nadya, screen + dialog for all)
+let stream = null;
+function follow(pid) {
+  if (stream?.pid === pid) return;
+  // a dialog is known only while its session's stream is open: a closed one keeps no old dialog
+  if (stream) { stream.es.close(); delete S.screens[stream.pid]?.dialog; }
+  stream = null;
+  if (!pid) return;
+  S.log = [];
+  const es = new EventSource(`${CCX}/s/${pid}/events`);
+  stream = {pid, es};
+  json(`${CCX}/s/${pid}/log`).then((d) => { if (stream?.pid === pid && !S.log.length) { S.log = d.events; drawView(); } }).catch(() => {});
+  es.addEventListener("log", (e) => { const d = JSON.parse(e.data); S.log = d.reset ? d.events : S.log.concat(d.events); drawView(true); });
+  es.addEventListener("screen", (e) => { (S.screens[pid] ??= {}).text = JSON.parse(e.data).text; drawView(true); });
+  es.addEventListener("dialog", (e) => { (S.screens[pid] ??= {}).dialog = JSON.parse(e.data); drawView(true); draw(); });
+}
+
+// ---------- what waits on the user
+function asksFor(name) { return S.asks.filter((a) => a.from === name && !sent.has(a.id)); }
+function hasDialog(r) { return r.state === "wait" && (r.asking || (stream?.pid === r.pid && S.screens[r.pid]?.dialog)); }
+function dueTodos() { const soon = Date.now() + 3600e3; return S.todo.filter((t) => t.due && t.due.getTime() <= soon && !sent.has("todo:" + t.full)); }
+function pace() {
+  const u = S.usage; if (!u?.history?.length) return null;
+  const now = u.at, h = u.history.filter((x) => x.resetsAt === u.resetsAt);
+  const past = h.findLast((x) => x.at <= now - 6 * 3600e3) ?? h[0];
+  const rate = (u.used - past.used) / Math.max(1, (now - past.at) / 3600e3);  // % per hour
+  const left = (100 - u.used) / Math.max(1, (u.resetsAt - now) / 3600e3);
+  const outAt = rate > 0 ? now + (100 - u.used) / rate * 3600e3 : Infinity;
+  return {x: left > 0 ? rate / left : 9, out: outAt < u.resetsAt ? new Date(outAt) : null, rate};
+}
+const day = (d) => d.toLocaleString("en-CA", {weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false});
+
+// ---------- list
+function items() {
+  const it = [];
+  const n = nadyaRow();
+  const nAsks = S.asks.filter((a) => !sent.has(a.id) && !S.rows.some((r) => r.name === a.from && r.name !== "nadya"));
+  const nadyaHot = (n && hasDialog(n)) || nAsks.length;
+  const lastText = [...S.log].reverse().find((e) => e.type === "text");
+  it.push({id: "nadya", d: nadyaHot ? (n && hasDialog(n) ? "red" : "blue") : n ? {busy: "green", wait: "", hold: "yel", free: "gray"}[n.state] : "gray", hot: nadyaHot, title: "nadya",
+    sub: n && hasDialog(n) ? `waits on a dialog: ${n.asking || "see pane"}` : nAsks[0] ? nAsks[0].text : lastText?.text.split("\n")[0] ?? (n ? n.summary : "not running"), t: n ? `${n.state} ${ago(n.since)}` : ""});
+  if (!localStorage.cc_blog_seen && S.posts.length) localStorage.cc_blog_seen = Date.now();
+  const seen = +localStorage.cc_blog_seen || 0, top = S.posts[0];
+  const fresh = S.posts.filter((x) => Date.parse(x.time) > seen).length;
+  it.push({id: "blog", d: fresh ? "green" : "", unread: fresh, title: "blog", sub: top?.title ?? "", t: fresh ? `${fresh} new` : top?.time?.slice(11) ?? ""});
+  const due = dueTodos();
+  it.push({id: "todo", d: due.length ? "blue" : "", hot: due.length, title: "ideas & todo", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : `${S.todo.length} todo · ${S.ideas.length} ideas`, t: ""});
+  const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, asks: asksFor(r.name), dialog: hasDialog(r)}));
+  ss.sort((a, b) => (b.dialog ? 2 : b.asks.length ? 1 : 0) - (a.dialog ? 2 : a.asks.length ? 1 : 0));
+  for (const {r, asks, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "red" : asks.length ? "blue" : {busy: "green", wait: "", hold: "yel", free: "gray"}[r.state] ?? "gray", hot: dialog || asks.length,
+    title: r.name, sub: dialog ? `waits on a dialog: ${r.asking || "see pane"}` : asks[0] ? asks[0].text : r.summary !== r.name ? r.summary : r.path, t: `${r.pid.split(".")[0] === "nadya" ? "" : r.pid.split(".")[0] + " · "}${r.state} ${ago(r.since)}`});
+  return it;
+}
+function draw() {
+  const all = items();
+  let sec = null, html = "";
+  for (const i of all) {
+    if ((i.sec ?? "") !== sec) { sec = i.sec ?? ""; html += sec ? `<div class="sec">${sec}</div>` : `<div style="height:.4rem"></div>`; }
+    html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""}" data-id="${esc(i.id)}" aria-current="${i.id === cur}"><span class="d ${i.d}"></span><span class="tx"><div>${esc(i.title)}</div><small>${esc(i.sub)}</small></span><time>${esc(i.t)}</time></div>`;
+  }
+  if (S.offline) html += `<p class="meta" style="padding:0 1.1rem">${esc(S.offline)}</p>`;
+  html += `<div class="addbar"><button class="add" id="add" aria-label="new session" title="start a new claude session" aria-current="${cur === "new"}">+</button></div>`;
+  $("#left").innerHTML = html;
+  const u = S.usage, p = pace();
+  // the bar: % used; the tick: where the even pace would be by now
+  const even = u ? Math.min(100, Math.max(0, (u.at - (u.resetsAt - 7 * 86400e3)) / (7 * 86400e3) * 100)) : 0;
+  const tip = u ? `quota ${u.used}% used${p ? `, ${p.x.toFixed(1)}x the pace that lasts to the reset` : ""}${p?.out ? `, runs out ${day(p.out)}` : ""}; reset ${day(new Date(u.resetsAt))}` : "no usage data";
+  $("#sum").innerHTML = `<button id="qbtn" class="${p?.out ? "out" : p?.x > 1 ? "hi" : ""}" title="${esc(tip)}" aria-label="${esc(tip)}"><span class="bar"><i style="width:${u?.used ?? 0}%"></i>${u ? `<s style="left:${even.toFixed(1)}%"></s>` : ""}</span><b>${u ? u.used + "%" : "?"}</b>${p ? `<em>${p.out ? "out " + day(p.out) : p.x.toFixed(1) + "x"}</em>` : ""}</button>`;
+  if (["nadya", "todo", "quota"].includes(cur) || cur?.includes(".")) drawView(true);
+}
+
+// ---------- center
+let lastView = "";
+// a user scroll away from the bottom pauses autoscroll until they're back at the bottom or 30 s pass with no scroll
+let pausedAt = 0, autoTop = -1;
+const atBottom = (v) => v.scrollHeight - v.scrollTop - v.clientHeight < 40;
+function toBottom() { const v = $("#view"); v.scrollTop = 1e9; autoTop = v.scrollTop; pausedAt = 0; $("#newer").hidden = true; }
+// also run from drawView, in case the scroll event hasn't fired yet
+function noteScroll() {
+  const v = $("#view");
+  if (Math.abs(v.scrollTop - autoTop) < 2) return;  // ours
+  autoTop = -1;
+  if (atBottom(v)) { pausedAt = 0; $("#newer").hidden = true; }
+  else pausedAt = Date.now();
+}
+$("#view").addEventListener("scroll", noteScroll);
+$("#newer").onclick = toBottom;
+function drawView(soft) {
+  const i = items().find((x) => x.id === cur);
+  const view = $("#view");
+  noteScroll();
+  const keep = atBottom(view) || Date.now() - pausedAt > 30e3;
+  const {scrollTop} = view, pane = view.querySelector("details")?.open, msgs = view.querySelector(".msgs")?.innerHTML;
+  let html, ph = "Message nadya";
+  if (cur === "quota") html = quotaView();
+  else if (!cur || cur === "nadya") html = nadyaView();
+  else if (cur === "blog") { html = `<iframe src="${BLOG}${blogTab ? `#${blogTab}` : ""}" title="blog"></iframe>`; ph = "Message nadya about the blog"; }
+  else if (cur === "todo") { html = todoView(); ph = "Tell nadya a todo or an idea"; }
+  else if (cur === "new") html = newView();
+  else if (i?.r) { html = sessionView(i.r); ph = `Message ${i.r.name}`; }
+  else html = `<article><p class="meta">gone</p></article>`;
+  if (soft && html === lastView) return;
+  if (soft && cur === "blog") return;  // don't rebuild the blog under the reader
+  lastView = html;
+  view.innerHTML = html;
+  const frame = view.querySelector("iframe");
+  frame?.addEventListener("load", () => frame.contentWindow.addEventListener("hashchange", () => { blogTab = decodeURIComponent(frame.contentWindow.location.hash.slice(1)); setHash(); }));
+  $("#say").q.placeholder = ph;
+  const chatty = !cur || cur === "nadya" || cur.includes(".");
+  if (!soft) { pausedAt = 0; $("#newer").hidden = true; }
+  if (soft && pane) view.querySelector("details")?.setAttribute("open", "");
+  if (chatty && (!soft || keep)) return toBottom();
+  view.scrollTop = soft ? scrollTop : 0;
+  autoTop = view.scrollTop;
+  if (chatty && view.querySelector(".msgs")?.innerHTML !== msgs) $("#newer").hidden = false;
+}
+// Claude Code wraps pasted text in <pasted_content id="..."> ... </pasted_content id="...">: show only the text
+const unpaste = (t) => t.replace(/<\/?pasted_content(?: id="[^"]*")?>\n?/g, "");
+// a session's transcript as a chat, the same for nadya and every other session
+function chat(r) {
+  const sc = S.screens[r.pid] ?? {};
+  const log = stream?.pid === r.pid ? S.log : [];
+  const out = []; let tools = 0;
+  const flush = (busy) => { if (tools) out.push(`<div class="tools">· ${tools} tool call${tools > 1 ? "s" : ""}${busy ? " · working" : ""}</div>`); tools = 0; };
+  for (const e of log) {
+    if (e.type === "tool") { tools++; continue; }
+    if (e.type !== "user" && e.type !== "text") continue;
+    flush(false);
+    out.push(`<div class="m ${e.type === "user" ? "me" : ""}"><small>${hhmm(e.at)}</small>${e.type === "user" ? esc(unpaste(e.text).length > 600 ? unpaste(e.text).slice(0, 600) + "…" : unpaste(e.text)) : md(e.text)}</div>`);
+  }
+  flush(r.state === "busy");
+  return `<details class="meta"><summary>${esc(r.pid)} · ${esc(r.path)} · ${r.state} ${ago(r.since)} · pane</summary><pre>${esc(sc.text ?? "")}</pre></details><div class="msgs">${out.join("") || `<p class="meta">${stream?.pid === r.pid ? "no messages yet" : "loading…"}</p>`}</div>`;
+}
+function nadyaView() {
+  const n = nadyaRow();
+  if (!n) return `<article><h1>nadya</h1><p class="meta">nadya isn't running.</p></article>`;
+  const nAsks = S.asks.filter((a) => !S.rows.some((r) => r.name === a.from && r.name !== "nadya"));
+  return `<article>${chat(n)}${dialogBox(n)}${nAsks.map(askBox).join("")}</article>`;
+}
+function askBox(a) {
+  return `<div class="need"><b>${esc(a.project)} · ${esc(a.from)} asks</b> <small class="meta">${esc(a.when)}</small><p>${esc(a.text)}</p>${sent.has(a.id) ? `<p class="done">✓ ${esc(sent.get(a.id))}</p>` : `<div class="opts" data-ask="${esc(a.id)}">${a.options.map((o) => `<button>${esc(o)}</button>`).join("")}</div>`}</div>`;
+}
+function dialogBox(r) {
+  const dg = r.state === "wait" && stream?.pid === r.pid ? S.screens[r.pid]?.dialog : null;
+  if (!dg?.options?.length) return r.state === "wait" && r.asking ? `<div class="need red"><b>Waiting: ${esc(r.asking)}</b><p>Reading the dialog from the pane…</p></div>` : "";
+  const labels = dg.options.map((o) => o.label);
+  return `<div class="need red"><b>${esc(dg.title ?? dg.question ?? "Dialog")}</b>${dg.detail ? `<p>${esc(dg.detail)}</p>` : ""}<div class="opts" data-pick="${esc(r.pid)}" data-labels="${esc(JSON.stringify(labels))}">${labels.map((l, k) => `<button data-i="${k}">${esc(l)}</button>`).join("")}</div></div>`;
+}
+function sessionView(r) {
+  return `<article><h1>${esc(r.name)}</h1>${chat(r)}${asksFor(r.name).map(askBox).join("")}${S.asks.filter((a) => a.from === r.name && sent.has(a.id)).map(askBox).join("")}${dialogBox(r)}</article>`;
+}
+function todoView() {
+  const due = dueTodos();
+  return `<article><h1>ideas &amp; todo</h1>${due.map((t) => `<div class="need"><b>${esc(t.text)}</b><p>due ${esc(t.date)} ${esc(t.time ?? "")}</p>${sent.has("todo:" + t.full) ? `<p class="done">✓ ${esc(sent.get("todo:" + t.full))}</p>` : `<div class="opts" data-todo="${esc(t.full)}"><button>done</button><button>snooze 1 h</button></div>`}</div>`).join("")}
+    <h2 class="h">todo</h2><ul class="rows">${S.todo.map((t) => `<li class="${t.mark === "!" ? "x" : ""}"><span>${esc(t.text)}</span><small>${t.date ? `${t.date}${t.time ? " " + t.time : ""}` : "note"}${t.mark === "!" ? " · reminded" : ""}</small></li>`).join("") || "<li><span class=meta>nothing</span></li>"}</ul>
+    <h2 class="h">ideas</h2><ul class="rows">${S.ideas.map((x) => `<li><span>${esc(x.title)}</span><small>${esc(x.status)}</small></li>`).join("")}</ul></article>`;
+}
+const HOSTS = ["nadya", "marx"];
+function newView() {
+  return `<article><h1>new session</h1><form id="new">
+    <fieldset class="seg"><legend>host</legend>${HOSTS.map((h, k) => `<label><input type="radio" name="host" value="${h}"${k ? "" : " checked"}><span>${h}</span></label>`).join("")}</fieldset>
+    <label>directory<input name="dir" value="~/" list="dirs" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" required></label>
+    <datalist id="dirs"></datalist>
+    <label>name (optional)<input name="name" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+    <button>start</button><p class="meta" id="newmsg"></p></form></article>`;
+}
+async function dirHints(f) {
+  const {host, dir} = f;
+  const prefix = `${host.value}:${dir.value}`;
+  const d = await json(`${CCX}/dirs?prefix=${encodeURIComponent(prefix)}`).catch(() => null);
+  if (!d || `${host.value}:${dir.value}` !== prefix) return;
+  $("#dirs").innerHTML = d.dirs.map((x) => `<option value="${esc(x.slice(x.indexOf(":") + 1))}/">`).join("");
+}
+document.addEventListener("input", (e) => { if (e.target.form?.id === "new" && e.target.name !== "name") dirHints(e.target.form); });
+document.addEventListener("submit", async (e) => {
+  if (e.target.id !== "new") return;
+  e.preventDefault();
+  const f = e.target, msg = $("#newmsg");
+  const dir = f.dir.value.trim().replace(/(.)\/+$/, "$1");
+  f.querySelector("button").disabled = true;
+  msg.className = "meta"; msg.textContent = `starting a claude on ${f.host.value} in ${dir}…`;
+  try {
+    // beside: a new tmux window next to a claude already in dir, what `ccx new` does
+    const r = await post(`${CCX}/spawn`, {dir: `${f.host.value}:${dir}`, name: f.name.value.trim(), beside: true});
+    if (!r.pid) throw new Error(r.error ?? "no pid");
+    for (let end = Date.now() + 15e3; !S.rows.some((x) => x.pid === r.pid) && Date.now() < end;) await new Promise((ok) => setTimeout(ok, 300));
+    cur = r.pid; push(); open();
+  } catch (err) {
+    msg.className = "err"; msg.textContent = err.message;
+    f.querySelector("button").disabled = false;
+  }
+});
+
+function quotaView() {
+  const u = S.usage, p = pace();
+  if (!u) return `<article><h1>quota</h1><p class="meta">no usage data</p></article>`;
+  const h = u.history.filter((x) => x.resetsAt === u.resetsAt);
+  const W = 600, H = 120, t0 = u.resetsAt - 7 * 86400e3;
+  const pts = h.map((x) => `${((x.at - t0) / (7 * 86400e3) * W).toFixed(1)},${(H - x.used / 100 * H).toFixed(1)}`).join(" ");
+  return `<article><h1>quota</h1><div class="meta">${p ? `${p.x.toFixed(1)}x the pace that lasts to the reset · ` : ""}${p?.out ? `<b class="err">runs out ${day(p.out)}</b> · ` : ""}reset ${day(new Date(u.resetsAt))}</div>
+    <div class="big" style="color:${p?.out ? "var(--red)" : "inherit"}">${u.used}%</div><div class="meter"><i style="width:${u.used}%;background:${p?.out ? "var(--red)" : "var(--accent)"}"></i></div>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;display:block" aria-label="quota used this week"><line x1="0" y1="${H}" x2="${W}" y2="0" stroke="var(--line)" stroke-dasharray="4 4"/><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>
+    <p class="meta">The dashed line is the even pace from the start of the week to the reset. Per-session burn isn't in this page yet (./task burn runs on the host).</p></article>`;
+}
+
+// ---------- actions
+async function toNadya(text) {
+  const n = nadyaRow();
+  if (!n) throw new Error("nadya isn't running");
+  await post(`${CCX}/s/${n.pid}/type`, {text});
+}
+function context() {
+  if (!cur || cur === "nadya") return "";
+  if (cur === "blog") return "about the blog";
+  if (cur === "todo") return "ideas & todo";
+  if (cur === "quota") return "about the quota";
+  const r = S.rows.find((x) => x.pid === cur);
+  return r ? `about ${r.name} (${r.pid})` : "";
+}
+$("#say").onsubmit = async (e) => {
+  e.preventDefault();
+  const q = e.target.q.value.trim(); if (!q) return;
+  const r = cur?.includes(".") ? S.rows.find((x) => x.pid === cur) : null;
+  const c = context();
+  try {
+    if (r) await post(`${CCX}/s/${r.pid}/type`, {text: q});
+    else { await toNadya(c ? `[cc, ${c}] ${q}` : q); if (cur !== "nadya") { cur = "nadya"; open(); } }
+    e.target.q.value = "";
+  }
+  catch (err) { alert(`Not sent: ${err.message}`); }
+};
+document.addEventListener("click", async (e) => {
+  if (e.target.closest("#qbtn")) { cur = "quota"; push(); open(); return; }
+  if (e.target.closest("#add")) { cur = "new"; push(); open(); dirHints($("#new")); return; }
+  if (e.target.closest("#back, #title")) { if (history.state?.cc) history.back(); else document.body.classList.remove("view"); return; }
+  const row = e.target.closest(".it"); if (row) { cur = row.dataset.id; push(); if (cur === "blog") localStorage.cc_blog_seen = Date.now(); if (cur === "todo") loadTodo(); open(); if ((cur === "nadya" || cur.includes(".")) && matchMedia("(hover: hover) and (pointer: fine)").matches) $("#say").q.focus(); return; }
+  const b = e.target.closest(".opts button"); if (!b) return;
+  const box = b.parentElement; [...box.children].forEach((x) => x.disabled = true);
+  try {
+    if (box.dataset.pick) await post(`${CCX}/s/${box.dataset.pick}/pick`, {i: +b.dataset.i, labels: JSON.parse(box.dataset.labels)});
+    else if (box.dataset.ask) { await post(`${BLOG}answer`, {id: box.dataset.ask, answer: b.textContent}); sent.set(box.dataset.ask, `answered: ${b.textContent}`); }
+    else if (box.dataset.todo) { setTimeout(loadTodo, 60e3); await toNadya(`[cc, todo] ${b.textContent === "done" ? "mark done" : "snooze 1 h"}: ${box.dataset.todo.slice(0, 200)}`); sent.set("todo:" + box.dataset.todo, b.textContent === "done" ? "sent to nadya: done" : "sent to nadya: snooze 1 h"); }
+    box.outerHTML = box.dataset.pick ? `<p class="done">✓ ${esc(b.textContent)}</p>` : "";
+    draw(); drawView(true);
+  } catch (err) { box.insertAdjacentHTML("afterend", `<p class="err">${esc(err.message)}</p>`); [...box.children].forEach((x) => x.disabled = false); }
+});
+// phone: opening an item is a history entry, so the browser's back (and the swipe) returns to the list
+const narrow = () => matchMedia("(max-width: 760px)").matches;
+function push() {
+  if (!narrow()) return;
+  if (history.state?.cc) history.replaceState({cc: cur}, "");
+  else history.pushState({cc: cur}, "");
+}
+addEventListener("popstate", (e) => {
+  if (e.state?.cc) { cur = e.state.cc; open(); }
+  else document.body.classList.remove("view");
+});
+function open() {
+  document.body.classList.add("view");
+  setHash();
+  const pid = cur === "nadya" || cur === null ? nadyaRow()?.pid : cur?.includes(".") ? cur : null;
+  follow(pid);
+  draw(); drawView();
+}
+
+// ---------- start
+listen();
+loadUsage(); loadAsks(); loadBlog(); loadTodo();
+setInterval(loadUsage, 5 * 60e3); setInterval(loadAsks, 60e3); setInterval(loadBlog, 60e3); setInterval(loadTodo, 30e3);
+// back on the tab (or the phone woke up): read everything again at once
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { loadUsage(); loadAsks(); loadBlog(); loadTodo(); } });
+setInterval(draw, 30e3);  // ages
+const wait = setInterval(() => { if (!S.rows.length) return; clearInterval(wait); if (cur) open(); }, 200);
+</script>
+</body>
+</html>
