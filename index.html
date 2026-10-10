@@ -63,6 +63,7 @@
   .m small { display: block; font-size: 0.72rem; opacity: 0.7; }
   .m p { margin: 0 0 0.4rem; } .m p:last-child { margin: 0; } .m ul { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; } .m code { font: 0.88em var(--mono); }
   .tools { align-self: flex-start; font-size: 0.78rem; color: var(--muted); padding: 0 0.8rem; }
+  #say[hidden] { display: none; }
   #say { display: flex; gap: 0.5rem; padding: 0.7rem 2rem 0.9rem; border-top: 1px solid var(--line); }
   #say input { flex: 1; font: inherit; border: 1px solid var(--line); border-radius: 999px; padding: 0.55rem 1rem; }
   #say button { border: 0; background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 0 1.1rem; cursor: pointer; font: inherit; }
@@ -292,8 +293,8 @@ function drawView(soft) {
   let html, ph = "Message nadya";
   if (cur === "quota") html = quotaView();
   else if (!cur || cur === "nadya") html = nadyaView();
-  else if (cur === "blog") { html = `<iframe src="${BLOG}" title="blog"></iframe>`; ph = "Message nadya about the blog"; }
-  else if (cur === "todo") { html = todoView(); ph = "Tell nadya a todo or an idea"; }
+  else if (cur === "blog") html = `<iframe src="${BLOG}" title="blog"></iframe>`;
+  else if (cur === "todo") html = todoView();
   else if (cur === "new") html = newView();
   else if (i?.r) { html = sessionView(i.r); ph = `Message ${i.r.name}`; }
   else html = `<article><p class="meta">gone</p></article>`;
@@ -305,6 +306,7 @@ function drawView(soft) {
   // no project filter in cc: hide the blog's filter row; the colored project labels stay, not clickable
   frame?.addEventListener("load", () => frame.contentDocument.head.insertAdjacentHTML("beforeend", "<style>#filter { display: none; } .meta a { pointer-events: none; }</style>"));
   $("#say").q.placeholder = ph;
+  $("#say").hidden = !(!cur || cur === "nadya" || i?.r);  // the prompt only where it talks to nadya or a session
   const chatty = !cur || cur === "nadya" || cur.includes(".");
   if (!soft) { pausedAt = 0; $("#newer").hidden = true; }
   if (soft && pane) view.querySelector("details")?.setAttribute("open", "");
