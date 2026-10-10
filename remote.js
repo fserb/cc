@@ -16,7 +16,9 @@ const TIMEOUT = 3000;
 const ENTRIES = (Deno.env.get("CCX_HOSTS") ?? "marx,nadya").split(",")
   .map((h) => h.trim().split("=")).filter(([h]) => h);
 export const HOSTS = ENTRIES.map(([h]) => h);
-const ADDR = new Map(ENTRIES.map(([h, a]) => [h, a ?? `${h}:${PORT}`]));
+// this host by its own name can leave from a link-local address, which tailnetOrLocal
+// refuses (nadya resolves itself to four fe80:: as well), so it is localhost
+const ADDR = new Map(ENTRIES.map(([h, a]) => [h, a ?? (h === SELF ? "localhost" : h) + `:${PORT}`]));
 export const others = () => HOSTS.filter((h) => h !== SELF);
 
 export const base = (host) => `http://${ADDR.get(host) ?? `${host}:${PORT}`}`;
