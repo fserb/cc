@@ -840,6 +840,15 @@ Deno.test("StateClock.on: events carry host, name and a rising seq; off() stops 
     [[1, "marx", "a", "s", "busy", "poll"], [2, "marx", "a", "s", "gone", "poll"]]);
 });
 
+Deno.test("StateClock.on: an event names the tmux pane and the summary, for `any is new`", () => {
+  const clock = new StateClock("marx"), got = [];
+  clock.on((evs) => got.push(...evs));
+  clock.update([inst(1, "free", {session: "work", window: "2", paneIndex: "1", summary: "t",
+    sessionId: "s"}), inst(2, "wait", {summary: "nadya", path: "/tmp"})]);
+  eq(got.map((e) => [e.pane, e.summary, e.path]), [["work:2.1", "t", ""], ["", "", "/tmp"]],
+    "no record, so the summary is the pane title and is left out");
+});
+
 Deno.test("StateClock: a pid that went away is first sight again when it returns", () => {
   const clock = new StateClock();
   clock.update([inst(1, "busy")]);

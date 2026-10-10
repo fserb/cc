@@ -393,7 +393,10 @@ export class StateClock {
   event(i, from, to, at) {
     return {seq: ++this.seq, host: this.host, pid: i.pid, name: i.name ?? "",
       sessionId: i.sessionId ?? "", cwd: i.cwd ?? "", from, to, asking: i.asking ?? "",
-      waitsOn: i.waitsOn ?? "", since: i.since, at, source: "poll"};
+      waitsOn: i.waitsOn ?? "", since: i.since, at, source: "poll", path: i.path ?? "",
+      // with no record the summary is the pane title, which is the hostname until claude sets it
+      summary: i.sessionId ? i.summary ?? "" : "",
+      pane: i.session ? `${i.session}:${i.window}.${i.paneIndex}` : ""};
   }
 }
 

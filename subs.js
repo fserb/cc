@@ -1,4 +1,5 @@
-// Subscriptions: "tell <who> when <agent> changes state", or "... when it goes to <state>".
+// Subscriptions: "tell <who> when <agent> changes state", or "... when it goes to <state>",
+// or "... when any session is new" (`any is new`), which each host's daemon holds a copy of.
 // They live in the daemon of the host the watched agent runs on, matched against the
 // state-change events of that host's StateClock, and are answered with a chat message to
 // the subscriber, on any host. Memory only: a `ccx host` restart drops them.
@@ -13,7 +14,7 @@ export function parseDuration(text) {
 }
 
 // `<who> when <target> [is <state>] [for <duration>]` as {who, target, state, secs}, or
-// {error}
+// {error}. `any` and `new` come together: `<who> when [host:]any is new`
 export function parseNotify(words) {
   const [who, when, target, ...rest] = words;
   if (!who || when !== "when" || !target) {
@@ -22,7 +23,7 @@ export function parseNotify(words) {
   let state = "", secs = 0;
   for (let n = 0; n < rest.length; n += 2) {
     const [key, value] = [rest[n], rest[n + 1]];
-    if (key === "is" && STATES.includes(value)) state = value;
+    if (key === "is" && (STATES.includes(value) || value === "new")) state = value;
     else if (key === "for" && parseDuration(value)) secs = parseDuration(value);
     else if (key === "is") {
       return { error: `a state is one of ${STATES.join(", ")}` };
@@ -30,19 +31,32 @@ export function parseNotify(words) {
       return { error: "a duration is a number and s, m, h or d: 30m, 2h" };
     } else return { error: `unexpected ${JSON.stringify(key)}` };
   }
+  if ((state === "new") !== /^([^:]+:)?any$/.test(target)) {
+    return { error: "a new session is `when any is new`, or `when <host>:any is new`" };
+  }
   return { who, target, state, secs };
 }
 
 // Whether an event (claudes.js StateClock's shape: {pid, from, to, ...}) answers a
 // subscription. First sight is not a change; `gone` always answers, since nothing after it
-// ever will
+// ever will. A `new` subscription is first sight and nothing else
 export function matches(sub, ev) {
+  if (sub.state === "new") return !ev.from && ev.to !== "gone";
   if (ev.pid !== sub.target.pid || !ev.from || ev.from === ev.to) return false;
   return ev.to === "gone" || !sub.state || ev.to === sub.state;
 }
 
 // The one line the subscriber gets
 export function noticeText(host, sub, ev) {
+  if (sub.state === "new") {
+    const parts = [`new ${host}:${ev.pid}`];
+    if (ev.name) parts.push(`name=${ev.name}`);
+    if (ev.cwd || ev.path) parts.push(`dir=${ev.cwd || ev.path}`);
+    if (ev.pane) parts.push(`pane=${ev.pane}`);
+    parts.push(ev.to);
+    if (ev.summary) parts.push(`title=${JSON.stringify(ev.summary)}`);
+    return `[ccx notify ${host}:${sub.id}] ${parts.join(" ")}`;
+  }
   const why = ev.to === "wait" && ev.asking
     ? ` (${ev.asking})`
     : ev.to === "hold" && ev.waitsOn
@@ -62,7 +76,7 @@ export class Subs {
     this.next = 1;
   }
 
-  // who: {host, pid, name}; target: {pid, name}; secs 0 is one shot, else repeat until then
+  // who: {host, pid, name}; target: {pid, name}, or {any: true} for `new`; secs 0 is one shot, else repeat until then
   add({ who, target, state = "", secs = 0 }) {
     const id = this.next++;
     const at = this.now();

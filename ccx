@@ -1247,6 +1247,7 @@ async function cmdNotify(...words) {
   const {instances, down} = await discoverAll(new StateClock());
   reportDown(down);
   const who = onlyOne("notify", instances, n.who);
+  if (n.state === "new") return notifyNew(n, who, words);
   const target = onlyOne("notify", instances, n.target);
   const host = target.host || SELF;
   const [r, err] = await call(host, "/api/subs", {pid: target.pid, state: n.state,
@@ -1262,6 +1263,32 @@ async function cmdNotify(...words) {
   console.log(`${host}:${r.id}: tell ${where(who)} when ${where(target)} ${what}${until}${now}`);
 }
 
+// `any is new`: a copy with every host's daemon, or the one named, since each sees only
+// its own sessions start
+async function notifyNew(n, who, words) {
+  const prefix = n.target.includes(":") ? n.target.split(":")[0] : "";
+  if (prefix && !HOSTS.includes(prefix)) {
+    console.error(`notify: no host ${JSON.stringify(prefix)}`);
+    Deno.exit(1);
+  }
+  const hosts = prefix ? [prefix] : HOSTS;
+  const until = n.secs ? `, every time for ${words.at(-1)}` : ", once per host";
+  const body = {any: true, state: "new", secs: n.secs,
+    who: {host: who.host || SELF, pid: who.pid, name: who.name}};
+  const answers = await Promise.all(hosts.map((h) => call(h, "/api/subs", body)));
+  let ok = 0;
+  for (const [i, [r, err]] of answers.entries()) {
+    const host = hosts[i];
+    if (err) {
+      console.error(`notify: ${host}: ${err}`);
+      continue;
+    }
+    ok++;
+    console.log(`${host}:${r.id}: tell ${where(who)} when a session starts on ${host}${until}`);
+  }
+  if (!ok) Deno.exit(1);
+}
+
 // ccx subs: every host's subscriptions
 async function cmdSubs() {
   const all = await Promise.all(HOSTS.map((h) => call(h, "/api/subs")));
@@ -1271,7 +1298,8 @@ async function cmdSubs() {
     for (const s of body.subs) {
       const until = s.until ? `until ${new Date(s.until * 1000).toLocaleTimeString()}` : "once";
       console.log(`${`${h}:${s.id}`.padEnd(10)} ${`${s.who.host}:${s.who.name || s.who.pid}`
-        .padEnd(18)} <- ${`${h}:${s.target.name || s.target.pid}`.padEnd(18)} ` +
+        .padEnd(18)} <- ${`${h}:${s.target.any ? "any" : s.target.name || s.target.pid}`
+        .padEnd(18)} ` +
         `${(s.state || "any").padEnd(5)} ${until}`);
     }
   });
@@ -1330,6 +1358,8 @@ const HELP = [
   ["  notify <who> when <target>", "message who (`me` inside a claude) from `ccx` when target's"],
   ["  [is <state>] [for <time>]", "state changes, or goes to wait|busy|hold|free|gone; once,"],
   ["", "or every time for 30m, 2h, 1d. Lives in target's host daemon"],
+  ["  notify <who> when any is new", "message who when a session starts on any host (or"],
+  ["  [for <time>]", "`host:any`): host:pid, name, dir, tmux pane, state, title"],
   ["  subs", "every host's subscriptions"],
   ["  unsub <host:id>", "drop one"],
   ["  serve [--port N]", "the web page and its API on 127.0.0.1, port 7681"],

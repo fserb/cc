@@ -349,8 +349,15 @@ export class Server {
           : json({error: `no subscription ${body.id}`}, 404);
       }
       const {who, state = "", secs = 0} = body, pid = Number(body.pid);
-      if (!who?.host || !Number.isInteger(who.pid) || !STATES.includes(state || "wait") ||
-        typeof secs !== "number" || secs < 0) return json({error: "malformed subscription"}, 400);
+      if (!who?.host || !Number.isInteger(who.pid) || typeof secs !== "number" || secs < 0 ||
+        !(body.any === true ? state === "new" : STATES.includes(state || "wait"))) {
+        return json({error: "malformed subscription"}, 400);
+      }
+      if (body.any === true) {
+        const id = this.subs.add({who: {host: String(who.host), pid: who.pid,
+          name: String(who.name ?? "")}, target: {any: true}, state, secs});
+        return json({id, state: "new"});
+      }
       const inst = this.find(pid);
       if (!inst) return json({error: `no claude instance with pid ${pid}`}, 404);
       const id = this.subs.add({who: {host: String(who.host), pid: who.pid,

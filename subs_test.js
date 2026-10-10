@@ -171,3 +171,38 @@ Deno.test("Subs: a subscriber that is no longer a claude loses its subscription"
   await subs.onEvents([ev(1, "busy", "wait")]);
   eq(subs.list().map((s) => s.who.pid), [50], "only the reachable one");
 });
+
+Deno.test("new: `any is new` parses, and neither comes alone", () => {
+  eq(parseNotify(["me", "when", "any", "is", "new", "for", "7d"]), {
+    who: "me",
+    target: "any",
+    state: "new",
+    secs: 604800,
+  }, "every host for 7d");
+  eq(parseNotify(["me", "when", "marx:any", "is", "new"]).target, "marx:any", "one host");
+  eq(!!parseNotify(["me", "when", "x", "is", "new"]).error, true, "new needs any");
+  eq(!!parseNotify(["me", "when", "any"]).error, true, "any needs new");
+  eq(!!parseNotify(["me", "when", "any", "is", "wait"]).error, true, "any is only new");
+});
+
+Deno.test("new: first sight of any pid, and what the notice says", async () => {
+  const { sent, t, subs } = setup();
+  subs.add({ who: me(), target: { any: true }, state: "new", secs: 60 });
+  const started = ev(7, "", "free", {
+    cwd: "/home/u/prj",
+    pane: "work:2.0",
+    summary: "",
+  });
+  await subs.onEvents([ev(1, "busy", "wait"), ev(2, "wait", "gone"), started]);
+  eq(sent, [[50, "[ccx notify nadya:1] new nadya:7 name=n7 dir=/home/u/prj pane=work:2.0 free"]],
+    "only the new one");
+  await subs.onEvents([ev(8, "", "busy", { name: "", path: "/tmp", summary: 'Fix "x"' })]);
+  eq(sent[1][1], '[ccx notify nadya:1] new nadya:8 dir=/tmp busy title="Fix \\"x\\""',
+    "no name, the pane's dir, a title");
+  eq(subs.list().length, 1, "for 60s it stays, gone or not");
+  t.now += 61;
+  eq(subs.list().length, 0, "then expires");
+  subs.add({ who: me(), target: { any: true }, state: "new" });
+  await subs.onEvents([ev(9, "", "free"), ev(10, "", "free")]);
+  eq(sent.length, 3, "a one shot fires once in a batch");
+});
