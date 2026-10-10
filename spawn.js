@@ -22,6 +22,17 @@ export function expandDir(dir) {
   return dir === "~" || dir.startsWith("~/") ? `${HOME}${dir.slice(1)}` : dir;
 }
 
+// A detached tmux session named `session` in dir, unless one by that name is already up.
+// An error message, or null
+export async function ensureSession(session, dir) {
+  if (!session) return "no session name";
+  if ((await run("tmux", "has-session", "-t", `=${session}`)).code === 0) return null;
+  const path = expandDir(dir || "~");
+  if (!isDir(path)) return `no such directory: ${path}`;
+  const r = await run("tmux", "new-session", "-d", "-s", session, "-c", path);
+  return r.code === 0 ? null : TMUX_ERR(r);
+}
+
 function isDir(dir) {
   try {
     return Deno.statSync(dir).isDirectory;

@@ -12,7 +12,7 @@ import {jump, kittyWindowTitle, raiseTarget, tmuxWindowName, typeInto} from "./j
 import {Online} from "./online.js";
 import {byDay, HISTORY, readUsage, usageLine, USAGE} from "./usage.js";
 import {close, expandDir, paneIn, spawn} from "./spawn.js";
-import {attachSession, base, bestUsage, call, discoverAll, HOSTS, jumpRemote, label, others, Remotes, SELF}
+import {base, bestUsage, call, discoverAll, HOSTS, jumpRemote, jumpSession, label, others, Remotes, SELF}
   from "./remote.js";
 
 // `peer.js` and `chat.js` load on use, not at startup: a missing one must cost `ccx send`
@@ -885,14 +885,20 @@ async function cmdFocus(spec) {
   Deno.exit(1);
 }
 
-// ccx attach [host:]<session> [dir]
-// A kitty window on a tmux session, on this host or another, the session made in dir if
-// there is none. dir is the host's own: ~ and a relative path are its home's
+// ccx attach host:<session> [dir]
+// A remote tmux session by name, focused the way `focus` does an instance's, made in dir
+// (the host's own; default its ~) if it is not up
 async function cmdAttach(spec, dir = "") {
-  if (!spec || spec.endsWith(":")) usage();
+  if (!spec) usage();
   const [host, session] = splitHost(spec);
-  // a local tmux gets no shell to expand ~
-  await attachSession(host, session, host || !dir ? dir : expandDir(dir));
+  if (!host) {
+    console.error(`attach: give another host's session as host:<session>, not ${JSON.stringify(spec)}`);
+    Deno.exit(1);
+  }
+  const err = await jumpSession(host, session, dir);
+  if (!err) return;
+  console.error(`attach: ${host}: ${err}`);
+  Deno.exit(1);
 }
 
 // ccx new [host:]<dir> [name]
@@ -1242,7 +1248,7 @@ const HELP = [
   ["  usage", "the seven-day limit, the last 6h against what is left, the week by day"],
   ["  doctor", "what resolves, and the kitty match it would use"],
   ["  focus <target>", "jump to one instance without the UI, on any host"],
-  ["  attach [host:]<session> [dir]", "a kitty window on a tmux session, made in dir if missing"],
+  ["  attach host:<session> [dir]", "focus a tmux session on another host, made in dir if missing"],
   ["  new [host:]<dir> [name...]", "a claude in dir: beside one already there, else a kitty window; focused"],
   ["  delete [host:]<name|pid>", "end one instance and close its tmux pane"],
   ["  send <target> <message...>", "a chat message to one or more instances"],
