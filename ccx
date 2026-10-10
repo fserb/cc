@@ -13,6 +13,7 @@ import {jump, kittyWindowTitle, raiseTarget, tmuxWindowName, typeInto} from "./j
 import {Online} from "./online.js";
 import {byDay, HISTORY, readUsage, usageLine, USAGE} from "./usage.js";
 import {close, expandDir, paneIn, spawn} from "./spawn.js";
+import {call, discoverAll, HOSTS, label, SELF} from "./remote.js";
 
 // `peer.js` and `chat.js` load on use, not at startup: a missing one must cost `ccx send`
 // its error line and nothing else. A static import would take `list`, `doctor` and the TUI
@@ -789,8 +790,15 @@ function cmdResolve(...args) {
 
 // cli
 
+// a host that did not answer, on stderr so a pipe still carries only rows
+function reportDown(down) {
+  for (const [h, err] of down) console.error(`${h}: down, ${err}`);
+}
+
 async function cmdList() {
-  for (const i of new StateClock().update(await discover())) {
+  const {instances, down} = await discoverAll(new StateClock());
+  reportDown(down);
+  for (const i of instances) {
     console.log(`${stateOf(i).label.padEnd(6)} ${i.age.padStart(4)}  ` +
       `${i.shortPath.padEnd(30)} ${i.summary}`);
   }
@@ -944,6 +952,53 @@ async function cmdServe(...args) {
   await new Promise(() => {});
 }
 
+// ccx host [--port N]
+// The daemon each machine runs: the server on every interface, tailnet and loopback only,
+// and a stand-in record for every claude on the other hosts so SendMessage reaches them
+async function cmdHost(...args) {
+  let port;
+  for (let n = 0; n < args.length; n++) {
+    if (args[n] !== "--port" || !/^\d+$/.test(args[n + 1] ?? "")) usage();
+    port = Number(args[++n]);
+  }
+  const [srv, relayMod, remote] = await Promise.all([serverModule(), import("./relay.js"),
+    import("./remote.js")]);
+  port ??= srv.PORT;
+  const clock = new StateClock(), net = new Online();
+  let instances = [], polling = false;
+  const poll = async () => {
+    net.tick();
+    if (polling) return;
+    polling = true;
+    try {
+      instances = clock.update(await discover());
+    } finally {
+      polling = false;
+    }
+  };
+  await poll();
+  setInterval(poll, 1500);
+  relayMod.clearStandIns(remote.SELF);
+  const relay = new relayMod.Relay(remote.SELF, async (host, body) =>
+    (await remote.call(host, "/api/relay", body))[1]);
+  const r = srv.runServer({source: () => ({instances, net}), port, hostname: "0.0.0.0", relay});
+  if (r.error) {
+    console.error(`host: ${r.error}`);
+    Deno.exit(1);
+  }
+  const stops = remote.others().map((h) => remote.follow(h, (rows) => relay.sync(h, rows)));
+  const quit = () => {
+    for (const stop of stops) stop();
+    relay.close();
+    Deno.exit(0);
+  };
+  Deno.addSignalListener("SIGINT", quit);
+  Deno.addSignalListener("SIGTERM", quit);
+  console.log(`ccx host ${remote.SELF} on :${port}, following ${remote.others().join(", ") ||
+    "no other host"}`);
+  await new Promise(() => {});
+}
+
 const BUNDLE = `${import.meta.dirname}/ccx.app`;
 
 // Deno.Tray is undefined under `deno run`: with the desktop globals this *is* the tray,
@@ -992,8 +1047,15 @@ function selfPid() {
  */
 function resolveTarget(instances, target, self = 0) {
   if (!target) return [];
-  if (target === "all") return instances.filter((i) => i.pid !== self);
-  if (/^\d+$/.test(target)) return instances.filter((i) => i.pid === Number(target));
+  // `host:target` is target among that host's instances only
+  const colon = target.indexOf(":");
+  if (colon > 0 && HOSTS.includes(target.slice(0, colon))) {
+    const host = target.slice(0, colon) === SELF ? "" : target.slice(0, colon);
+    return resolveTarget(instances.filter((i) => i.host === host), target.slice(colon + 1),
+      self);
+  }
+  if (target === "all") return instances.filter((i) => i.host || i.pid !== self);
+  if (/^\d+$/.test(target)) return instances.filter((i) => !i.host && i.pid === Number(target));
   const needle = target.toLowerCase();
   const named = instances.filter((i) => i.name.toLowerCase() === needle);
   if (named.length) return named;
@@ -1013,8 +1075,8 @@ function resolveTargets(instances, spec, self = 0) {
     const hits = resolveTarget(instances, t, self);
     if (!hits.length) missed.push(t);
     for (const i of hits) {
-      if (seen.has(i.pid)) continue;
-      seen.add(i.pid);
+      if (seen.has(label(i))) continue;
+      seen.add(label(i));
       found.push(i);
     }
   }
@@ -1031,8 +1093,9 @@ const sendLine = (verb, who, where, what) =>
 // Exits on usage; returns what `spec` named and what it did not
 async function targets(cmd, spec, text) {
   if (!spec || !text.trim()) usage();
-  const {found, missed} = resolveTargets(
-    new StateClock().update(await discover()), spec, selfPid());
+  const {instances, down} = await discoverAll(new StateClock());
+  reportDown(down);
+  const {found, missed} = resolveTargets(instances, spec, selfPid());
   if (!found.length) {
     for (const t of missed) console.error(`${cmd}: no instance matches ${JSON.stringify(t)}`);
     usage();
@@ -1046,9 +1109,14 @@ async function targets(cmd, spec, text) {
 function report(verb, found, missed, errs) {
   for (const t of missed) console.log(sendLine("failed", t, "-", "no instance matches"));
   found.forEach((i, n) => console.log(errs[n]
-    ? sendLine("failed", i.name || String(i.pid), i.shortPath, errs[n])
-    : sendLine(verb, i.name || String(i.pid), i.shortPath, i.summary)));
+    ? sendLine("failed", label(i), i.shortPath, errs[n])
+    : sendLine(verb, label(i), i.shortPath, i.summary)));
   if (missed.length || errs.some((e) => e)) Deno.exit(1);
+}
+
+// a send or type on the host the instance runs on, by its api. An error, or null
+async function onHost(i, verb, text) {
+  return (await call(i.host, `/api/s/${i.pid}/${verb}`, {text}))[1];
 }
 
 // ccx send <target>[,<target>...] <message...>
@@ -1062,7 +1130,8 @@ async function cmdSend(spec, ...words) {
     console.error(`send: ${e.message ?? e}`);
     Deno.exit(1);
   }
-  report("sent", found, missed, await Promise.all(found.map((i) => sendPeer(i, text))));
+  report("sent", found, missed, await Promise.all(found.map((i) =>
+    i.host ? onHost(i, "send", text) : sendPeer(i, text))));
 }
 
 // ccx user <target>[,<target>...] <text...>
@@ -1071,7 +1140,8 @@ async function cmdSend(spec, ...words) {
 async function cmdUser(spec, ...words) {
   const text = words.join(" ");
   const {found, missed} = await targets("user", spec, text);
-  report("typed", found, missed, await Promise.all(found.map((i) => typeInto(i, text))));
+  report("typed", found, missed, await Promise.all(found.map((i) =>
+    i.host ? onHost(i, "type", text) : typeInto(i, text))));
 }
 
 // ccx chat [--no-follow]
@@ -1115,6 +1185,7 @@ const COMMANDS = {
   user: [cmdUser, -1],
   chat: [cmdChat, -1],
   serve: [cmdServe, -1],
+  host: [cmdHost, -1],
   systray: [cmdSystray, -1],         // -1: passes its own flags through to the bundle
   help: [cmdHelp, 0],
   "-h": [cmdHelp, 0],
@@ -1140,6 +1211,7 @@ const HELP = [
   ["  user <target> <text...>", "typed into an instance as its user, /commands included"],
   ["  chat [--no-follow]", "what the agents here have said to each other"],
   ["  serve [--port N]", "the web page and its API on 127.0.0.1, port 7681"],
+  ["  host [--port N]", "the daemon: serve on the tailnet, and relay SendMessage between hosts"],
   ["  systray", "the menu bar app, needs ./task build"],
   ["  help", "this, which is also what `ccx` alone prints"],
   "",

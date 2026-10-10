@@ -20,6 +20,8 @@ export class Instance {
     this.sock = "";           // the record's messagingSocketPath, where peer.js delivers
     this.sessionId = "";      // the record's; with cwd, what names the session log
     this.cwd = "";            // the record's, where claude started; path follows the shell
+    this.host = "";           // the machine it runs on, "" for this one
+    this.peer = null;         // what a stand-in record on another host copies (relay.js)
     this.statusSince = 0;     // epoch of the record's last status change, 0 without one
     this.lastWrite = 0;       // epoch claude last wrote to its session log
     this.since = 0;           // epoch this instance entered its current state
@@ -35,7 +37,8 @@ export class Instance {
 
   get shortPath() {
     const path = this.path ? this.path.replace(HOME, "~") : "?";
-    return this.tab ? `${path}:${this.tab}` : path;
+    const tabbed = this.tab ? `${path}:${this.tab}` : path;
+    return this.host ? `${this.host}:${tabbed}` : tabbed;
   }
 
   get age() {
@@ -417,6 +420,13 @@ export function summaryOf(title) {
   return text === "Claude Code" ? "" : text;
 }
 
+// The raw record fields a stand-in on another host needs, or null with no record
+function peerOf(rec) {
+  if (!rec.status) return null;
+  return {status: rec.status, startedAt: rec.startedAt ?? 0, version: rec.version ?? "",
+    peerFeatures: rec.peerFeatures ?? [], statusUpdatedAt: rec.statusUpdatedAt ?? 0};
+}
+
 // Every running claude, with where it is and what it is doing. Async because it shares a
 // task with the input loop: `ps` and the tmux listing overlap instead of adding up, and so
 // do the record-less screen scrapes.
@@ -472,7 +482,7 @@ export async function discover() {
       found.push(new Instance({pid, summary: title || cmd, path: rec.cwd ?? "",
         state, asking: rec.status === "waiting" ? (rec.waitingFor ?? "") : "", waitsOn: holdFor,
         name: rec.name ?? "", sock: rec.messagingSocketPath ?? "", statusSince: since,
-        sessionId: rec.sessionId ?? "", cwd: rec.cwd ?? ""}));
+        sessionId: rec.sessionId ?? "", cwd: rec.cwd ?? "", peer: peerOf(rec)}));
       continue;
     }
     const client = clientBySession.get(pane.session_name) ?? {};
@@ -495,6 +505,7 @@ export async function discover() {
       sock: rec.messagingSocketPath ?? "",
       sessionId: rec.sessionId ?? "",
       cwd: rec.cwd ?? "",
+      peer: peerOf(rec),
       statusSince: since,
       lastWrite: state ? 0 : lastWrite(pane.pane_current_path),
       clientTty: client.client_tty ?? "",

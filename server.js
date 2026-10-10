@@ -21,6 +21,8 @@ import {parseDialog, pick, screen} from "./dialog.js";
 import {sendKeys, typeInto} from "./jump.js";
 import {expandDir, spawn} from "./spawn.js";
 import {appIconPng} from "./icon.js";
+import {sendPeer} from "./peer.js";
+import {readUsage} from "./usage.js";
 import PAGE from "./page.html" with {type: "text"};
 
 export const PORT = 7681;
@@ -57,7 +59,7 @@ export function rowOf(i) {
   return {pid: i.pid, name: i.name, path: tilde(i.path), cwd: i.cwd, state: i.state,
     asking: i.asking, waitsOn: i.waitsOn, summary: i.summary, since: i.since,
     hasPane: Boolean(i.pane), pane: i.pane, session: i.session, window: i.window,
-    paneIndex: i.paneIndex};
+    paneIndex: i.paneIndex, tab: i.tab, sessionId: i.sessionId, sock: i.sock, ...i.peer};
 }
 
 function json(body, status = 200) {
@@ -137,10 +139,33 @@ function stream(onClose) {
   return {response: new Response(body, {headers: SSE_HEADERS}), send, close};
 }
 
+// Who may connect, by address: this machine, or the tailnet (100.64.0.0/10 and
+// fd7a:115c:a1e0::/48). `ccx host` listens on every interface, so this is the boundary
+export function tailnetOrLocal(addr) {
+  const a = addr.toLowerCase().replace(/^::ffff:/, "");
+  if (a === "::1" || a.startsWith("127.")) return true;
+  if (a.startsWith("fd7a:115c:a1e0:")) return true;
+  const m = a.match(/^100\.(\d+)\./);
+  return Boolean(m && Number(m[1]) >= 64 && Number(m[1]) < 128);
+}
+
+// The Host a request may name: an address, or this machine's own name, bare or as a
+// tailnet name. A page that rebinds a name of its own onto one of our addresses arrives
+// with that name, and that is what this refuses
+export function ownHost(host, port, self = HOSTNAME) {
+  const m = host.toLowerCase().match(/^(\[[0-9a-f:.]+\]|[^:]+):(\d+)$/);
+  if (!m || Number(m[2]) !== port) return false;
+  const name = m[1];
+  if (name === "localhost" || name === self || name.startsWith("[")) return true;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(name)) return true;
+  return name.startsWith(`${self}.`) && name.endsWith(".ts.net");
+}
+
 export class Server {
-  constructor(source, port = PORT) {
+  constructor(source, port = PORT, relay = null) {
     this.source = source;                 // () => {instances, net}
-    this.hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
+    this.port = port;
+    this.relay = relay;                   // a Relay, under `ccx host`
     this.lists = new Set();               // api/events clients
     this.sessions = new Set();            // api/s/<pid>/events clients
     this.lastList = "";
@@ -250,11 +275,12 @@ export class Server {
     return c.response;
   }
 
-  async handle(req) {
+  async handle(req, info = null) {
     const url = new URL(req.url);
     const path = url.pathname.replace(/\/+$/, "") || "/";
     const get = req.method === "GET", post = req.method === "POST";
-    if (!this.hosts.has(req.headers.get("host") ?? "")) return json({error: "bad host"}, 403);
+    if (info && !tailnetOrLocal(info.remoteAddr.hostname)) return json({error: "not tailnet"}, 403);
+    if (!ownHost(req.headers.get("host") ?? "", this.port)) return json({error: "bad host"}, 403);
     // the home-screen shortcut opens the page as a cross-site navigation, which reads nothing
     const open = get && path === "/" && req.headers.get("sec-fetch-mode") === "navigate";
     if (!open && req.headers.get("sec-fetch-site") === "cross-site") {
@@ -285,6 +311,11 @@ export class Server {
     }
     if (get && path === "/api/list") return json(this.listBody());
     if (get && path === "/api/events") return this.listEvents();
+    if (get && path === "/api/usage") return json({usage: readUsage()});
+    if (post && path === "/api/relay") {
+      if (!this.relay) return json({error: "no relay here; it runs under ccx host"}, 409);
+      return answer(await this.relay.deliver(await req.json().catch(() => ({}))));
+    }
     if (get && path === "/api/dirs") return json(dirsUnder(url.searchParams.get("prefix") ?? ""));
     if (post && path === "/api/spawn") {
       const body = await req.json().catch(() => ({}));
@@ -292,7 +323,7 @@ export class Server {
         mkdir: body.mkdir === true, name: String(body.name ?? "")});
       return r.error ? json(r, r.pane ? 502 : 409) : json(r);
     }
-    const m = path.match(/^\/api\/s\/(\d+)\/(log|events|type|pick|esc|screen)$/);
+    const m = path.match(/^\/api\/s\/(\d+)\/(log|events|type|pick|esc|screen|send)$/);
     if (!m) return json({error: "not found"}, 404);
     const [, pidText, verb] = m, pid = Number(pidText);
     // the pid has to be a claude in the current poll: a pane whose claude exited types
@@ -316,6 +347,10 @@ export class Server {
     }
     if (!post) return json({error: "not found"}, 404);
     const body = await req.json().catch(() => ({}));
+    if (verb === "send") {
+      if (typeof body.text !== "string" || !body.text.trim()) return json({error: "no text"}, 400);
+      return answer(await sendPeer(inst, body.text));
+    }
     if (verb === "type") {
       if (typeof body.text !== "string" || !body.text.trim()) return json({error: "no text"}, 400);
       return answer(await typeInto(inst, body.text));
@@ -331,11 +366,11 @@ export class Server {
 
 // Start serving. {server, stop} or {error}: a port already taken is reported, not thrown,
 // so the systray carries on without it.
-export function runServer({source, port = PORT, hostname = "127.0.0.1"}) {
-  const s = new Server(source, port);
+export function runServer({source, port = PORT, hostname = "127.0.0.1", relay = null}) {
+  const s = new Server(source, port, relay);
   let http;
   try {
-    http = Deno.serve({port, hostname, onListen() {}}, (req) => s.handle(req).catch((e) =>
+    http = Deno.serve({port, hostname, onListen() {}}, (req, info) => s.handle(req, info).catch((e) =>
       json({error: String(e?.message ?? e)}, 500)));
   } catch (e) {
     return {error: `${hostname}:${port}: ${e.message}`};
