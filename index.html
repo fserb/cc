@@ -436,7 +436,7 @@ function burnView() {
   const down = b.down?.length ? `<p class="meta err">${b.down.map(([host, e]) => esc(`${host}: ${e}`)).join("<br>")}</p>` : "";
   // the TOPN busiest projects of the window, the rest in one "others" row, last
   const group = (w) => {
-    const ps = w.projects.filter((x) => x.w > 0).sort((a, b) => b.w - a.w);
+    const ps = merged(w.projects).filter((x) => x.w > 0).sort((a, b) => b.w - a.w);
     const shown = ps.slice(0, TOPN), rest = ps.slice(TOPN);
     if (rest.length < 2) return shown.concat(rest).map((x, n) => ({...x, c: PCOL[n]}));
     const sum = (f) => rest.reduce((a, x) => a + (x[f] ?? 0), 0);
@@ -462,6 +462,28 @@ function burnView() {
     return `<details class="bp bd" data-k="${esc(k)}" ${qOpen.has(k) ? "open" : ""}><summary><span class="nm">${esc(label)}</span><span class="bb">${segs}</span><b>${d.used == null ? "" : fmtQ(d.used)}</b></summary>${list(d, k)}</details>`;
   }).join("");
   return `${tabs}${view}<h3 class="qh">by day</h3>${rows}<p class="meta">A bar is the day's weighted tokens; the % what the usage log added that day; tap a day for its projects. ↻ the weekly reset.</p>${down}`;
+}
+// a project's name as shown: a path's last part ("~/prj/bank" -> "bank"); /tmp dirs -> "tmp",
+// anything in .dotfiles or .claude -> "dotfiles" or "claude", "~/" -> "home", a dated dir -> its parent
+function pname(p) {
+  if (/^(\/private)?\/tmp\//.test(p)) return "tmp";
+  if (p.includes(".dotfiles")) return "dotfiles";
+  if (p.includes(".claude")) return "claude";
+  const parts = p.split("/").filter((x) => x && x !== "~");
+  if (!parts.length) return "home";
+  const last = /^\d/.test(parts.at(-1)) && parts.length > 1 ? parts.at(-2) : parts.at(-1);
+  return last.replace(/^\./, "");
+}
+// projects with the same shown name become one row (e.g. "ccx" and "~/prj/ccx")
+function merged(projects) {
+  const by = new Map();
+  for (const x of projects) {
+    const n = pname(x.p), m = by.get(n);
+    if (!m) { by.set(n, {...x, p: n}); continue; }
+    for (const f of ["w", "q", "share"]) m[f] = (m[f] ?? 0) + (x[f] ?? 0);
+    m.sessions = m.sessions.concat(x.sessions).sort((a, b) => b.w - a.w);
+  }
+  return [...by.values()];
 }
 const fmtQ = (q) => q == null ? "" : q < 0.05 ? "<0.1%" : `${q < 10 ? q.toFixed(1) : Math.round(q)}%`;
 document.addEventListener("toggle", (e) => { const k = e.target.dataset?.k; if (k) e.target.open ? qOpen.add(k) : qOpen.delete(k); }, true);
