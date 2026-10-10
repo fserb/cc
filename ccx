@@ -924,18 +924,6 @@ async function cmdNew(dir, ...words) {
     }
     console.log(`started ${host}:${r.pid} in ${host}:${rest}, ` +
       (r.after ? `tmux window after ${r.after}` : `tmux pane ${r.pane}`));
-    // then its window, as a local new opens one; the host's listing polls every 1.5s
-    for (let n = 0; n < 20; n++) {
-      const {instances} = await discoverAll(new StateClock());
-      const i = instances.find((i) => i.host === host && i.pid === r.pid);
-      if (i) {
-        const err = await jumpRemote(i);
-        if (err) console.error(`new: ${err}`);
-        return;
-      }
-      await new Promise((ok) => setTimeout(ok, 500));
-    }
-    console.error(`new: ${host}:${r.pid} never showed in its host's listing; not focused`);
     return;
   }
   let path = expandDir(dir);
@@ -1094,6 +1082,9 @@ function resolveTarget(instances, target, self = 0) {
   const colon = target.indexOf(":");
   if (colon > 0 && HOSTS.includes(target.slice(0, colon))) {
     const host = target.slice(0, colon) === SELF ? "" : target.slice(0, colon);
+    // a bare pid below means a local one, and a pid here is that host's
+    const pid = target.slice(colon + 1);
+    if (/^\d+$/.test(pid)) return instances.filter((i) => i.host === host && i.pid === Number(pid));
     return resolveTarget(instances.filter((i) => i.host === host), target.slice(colon + 1),
       self);
   }
@@ -1249,7 +1240,7 @@ const HELP = [
   ["  doctor", "what resolves, and the kitty match it would use"],
   ["  focus <target>", "jump to one instance without the UI, on any host"],
   ["  attach host:<session> [dir]", "focus a tmux session on another host, made in dir if missing"],
-  ["  new [host:]<dir> [name...]", "a claude in dir: beside one already there, else a kitty window; focused"],
+  ["  new [host:]<dir> [name...]", "a claude in dir: beside one already there, else a kitty window"],
   ["  delete [host:]<name|pid>", "end one instance and close its tmux pane"],
   ["  send <target> <message...>", "a chat message to one or more instances"],
   ["  user <target> <text...>", "typed into an instance as its user, /commands included"],
