@@ -71,6 +71,15 @@
   .meter { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin: 0.4rem 0 1rem; } .meter i { display: block; height: 100%; }
   .h { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 1.4rem 0 0.4rem; }
   .rows { list-style: none; padding: 0; margin: 0; } .rows li { display: flex; gap: 0.8rem; align-items: baseline; padding: 0.45rem 0; border-bottom: 1px solid var(--line); } .rows li small { margin-left: auto; color: var(--muted); white-space: nowrap; }
+  .tabs { display: flex; gap: 0.3rem; margin: 1.4rem 0 0.6rem; } .tabs button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 999px; padding: 0.25rem 0.9rem; cursor: pointer; } .tabs button[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .bp summary, .bs { display: grid; grid-template-columns: minmax(0, 9rem) minmax(0, 1fr) 3.4rem; gap: 0.7rem; align-items: center; padding: 0.35rem 0; font-variant-numeric: tabular-nums; }
+  .bp summary { list-style: none; border-bottom: 1px solid var(--line); } .bp summary::-webkit-details-marker { display: none; }
+  .bp summary .nm::before { content: "▸ "; color: var(--muted); } .bp[open] > summary .nm::before { content: "▾ "; }
+  .bp .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .bp b { text-align: right; font-weight: 600; } .bs b { font-weight: 400; color: var(--muted); }
+  .bs { padding-left: 1rem; font-size: 0.88rem; } .bs small { color: var(--muted); }
+  .bb { display: flex; height: 10px; border-radius: 3px; background: var(--line); overflow: hidden; } .bb i { display: block; height: 100%; background: var(--accent); } .bs .bb i { opacity: 0.55; }
+  .bp .bp { margin-left: 1rem; } .bp .bp summary { font-size: 0.9rem; }
+  .legend { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; font-size: 0.8rem; color: var(--muted); margin: 0.2rem 0 0.6rem; } .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 0.3rem; }
   .rows li.x span { text-decoration: line-through; color: var(--muted); }
   .add { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 0.35rem 0; text-align: center; font-size: 1.3rem; line-height: 1.2; color: var(--muted); border: 1px dashed var(--gray); border-radius: 6px; cursor: pointer; }
   .add:hover, .add[aria-current=true] { color: var(--accent); border-color: var(--accent); background: var(--cur); }
@@ -112,7 +121,7 @@ const CCX = "../ccx/api";
 const BLOG = "../blog/";
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
-const S = {rows: [], usage: null, asks: [], posts: [], todo: [], ideas: [], log: [], screens: {}};
+const S = {rows: [], usage: null, burn: null, asks: [], posts: [], todo: [], ideas: [], log: [], screens: {}};
 // the open item (and the blog's filter) live in the URL, so a refresh reopens them: #blog/arc, #marx.1234
 const [hashCur, hashTab] = decodeURIComponent(location.hash.slice(1)).split("/");
 let cur = hashCur || (innerWidth > 760 ? "nadya" : null);
@@ -154,7 +163,8 @@ const post = (url, body) => json(url, {method: "POST", headers: {"content-type":
 const nadyaRow = () => S.rows.find((r) => r.name === "nadya" && r.pid.startsWith("nadya."));
 
 // ---------- data
-async function loadUsage() { S.usage = (await json(`${CCX}/usage`).catch(() => null))?.usage ?? S.usage; draw(); }
+async function loadUsage() { S.usage = (await json(`${CCX}/usage`).catch(() => null))?.usage ?? S.usage; draw(); if (cur === "quota") loadBurn(); }
+async function loadBurn() { const b = await json(`${CCX}/burn`).catch((e) => ({error: e.message})); if (!b.error || !S.burn) S.burn = b; drawView(true); }
 async function loadAsks() { S.asks = (await json(`${BLOG}asks.json`, {cache: "no-cache"}).catch(() => null))?.asks ?? S.asks; draw(); }
 async function loadBlog() {
   const html = await fetch(BLOG, {cache: "no-cache"}).then((r) => r.text()).catch(() => "");
@@ -204,14 +214,10 @@ function follow(pid) {
 function asksFor(name) { return S.asks.filter((a) => a.from === name && !sent.has(a.id)); }
 function hasDialog(r) { return r.state === "wait" && (r.asking || (stream?.pid === r.pid && S.screens[r.pid]?.dialog)); }
 function dueTodos() { const soon = Date.now() + 3600e3; return S.todo.filter((t) => t.due && t.due.getTime() <= soon && !sent.has("todo:" + t.full)); }
+// the pace is ccx's (api/usage, every host's log merged), so the page and `ccx usage` agree
 function pace() {
-  const u = S.usage; if (!u?.history?.length) return null;
-  const now = u.at, h = u.history.filter((x) => x.resetsAt === u.resetsAt);
-  const past = h.findLast((x) => x.at <= now - 6 * 3600e3) ?? h[0];
-  const rate = (u.used - past.used) / Math.max(1, (now - past.at) / 3600e3);  // % per hour
-  const left = (100 - u.used) / Math.max(1, (u.resetsAt - now) / 3600e3);
-  const outAt = rate > 0 ? now + (100 - u.used) / rate * 3600e3 : Infinity;
-  return {x: left > 0 ? rate / left : 9, out: outAt < u.resetsAt ? new Date(outAt) : null, rate};
+  const p = S.usage?.pace; if (p?.ratio == null) return null;
+  return {x: p.ratio, out: p.out ? new Date(p.out) : null};
 }
 const day = (d) => d.toLocaleString("en-CA", {weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false});
 
@@ -376,6 +382,9 @@ document.addEventListener("submit", async (e) => {
   }
 });
 
+let qTab = "this";
+const qOpen = new Set();  // the open rows of the quota view, kept across redraws
+const PCOL = ["#0b7bd3", "#2f9e44", "#f59f00", "#ae3ec9", "#1098ad", "#e8590c"];
 function quotaView() {
   const u = S.usage, p = pace();
   if (!u) return `<article><h1>quota</h1><p class="meta">no usage data</p></article>`;
@@ -385,8 +394,41 @@ function quotaView() {
   return `<article><h1>quota</h1><div class="meta">${p ? `${p.x.toFixed(1)}x the pace that lasts to the reset · ` : ""}${p?.out ? `<b class="err">runs out ${day(p.out)}</b> · ` : ""}reset ${day(new Date(u.resetsAt))}</div>
     <div class="big" style="color:${p?.out ? "var(--red)" : "inherit"}">${u.used}%</div><div class="meter"><i style="width:${u.used}%;background:${p?.out ? "var(--red)" : "var(--accent)"}"></i></div>
     <svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;display:block" aria-label="quota used this week"><line x1="0" y1="${H}" x2="${W}" y2="0" stroke="var(--line)" stroke-dasharray="4 4"/><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>
-    <p class="meta">The dashed line is the even pace from the start of the week to the reset. Per-session burn isn't in this page yet (./task burn runs on the host).</p></article>`;
+    <p class="meta">The dashed line is the even pace from the start of the week to the reset.</p>${burnView()}</article>`;
 }
+// who used it (ccx api/burn): last week | this week | days, a row per project, its sessions on tap.
+// A % is of the limit: a project's share of the window's weighted tokens times what the log added
+// over it; a window with no log shows the share of its tokens instead, starred
+function burnView() {
+  const b = S.burn;
+  const tabs = `<div class="tabs" role="group" aria-label="window">${[["last", "last week"], ["this", "this week"], ["days", "days"]].map(([k, l]) => `<button data-qt="${k}" aria-pressed="${qTab === k}">${l}</button>`).join("")}</div>`;
+  if (!b) return `${tabs}<p class="meta">loading…</p>`;
+  if (b.error) return `${tabs}<p class="meta err">${esc(b.error)}</p>`;
+  const top = b.weeks[1].projects.concat(b.weeks[0].projects).map((x) => x.p).filter((x, n, a) => a.indexOf(x) === n).slice(0, PCOL.length);
+  const color = (name) => PCOL[top.indexOf(name)] ?? "var(--gray)";
+  const val = (w, x) => w.used == null ? `${fmtQ(x.share)}*` : fmtQ(x.q);
+  const note = (w) => w.used == null ? `<p class="meta">* no usage log for this window: each one's share of its tokens, not of the limit</p>` : "";
+  const down = b.down?.length ? `<p class="meta err">${b.down.map(([host, e]) => esc(`${host}: ${e}`)).join("<br>")}</p>` : "";
+  const list = (w, key) => {
+    const max = Math.max(1, ...w.projects.map((x) => x.w));
+    const shown = w.projects.filter((x) => x.w >= max / 500);
+    return shown.map((x) => { const k = `${key}/${x.p}`; return `<details class="bp" data-k="${esc(k)}" ${qOpen.has(k) ? "open" : ""}><summary><span class="nm">${esc(x.p)}</span><span class="bb"><i style="width:${(x.w / max * 100).toFixed(1)}%;background:${color(x.p)}"></i></span><b>${val(w, x)}</b></summary>${x.sessions.filter((s) => s.w >= max / 1000).map((s) => `<div class="bs"><span class="nm">${esc(s.n)} <small>${esc(s.host ?? "")}</small></span><span class="bb"><i style="width:${(s.w / max * 100).toFixed(1)}%;background:${color(x.p)}"></i></span><b>${val(w, s)}</b></div>`).join("")}</details>`; }).join("") || `<p class="meta">nothing used</p>`;
+  };
+  const head = (w) => `<p class="meta">${esc(new Date(w.from).toLocaleString("en-CA", {weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false}))} – ${esc(new Date(w.to).toLocaleString("en-CA", {weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false}))} · ${w.used == null ? "no usage log" : `${fmtQ(w.used)} of the limit`}</p>`;
+  if (qTab !== "days") { const w = b.weeks[qTab === "last" ? 0 : 1]; return `${tabs}${head(w)}${list(w, qTab)}${note(w)}${down}`; }
+  // days: newest first, a stacked bar each (widths by weighted tokens, the busiest day full), its projects on tap
+  const days = [...b.days].reverse(), max = Math.max(1, ...days.map((d) => d.w));
+  const legend = `<div class="legend">${top.map((x) => `<span><i style="background:${color(x)}"></i>${esc(x)}</span>`).join("")}<span><i style="background:var(--gray)"></i>other</span></div>`;
+  const rows = days.map((d) => {
+    const k = `days/${d.from}`;
+    const segs = d.projects.map((x) => `<i style="width:${(x.w / max * 100).toFixed(2)}%;background:${color(x.p)}" title="${esc(x.p)}"></i>`).join("");
+    const label = `${d.label} ${new Date(d.from).getDate()}${d.from === b.weeks[1].from ? " ↻" : ""}`;
+    return `<details class="bp" data-k="${esc(k)}" ${qOpen.has(k) ? "open" : ""}><summary><span class="nm">${esc(label)}</span><span class="bb">${segs}</span><b>${d.used == null ? "" : fmtQ(d.used)}</b></summary>${list(d, k)}</details>`;
+  }).join("");
+  return `${tabs}${legend}${rows}<p class="meta">A bar is the day's weighted tokens; the % what the usage log added that day. ↻ the weekly reset.</p>${down}`;
+}
+const fmtQ = (q) => q == null ? "" : q < 0.05 ? "<0.1%" : `${q < 10 ? q.toFixed(1) : Math.round(q)}%`;
+document.addEventListener("toggle", (e) => { const k = e.target.dataset?.k; if (k) e.target.open ? qOpen.add(k) : qOpen.delete(k); }, true);
 
 // ---------- actions
 async function toNadya(text) {
@@ -415,7 +457,8 @@ $("#say").onsubmit = async (e) => {
   catch (err) { alert(`Not sent: ${err.message}`); }
 };
 document.addEventListener("click", async (e) => {
-  if (e.target.closest("#qbtn")) { cur = "quota"; push(); open(); return; }
+  if (e.target.closest("#qbtn")) { cur = "quota"; push(); open(); loadBurn(); return; }
+  const qt = e.target.closest("[data-qt]"); if (qt) { qTab = qt.dataset.qt; drawView(true); return; }
   if (e.target.closest("#add")) { cur = "new"; push(); open(); dirHints($("#new")); return; }
   if (e.target.closest("#back, #title")) { if (history.state?.cc) history.back(); else document.body.classList.remove("view"); return; }
   const row = e.target.closest(".it"); if (row) { cur = row.dataset.id; push(); if (cur === "blog") localStorage.cc_blog_seen = Date.now(); if (cur === "todo") loadTodo(); open(); if ((cur === "nadya" || cur.includes(".")) && matchMedia("(hover: hover) and (pointer: fine)").matches) $("#say").q.focus(); return; }
