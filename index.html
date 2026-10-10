@@ -92,7 +92,6 @@
   .doc p, .doc ul, .doc ol { margin: 0 0 0.8rem; } .doc ul, .doc ol { padding-left: 1.4rem; } .doc li { margin: 0.2rem 0; } .doc li > ul, .doc li > ol { margin: 0.2rem 0 0; }
   .doc a { color: var(--accent); } .doc :not(pre) > code { font: 0.88em var(--mono); background: var(--hover); padding: 0.05em 0.25em; border-radius: 3px; }
   .tbl { overflow-x: auto; margin: 0 0 1rem; } .tbl table { border-collapse: collapse; font-size: 0.86rem; } .tbl th, .tbl td { border: 1px solid var(--line); padding: 0.35rem 0.55rem; text-align: left; vertical-align: top; min-width: 7rem; } .tbl th { background: var(--track); }
-  .rows li.other span { color: var(--muted); }
   .rows li.x span { text-decoration: line-through; color: var(--muted); }
   .add { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 0.35rem 0; text-align: center; font-size: 1.3rem; line-height: 1.2; color: var(--muted); border: 1px dashed var(--gray); border-radius: 6px; cursor: pointer; }
   .add:hover, .add[aria-current=true] { color: var(--accent); border-color: var(--accent); background: var(--cur); }
@@ -239,12 +238,12 @@ async function loadTodo() {
   draw();
 }
 async function loadDocs(dir) {
-  // every .md in files/<dir>/ (caddy's listing): # title, Status: line, Kind: other (projects not coordinated)
+  // every .md in files/<dir>/ (caddy's listing): # title, Status: line
   const list = await fetch(`files/${dir}/`, {cache: "no-cache"}).then((r) => r.ok ? r.text() : "").catch(() => "");
   const files = [...new Set([...list.matchAll(/href="(?:\.\/)?([\w.-]+\.md)"/g)].map((m) => m[1]))];
   return Promise.all(files.map(async (f) => {
     const t = await fetch(`files/${dir}/${f}`, {cache: "no-cache"}).then((r) => r.text()).catch(() => "");
-    return {file: f, text: t, title: t.match(/^# (.+)$/m)?.[1] ?? f, status: t.match(/^Status: ([^.(]+)/m)?.[1]?.trim() ?? "", other: /^Kind: other/mi.test(t)};
+    return {file: f, text: t, title: t.match(/^# (.+)$/m)?.[1] ?? f, status: t.match(/^Status: ([^.(]+)/m)?.[1]?.trim() ?? ""};
   }));
 }
 function listen() {
@@ -295,8 +294,9 @@ function items() {
   it.push({id: "blog", d: fresh ? "green" : "", unread: fresh, title: "blog", sub: top?.title ?? "", t: fresh ? `${fresh} new` : top?.time?.slice(11) ?? ""});
   const due = dueTodos();
   it.push({id: "plan", d: due.length ? "blue" : "", hot: due.length, title: "plan", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : `${S.todo.length} todo · ${S.ideas.length} ideas`, t: ""});
-  const run = projects().filter((x) => x.running).length;
-  it.push({id: "projects", d: run ? "green" : "", title: "projects", sub: `${run ? `${run} running · ` : ""}${S.projects.length} projects`, t: ""});
+  const ps = projects(), run = ps.filter((x) => x.running).length;
+  const counts = Object.entries(Object.groupBy(ps.filter((x) => x.state !== "done"), (x) => x.state)).map(([k, v]) => `${v.length} ${k}`);
+  it.push({id: "projects", d: run ? "green" : "", title: "projects", sub: counts.join(" · ") || `${ps.length} done`, t: ""});
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, asks: asksFor(r.name), dialog: hasDialog(r)}));
   ss.sort((a, b) => (b.dialog ? 2 : b.asks.length ? 1 : 0) - (a.dialog ? 2 : a.asks.length ? 1 : 0));
   for (const {r, asks, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "red" : asks.length ? "blue" : {busy: "green", wait: "", hold: "yel", free: "gray"}[r.state] ?? "gray", hot: dialog || asks.length,
@@ -409,16 +409,19 @@ function todoView() {
     <h2 class="h">ideas</h2><ul class="rows">${S.ideas.map((x) => `<li class="go" data-go="idea/${esc(x.file)}"><span>${esc(x.title)}</span><small>${esc(x.status)}</small></li>`).join("")}</ul></article>`;
 }
 function projectsView() {
-  return `<article><h1>projects</h1><ul class="rows">${projects().map((x) => `<li class="go${x.other ? " other" : ""}" data-go="project/${esc(x.file)}"><span>${esc(x.title)}</span><small>${x.running ? "running" : esc(x.status)}</small></li>`).join("") || "<li><span class=meta>none</span></li>"}</ul></article>`;
+  const row = (x) => `<li class="go" data-go="project/${esc(x.file)}"><span>${esc(x.title)}</span><small>${esc(x.state)}</small></li>`;
+  const ps = projects(), open = ps.filter((x) => x.state !== "done"), done = ps.filter((x) => x.state === "done");
+  return `<article><h1>projects</h1><ul class="rows">${open.map(row).join("") || "<li><span class=meta>none</span></li>"}</ul>${done.length ? `<details><summary class="h">done (${done.length})</summary><ul class="rows">${done.map(row).join("")}</ul></details>` : ""}</article>`;
 }
 const docParent = (c) => c.startsWith("project/") ? "projects" : "plan";
 function projects() {
-  // running (a live <stem>-co, or <last part>-co: arcade-switch -> switch-co), then stopped/paused, then the rest, then Kind: other
-  const live = new Set(S.rows.map((r) => r.name));
-  const rank = (x) => x.other ? 3 : x.running ? 0 : /^(stopped|paused)/i.test(x.status) ? 1 : 2;
+  // state: running (a live <stem>-co, or <last part>-co: arcade-switch -> switch-co), else the Status: line's first word
+  const live = new Set(S.rows.map((r) => r.name)), order = ["running", "paused", "todo"];
+  const rank = (x) => (order.indexOf(x.state) + 4) % 4 + (x.state === "done") * 4;  // running, paused, todo, other words, done
   return S.projects.map((x) => {
     const stem = x.file.replace(/\.md$/, "");
-    return {...x, running: live.has(`${stem}-co`) || live.has(`${stem.split("-").pop()}-co`)};
+    const running = live.has(`${stem}-co`) || live.has(`${stem.split("-").pop()}-co`);
+    return {...x, running, state: running ? "running" : x.status.split(/\s/)[0].toLowerCase()};
   }).sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title));
 }
 function docView(kind, file) {
