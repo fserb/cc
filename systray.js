@@ -9,14 +9,11 @@ import {HOME, MAC} from "./sh.js";
 import {discover, StateClock} from "./claudes.js";
 import {fuzzy, loadOf, NUMBERS, PALETTE, rank, stateOf} from "./view.js";
 import {jump} from "./jump.js";
-import {loadBell, play} from "./bell.js";
 import {iconPng} from "./icon.js";
 import {Online} from "./online.js";
 import {readUsage, usageLine} from "./usage.js";
 
-// present while the bell is off, so the choice outlives a restart and KeepAlive
-const MUTED = `${HOME}/.claude/ccx-mute`;
-const POLL = 1500;          // same cadence as the TUI, so the bell lands as promptly
+const POLL = 1500;          // same cadence as the TUI
 
 // macOS points, Wayland logical pixels and CSS pixels are close enough to the same size
 // that these numbers carry across the three.
@@ -43,15 +40,6 @@ const TOGGLE_GAP = 250;     // how long a close is remembered, so the click that
 // Module global: Carbon keeps a raw pointer, so a collected callback is a crash later, not
 // an error now.
 let HOTKEY_HANDLER = null;
-
-function exists(path) {
-  try {
-    Deno.statSync(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /* `fn` is SCHEDULED and never called in the handler, and that is the whole of what makes
  * the hotkey work rather than kill the app.
@@ -299,12 +287,11 @@ class Model {
     this.redraw = redraw;
     this.close = close;
     this.quit = quit;
-    this.muted = exists(MUTED);
   }
 
   // discover() is async, so the interval does not wait for the poll it started; the guard
   // drops the next tick rather than letting two land out of order and paint the older
-  // listing. This is the thing that runs all day, so it also owns the bell and the probe.
+  // listing. This is the thing that runs all day, so it also owns the probe.
   async poll() {
     this.net.tick();           // returns at once; a probe is due every 30s, or 5s once one
     this.usage = usageLine(readUsage());
@@ -315,7 +302,6 @@ class Model {
     } finally {
       this.polling = false;
     }
-    if (this.clock.woke.length && !this.muted) play();   // busy -> wait: a turn ended or a prompt is up
     this.refresh();
   }
 
@@ -663,7 +649,6 @@ export async function runSystray(argv = Deno.args) {
     console.error("the systray is the built app: ./task build, then ccx systray");
     return 1;
   }
-  await loadBell();          // play() is a no-op until this has run, and a poll cannot await
 
   let drawn = null;          // the ordered state list the icon last drew
   let sized = 0;             // the height the panel was last set to
@@ -689,9 +674,6 @@ export async function runSystray(argv = Deno.args) {
       {item: {id: "about", label: `ccx  ·  ${HOTKEY_NAME}`, enabled: false,
         accelerator: null, checked: false, tooltip: null}},
       {separator: null},
-      {item: {id: "bell", label: "Sound", enabled: true, accelerator: null,
-        checked: !model.muted, tooltip: null}},
-      {separator: null},
       {item: {id: "quit", label: "Quit", enabled: true, accelerator: null, checked: false,
         tooltip: null}},
     ]);
@@ -700,12 +682,7 @@ export async function runSystray(argv = Deno.args) {
   // the event's shape is undocumented in 2.9.7, so the id is taken from any of the three
   tray.onmenuclick = (e) => {
     const id = e?.detail?.id ?? e?.id ?? e;
-    if (id === "quit") return model.quit();
-    if (id !== "bell") return;
-    model.muted = !model.muted;
-    if (model.muted) Deno.writeTextFileSync(MUTED, "");
-    else Deno.removeSync(MUTED);
-    menu();
+    if (id === "quit") model.quit();
   };
 
   /* The panel is a window we own, shown, hidden and placed by hand. `tray.attachPanel` is

@@ -10,7 +10,6 @@ import {discover, fmtAge, sessionRecords, StateClock} from "./claudes.js";
 import {HOME, ON_EXIT, sh} from "./sh.js";
 import {fuzzy, loadOf, NUMBERS, PALETTE, rank, SORTS, stateOf} from "./view.js";
 import {jump, kittyWindowTitle, raiseTarget, tmuxWindowName, typeInto} from "./jump.js";
-import {loadBell, play, ringer, soundBytes} from "./bell.js";
 import {Online} from "./online.js";
 import {byDay, HISTORY, readUsage, usageLine, USAGE} from "./usage.js";
 import {fmtMem} from "./top.js";
@@ -424,7 +423,6 @@ async function reload() {
   } finally {
     polling = false;
   }
-  if (app.clock.woke.length) play();           // one sound per pass, not one per instance
   refresh();
 }
 
@@ -660,7 +658,6 @@ async function cmdUi() {
     console.error("ccx ps is a terminal app: try `ccx list` or `ccx --snapshot`");
     Deno.exit(2);
   }
-  await loadBell();                  // play() is a no-op until this runs, and a poll cannot await
   restores = [tmuxWindowName("ccx"), await kittyWindowTitle("ccx")];
   enter();
   for (const sig of ["SIGTERM", "SIGHUP"]) Deno.addSignalListener(sig, quit);
@@ -871,14 +868,11 @@ function cmdUsage() {
 }
 
 async function cmdDoctor() {
-  await loadBell();                  // soundBytes() is empty until the gzip has been read
   console.log(`TMUX=${Deno.env.get("TMUX") ?? "(none)"}  ` +
     `KITTY_WINDOW_ID=${Deno.env.get("KITTY_WINDOW_ID") ?? "(none)"}`);
   const pass = (await sh("tmux", "show", "-gv", "allow-passthrough")).trim();
   console.log(`tmux allow-passthrough: ${pass}`);
-  // the two per-platform pieces: a box that jumps but stays silent says which
-  console.log(`platform ${Deno.build.os}  bell ${ringer()}  ` +
-    `sound ${soundBytes().length}B of wav, straight from memory`);
+  console.log(`platform ${Deno.build.os}`);
   // one probe, awaited: doctor is the place to see the endpoint and what it answered, and
   // `from` is the only way to tell which file or var set it
   const net = new Online();

@@ -1,11 +1,10 @@
 // `deno test -A --ext=js ccx_test.js`. Nothing here touches live state: no discover(), no
 // tmux, no ~/.claude. The library is imported, the renderer is driven as a subprocess, and
-// the icon and the bell are pure.
+// the icon is pure.
 
 import {fmtAge, Instance, IS_CLAUDE, openSubscriptions, paneState, StateClock, summaryOf,
   waitsOn} from "./claudes.js";
 import {fuzzy, NUMBERS, PALETTE, rank, SORTS, STATE} from "./view.js";
-import {loadBell, soundBytes} from "./bell.js";
 import {iconDots, iconPng} from "./icon.js";
 import {baseFromSettings, Online, pickBase} from "./online.js";
 import {fmtMem, treeUsage} from "./top.js";
@@ -717,43 +716,6 @@ Deno.test("snapshot: offline is written beside the counter, and keeps the key hi
     ok(!(await snapshot("100x8", "plain"))[0].includes("offline"), "nothing when it is up");
   });
 
-// the bell
-
-Deno.test("bell: BOTTLE unpacks to the WAV the python built, byte for byte", async () => {
-  await loadBell();
-  const wav = soundBytes();
-  eq(wav.length, 17684, "44 bytes of RIFF header and 17640 of PCM");
-  const sum = [...new Uint8Array(await crypto.subtle.digest("SHA-256", wav))]
-    .map((b) => b.toString(16).padStart(2, "0")).join("");
-  eq(sum, "36d0609844e5a0f1c0381dc174e714344b29b4b9ee46bb85a27db52b39ccc521", "sha256");
-});
-
-Deno.test("bell: the hand-written RIFF header says mono 22050Hz 16-bit", async () => {
-  await loadBell();
-  const wav = soundBytes();
-  const text = new TextDecoder();
-  const view = new DataView(wav.buffer, wav.byteOffset, wav.byteLength);
-  eq(text.decode(wav.subarray(0, 4)), "RIFF", "the magic");
-  eq(view.getUint32(4, true), wav.length - 8, "the RIFF size counts everything after it");
-  eq(text.decode(wav.subarray(8, 16)), "WAVEfmt ", "the format chunk");
-  eq(view.getUint32(16, true), 16, "fmt chunk size");
-  eq(view.getUint16(20, true), 1, "PCM, uncompressed");
-  eq(view.getUint16(22, true), 1, "mono");
-  eq(view.getUint32(24, true), 22050, "sample rate");
-  eq(view.getUint32(28, true), 22050 * 2, "byte rate");
-  eq(view.getUint16(32, true), 2, "block align");
-  eq(view.getUint16(34, true), 16, "bits per sample");
-  eq(text.decode(wav.subarray(36, 40)), "data", "the data chunk");
-  eq(view.getUint32(40, true), 17640, "8820 samples, which is 0.40s at 22050Hz");
-});
-
-Deno.test("bell: loadBell is idempotent and the bytes are stable", async () => {
-  await loadBell();
-  const first = soundBytes();
-  await loadBell();
-  ok(soundBytes() === first, "the second call must not rebuild the buffer");
-});
-
 // the two version-coupled scrapers
 // a Claude Code screen and a Claude Code title, both undocumented and version-coupled:
 // a rename is not caught anywhere else
@@ -999,9 +961,9 @@ Deno.test("cursor: the SGR constants above are PALETTE and STATE, not copied hex
   eq([rgb(PALETTE.text), rgb(PALETTE.idle)], [TEXT, IDLE], "the two summary colors");
 });
 
-// the bell rule
-// StateClock.update() shells out to nothing, so the bell rule is testable without a live
-// discover(). Both UIs ring on `clock.woke.length`, one sound per pass, not per instance
+// the woke rule
+// StateClock.update() shells out to nothing, so the woke rule is testable without a live
+// discover()
 
 const inst = (pid, state, extra = {}) =>
   new Instance({pid, state, statusSince: 0, lastWrite: 0, ...extra});
