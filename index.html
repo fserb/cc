@@ -50,7 +50,7 @@
   .meta { color: var(--muted); margin-bottom: 1rem; font-size: 0.88rem; }
   article img, article video { max-width: 100%; height: auto; border-radius: 6px; display: block; margin-bottom: 1rem; }
   pre { background: var(--pre-bg); color: var(--pre-fg); padding: 0.8rem 1rem; border-radius: 6px; font: 12.5px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
-  .need { border-left: 4px solid var(--accent); background: var(--need); border-radius: 0 6px 6px 0; padding: 0.7rem 0.9rem; margin: 1rem 0; } .need.red { border-color: var(--red); background: var(--need-red); } .need p { margin: 0.2rem 0 0; }
+  .need { border-left: 4px solid var(--accent); background: var(--need); border-radius: 0 6px 6px 0; padding: 0.7rem 0.9rem; margin: 1rem 0; } .need.red { border-color: var(--red); background: var(--need-red); } .need p { margin: 0.2rem 0 0; white-space: pre-line; } .need p.suggest { color: var(--muted); }
   .opts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0 0; }
   .opts button { font: inherit; text-align: left; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: 6px; padding: 0.35rem 0.9rem; cursor: pointer; }
   .opts button:first-child { background: var(--accent); color: var(--on-accent); }
@@ -257,7 +257,7 @@ function draw() {
   // the bar: % used; the tick: where the even pace would be by now
   const even = u ? Math.min(100, Math.max(0, (u.at - (u.resetsAt - 7 * 86400e3)) / (7 * 86400e3) * 100)) : 0;
   const tip = u ? `quota ${u.used}% used${p ? `, ${p.x.toFixed(1)}x the pace that lasts to the reset` : ""}${p?.out ? `, runs out ${day(p.out)}` : ""}; reset ${day(new Date(u.resetsAt))}` : "no usage data";
-  $("#sum").innerHTML = `<button id="qbtn" class="${p?.out ? "out" : p?.x > 1 ? "hi" : ""}" title="${esc(tip)}" aria-label="${esc(tip)}"><span class="bar"><i style="width:${u?.used ?? 0}%"></i>${u ? `<s style="left:${even.toFixed(1)}%"></s>` : ""}</span><b>${u ? u.used + "%" : "?"}</b>${p ? `<em>${p.out ? "out " + day(p.out) : p.x.toFixed(1) + "x"}</em>` : ""}</button>`;
+  $("#sum").innerHTML = `<button id="qbtn" class="${p?.out ? "out" : p?.x > 1 ? "hi" : ""}" title="${esc(tip)}" aria-label="${esc(tip)}"><span class="bar"><i style="width:${u?.used ?? 0}%"></i>${u ? `<s style="left:${even.toFixed(1)}%"></s>` : ""}</span><b>${u ? u.used + "%" : "?"}</b>${p ? `<em>${p.x.toFixed(1)}x${p.out ? ` · out ${day(p.out)}` : ""}</em>` : ""}</button>`;
   if (["nadya", "todo", "quota"].includes(cur) || cur?.includes(".")) drawView(true);
 }
 
@@ -330,7 +330,7 @@ function nadyaView() {
   return `<article>${chat(n)}${dialogBox(n)}${nAsks.map(askBox).join("")}</article>`;
 }
 function askBox(a) {
-  return `<div class="need"><b>${esc(a.project)} · ${esc(a.from)} asks</b> <small class="meta">${esc(a.when)}</small><p>${esc(a.text)}</p>${sent.has(a.id) ? `<p class="done">✓ ${esc(sent.get(a.id))}</p>` : `<div class="opts" data-ask="${esc(a.id)}">${a.options.map((o) => `<button>${esc(o)}</button>`).join("")}</div>`}</div>`;
+  return `<div class="need"><b>${esc(a.project)} · ${esc(a.from)} asks</b> <small class="meta">${esc(a.when)}</small><p>${esc(a.text)}</p>${a.suggest ? `<p class="suggest">nadya suggests: ${esc(a.suggest)}</p>` : ""}${sent.has(a.id) ? `<p class="done">✓ ${esc(sent.get(a.id))}</p>` : `<div class="opts" data-ask="${esc(a.id)}">${a.options.map((o) => `<button>${esc(o)}</button>`).join("")}</div>`}</div>`;
 }
 function dialogBox(r) {
   const dg = r.state === "wait" && stream?.pid === r.pid ? S.screens[r.pid]?.dialog : null;
@@ -404,7 +404,7 @@ function quotaView() {
 }
 // who used it (ccx api/burn): last week | this week | days, a row per project, its sessions on tap.
 // A % is of the limit: a project's share of the window's weighted tokens times what the log added
-// over it; a window with no log shows the share of its tokens instead, starred
+// over it; a window with no log shows the share of its tokens instead
 function burnView() {
   const b = S.burn;
   const tabs = `<div class="tabs" role="group" aria-label="window">${[["last", "last week"], ["this", "this week"], ["days", "days"]].map(([k, l]) => `<button data-qt="${k}" aria-pressed="${qTab === k}">${l}</button>`).join("")}</div>`;
@@ -412,10 +412,9 @@ function burnView() {
   if (b.error) return `${tabs}<p class="meta err">${esc(b.error)}</p>`;
   const top = b.weeks[1].projects.concat(b.weeks[0].projects).map((x) => x.p).filter((x, n, a) => a.indexOf(x) === n).slice(0, PCOL.length);
   const color = (name) => PCOL[top.indexOf(name)] ?? "var(--gray)";
-  const val = (w, x) => w.used == null ? `${fmtQ(x.share)}*` : fmtQ(x.q);
-  const note = (w) => w.used == null ? `<p class="meta">* no usage log for this window: each one's share of its tokens, not of the limit</p>` : "";
+  const val = (w, x) => fmtQ(w.used == null ? x.share : x.q);
   const down = b.down?.length ? `<p class="meta err">${b.down.map(([host, e]) => esc(`${host}: ${e}`)).join("<br>")}</p>` : "";
-  // projects under MINQ (of the limit, or of the tokens when starred) go into one "others" row, last
+  // projects under MINQ (of the limit, or of the tokens with no log) go into one "others" row, last
   const group = (w) => {
     const v = (x) => (w.used == null ? x.share : x.q) ?? 0;
     const shown = w.projects.filter((x) => v(x) >= MINQ), rest = w.projects.filter((x) => v(x) < MINQ && x.w > 0);
@@ -429,8 +428,8 @@ function burnView() {
     const sub = (x) => x.others ? x.others.map((o) => ({n: o.p, w: o.w, q: o.q, share: o.share})) : x.sessions.filter((s) => s.w >= max / 1000);
     return group(w).map((x) => { const k = `${key}/${x.p}`; return `<details class="bp" data-k="${esc(k)}" ${qOpen.has(k) ? "open" : ""}><summary><span class="nm">${x.others ? `<i>others</i> <small>${x.others.length}</small>` : esc(x.p)}</span><span class="bb"><i style="width:${(x.w / max * 100).toFixed(1)}%;background:${pcol(x)}"></i></span><b>${val(w, x)}</b></summary>${sub(x).map((s) => `<div class="bs"><span class="nm">${esc(s.n)} <small>${esc(s.host ?? "")}</small></span><span class="bb"><i style="width:${(s.w / max * 100).toFixed(1)}%;background:${pcol(x)}"></i></span><b>${val(w, s)}</b></div>`).join("")}</details>`; }).join("") || `<p class="meta">nothing used</p>`;
   };
-  const head = (w) => `<p class="meta">${esc(new Date(w.from).toLocaleString("en-CA", {weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false}))} – ${esc(new Date(w.to).toLocaleString("en-CA", {weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false}))} · ${w.used == null ? "no usage log" : `${fmtQ(w.used)} of the limit`}</p>`;
-  if (qTab !== "days") { const w = b.weeks[qTab === "last" ? 0 : 1]; return `${tabs}${head(w)}${list(w, qTab)}${note(w)}${down}`; }
+  const head = (w) => `<p class="meta">${esc(new Date(w.from).toLocaleString("en-CA", {weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false}))} – ${esc(new Date(w.to).toLocaleString("en-CA", {weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false}))}${w.used == null ? "" : ` · ${fmtQ(w.used)} of the limit`}</p>`;
+  if (qTab !== "days") { const w = b.weeks[qTab === "last" ? 0 : 1]; return `${tabs}${head(w)}${list(w, qTab)}${down}`; }
   // days: newest first, a stacked bar each (widths by weighted tokens, the busiest day full), its projects on tap
   const days = [...b.days].reverse(), max = Math.max(1, ...days.map((d) => d.w));
   const legend = `<div class="legend">${top.map((x) => `<span><i style="background:${color(x)}"></i>${esc(x)}</span>`).join("")}<span><i style="background:var(--gray)"></i>others</span></div>`;
