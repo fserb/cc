@@ -92,6 +92,7 @@
   .doc p, .doc ul, .doc ol { margin: 0 0 0.8rem; } .doc ul, .doc ol { padding-left: 1.4rem; } .doc li { margin: 0.2rem 0; } .doc li > ul, .doc li > ol { margin: 0.2rem 0 0; }
   .doc a { color: var(--accent); } .doc :not(pre) > code { font: 0.88em var(--mono); background: var(--hover); padding: 0.05em 0.25em; border-radius: 3px; }
   .tbl { overflow-x: auto; margin: 0 0 1rem; } .tbl table { border-collapse: collapse; font-size: 0.86rem; } .tbl th, .tbl td { border: 1px solid var(--line); padding: 0.35rem 0.55rem; text-align: left; vertical-align: top; min-width: 7rem; } .tbl th { background: var(--track); }
+  .rows li.other span { color: var(--muted); }
   .rows li.x span { text-decoration: line-through; color: var(--muted); }
   .add { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 0.35rem 0; text-align: center; font-size: 1.3rem; line-height: 1.2; color: var(--muted); border: 1px dashed var(--gray); border-radius: 6px; cursor: pointer; }
   .add:hover, .add[aria-current=true] { color: var(--accent); border-color: var(--accent); background: var(--cur); }
@@ -128,17 +129,18 @@
 // A static page (no box): everything it shows comes from these, all same origin:
 //   ../ccx/api/...        sessions on every host: list + events (SSE), log, screen, pick, type
 //   ../blog/              the blog (its #posts are inserted here), asks.json, POST answer
-//   files/                todo.md, ideas/, research/: links to ~/nadya (caddy lists ideas/)
+//   files/                todo.md, ideas/, projects/, research/: links to ~/nadya (caddy lists the dirs)
 const CCX = "../ccx/api";
 const BLOG = "../blog/";
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
-const S = {rows: [], usage: null, burn: null, asks: [], posts: [], todo: [], ideas: [], log: [], screens: {}};
+const S = {rows: [], usage: null, burn: null, asks: [], posts: [], todo: [], ideas: [], projects: [], log: [], screens: {}};
 // the open item lives in the URL, so a refresh reopens it: #blog, #marx.1234 (an old #blog/arc opens the blog)
 const hash = decodeURIComponent(location.hash.slice(1));
-const hashCur = hash.startsWith("idea/") ? hash : hash.split("/")[0];
+const isDoc = (c) => /^(idea|project)\//.test(c ?? "");  // idea/<file>, project/<file>: opened from plan
+const hashCur = isDoc(hash) ? hash : hash.split("/")[0];
 let cur = hashCur || (innerWidth > 760 ? "nadya" : null);
-const isPid = (c) => c?.includes(".") && !c.startsWith("idea/");  // marx.1234; an idea is idea/<file>
+const isPid = (c) => c?.includes(".") && !isDoc(c);  // marx.1234
 function setHash() { if (cur) history.replaceState(history.state, "", `#${cur}`); }
 const sent = new Map();  // ask id / item -> what was sent, for "✓" lines
 
@@ -233,13 +235,17 @@ async function loadTodo() {
     const due = date ? new Date(`${date}T${time ?? "09:00"}`) : null;
     return {mark, date, time, due, text: rest.split(/\. |\(user/)[0].trim(), full: rest};
   }).filter((t) => t.mark !== "x");
-  const list = await fetch("files/ideas/", {cache: "no-cache"}).then((r) => r.ok ? r.text() : "").catch(() => "");
-  const files = [...new Set([...list.matchAll(/href="(?:\.\/)?([\w.-]+\.md)"/g)].map((m) => m[1]))];
-  S.ideas = await Promise.all(files.map(async (f) => {
-    const t = await fetch(`files/ideas/${f}`, {cache: "no-cache"}).then((r) => r.text()).catch(() => "");
-    return {file: f, text: t, title: t.match(/^# (.+)$/m)?.[1] ?? f, status: t.match(/^Status: ([^.(]+)/m)?.[1]?.trim() ?? ""};
-  }));
+  [S.ideas, S.projects] = await Promise.all([loadDocs("ideas"), loadDocs("projects")]);
   draw();
+}
+async function loadDocs(dir) {
+  // every .md in files/<dir>/ (caddy's listing): # title, Status: line, Kind: other (projects not coordinated)
+  const list = await fetch(`files/${dir}/`, {cache: "no-cache"}).then((r) => r.ok ? r.text() : "").catch(() => "");
+  const files = [...new Set([...list.matchAll(/href="(?:\.\/)?([\w.-]+\.md)"/g)].map((m) => m[1]))];
+  return Promise.all(files.map(async (f) => {
+    const t = await fetch(`files/${dir}/${f}`, {cache: "no-cache"}).then((r) => r.text()).catch(() => "");
+    return {file: f, text: t, title: t.match(/^# (.+)$/m)?.[1] ?? f, status: t.match(/^Status: ([^.(]+)/m)?.[1]?.trim() ?? "", other: /^Kind: other/mi.test(t)};
+  }));
 }
 function listen() {
   const es = new EventSource(`${CCX}/events`);
@@ -288,7 +294,7 @@ function items() {
   const fresh = S.posts.filter((x) => Date.parse(x.time) > seen).length;
   it.push({id: "blog", d: fresh ? "green" : "", unread: fresh, title: "blog", sub: top?.title ?? "", t: fresh ? `${fresh} new` : top?.time?.slice(11) ?? ""});
   const due = dueTodos();
-  it.push({id: "plan", d: due.length ? "blue" : "", hot: due.length, title: "plan", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : `${S.todo.length} todo · ${S.ideas.length} ideas`, t: ""});
+  it.push({id: "plan", d: due.length ? "blue" : "", hot: due.length, title: "plan", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : `${S.projects.length} projects · ${S.todo.length} todo · ${S.ideas.length} ideas`, t: ""});
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, asks: asksFor(r.name), dialog: hasDialog(r)}));
   ss.sort((a, b) => (b.dialog ? 2 : b.asks.length ? 1 : 0) - (a.dialog ? 2 : a.asks.length ? 1 : 0));
   for (const {r, asks, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "red" : asks.length ? "blue" : {busy: "green", wait: "", hold: "yel", free: "gray"}[r.state] ?? "gray", hot: dialog || asks.length,
@@ -300,7 +306,7 @@ function draw() {
   let sec = null, html = "";
   for (const i of all) {
     if ((i.sec ?? "") !== sec) { sec = i.sec ?? ""; html += sec ? `<div class="sec">${sec}</div>` : `<div style="height:.4rem"></div>`; }
-    html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""}" data-id="${esc(i.id)}" aria-current="${i.id === (cur?.startsWith("idea/") ? "plan" : cur)}"><span class="d ${i.d}"></span><span class="tx"><div>${esc(i.title)}</div><small>${esc(i.sub)}</small></span><time>${esc(i.t)}</time></div>`;
+    html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""}" data-id="${esc(i.id)}" aria-current="${i.id === (isDoc(cur) ? "plan" : cur)}"><span class="d ${i.d}"></span><span class="tx"><div>${esc(i.title)}</div><small>${esc(i.sub)}</small></span><time>${esc(i.t)}</time></div>`;
   }
   if (S.offline) html += `<p class="meta" style="padding:0 1.1rem">${esc(S.offline)}</p>`;
   html += `<div class="addbar"><button class="add" id="add" aria-label="new session" title="start a new claude session" aria-current="${cur === "new"}">+</button></div>`;
@@ -340,7 +346,7 @@ function drawView(soft) {
   else if (!cur || cur === "nadya") html = nadyaView();
   else if (cur === "blog") html = `<iframe src="${BLOG}" title="blog"></iframe>`;
   else if (cur === "plan") html = todoView();
-  else if (cur.startsWith("idea/")) html = ideaView(cur.slice(5));
+  else if (isDoc(cur)) html = docView(...cur.split("/"));
   else if (cur === "new") html = newView();
   else if (i?.r) { html = sessionView(i.r); ph = `Message ${i.r.name}`; }
   else html = `<article><p class="meta">gone</p></article>`;
@@ -396,12 +402,22 @@ function sessionView(r) {
 function todoView() {
   const due = dueTodos();
   return `<article><h1>plan</h1>${due.map((t) => `<div class="need"><b>${esc(t.text)}</b><p>due ${esc(t.date)} ${esc(t.time ?? "")}</p>${sent.has("todo:" + t.full) ? `<p class="done">✓ ${esc(sent.get("todo:" + t.full))}</p>` : `<div class="opts" data-todo="${esc(t.full)}"><button>done</button><button>snooze 1 h</button></div>`}</div>`).join("")}
+    <h2 class="h">projects</h2><ul class="rows">${projects().map((x) => `<li class="go${x.other ? " other" : ""}" data-go="project/${esc(x.file)}"><span>${esc(x.title)}</span><small>${x.running ? "running" : esc(x.status)}</small></li>`).join("") || "<li><span class=meta>none</span></li>"}</ul>
     <h2 class="h">todo</h2><ul class="rows">${S.todo.map((t) => `<li class="${t.mark === "!" ? "x" : ""}"><span>${esc(t.text)}</span><small>${t.date ? `${t.date}${t.time ? " " + t.time : ""}` : "note"}${t.mark === "!" ? " · reminded" : ""}</small></li>`).join("") || "<li><span class=meta>nothing</span></li>"}</ul>
     <h2 class="h">ideas</h2><ul class="rows">${S.ideas.map((x) => `<li class="go" data-go="idea/${esc(x.file)}"><span>${esc(x.title)}</span><small>${esc(x.status)}</small></li>`).join("")}</ul></article>`;
 }
-function ideaView(file) {
-  const x = S.ideas.find((y) => y.file === file);
-  return `<article class="doc"><p class="meta"><a href="#plan" data-go="plan">← plan</a> · ${esc(file)}</p>${x ? md(x.text, true) : `<p class="meta">${S.ideas.length ? "no such idea" : "loading…"}</p>`}</article>`;
+function projects() {
+  // running (a live <stem>-co, or <last part>-co: arcade-switch -> switch-co), then stopped/paused, then the rest, then Kind: other
+  const live = new Set(S.rows.map((r) => r.name));
+  const rank = (x) => x.other ? 3 : x.running ? 0 : /^(stopped|paused)/i.test(x.status) ? 1 : 2;
+  return S.projects.map((x) => {
+    const stem = x.file.replace(/\.md$/, "");
+    return {...x, running: live.has(`${stem}-co`) || live.has(`${stem.split("-").pop()}-co`)};
+  }).sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title));
+}
+function docView(kind, file) {
+  const all = kind === "idea" ? S.ideas : S.projects, x = all.find((y) => y.file === file);
+  return `<article class="doc"><p class="meta"><a href="#plan" data-go="plan">← plan</a> · ${esc(file)}</p>${x ? md(x.text, true) : `<p class="meta">${all.length ? `no such ${kind}` : "loading…"}</p>`}</article>`;
 }
 const HOSTS = ["nadya", "marx"];
 function newView() {
@@ -583,7 +599,7 @@ document.addEventListener("click", async (e) => {
   if (e.target.closest("#add")) { cur = "new"; push(); open(); dirHints($("#new")); return; }
   if (e.target.closest("#back, #title")) { if (history.state?.cc) history.back(); else document.body.classList.remove("view"); return; }
   const row = e.target.closest(".it"); if (row) { cur = row.dataset.id; push(); if (cur === "blog") localStorage.cc_blog_seen = Date.now(); if (cur === "plan") loadTodo(); open(); if ((cur === "nadya" || cur.includes(".")) && matchMedia("(hover: hover) and (pointer: fine)").matches) $("#say").q.focus(); return; }
-  const go = e.target.closest("[data-go]"); if (go) { e.preventDefault(); cur = go.dataset.go; push(cur.startsWith("idea/")); if (cur === "plan") loadTodo(); open(); return; }
+  const go = e.target.closest("[data-go]"); if (go) { e.preventDefault(); cur = go.dataset.go; push(isDoc(cur)); if (cur === "plan") loadTodo(); open(); return; }
   const b = e.target.closest(".opts button"); if (!b) return;
   const box = b.parentElement; [...box.children].forEach((x) => x.disabled = true);
   try {
