@@ -42,7 +42,7 @@ export class Instance {
 
   get shortPath() {
     const path = this.path ? this.path.replace(HOME, "~") : "?";
-    const tabbed = this.tab ? `${path}:${this.tab}` : path;
+    const tabbed = this.tab ? `${path}:${this.name || this.tab}` : path;
     return this.host ? `${this.host}:${tabbed}` : tabbed;
   }
 
@@ -530,8 +530,9 @@ export async function discover() {
 }
 
 // Tab suffix for the path, only where it disambiguates: one kitty window shows one tmux
-// window at a time, so the number matters only when a session holds more than one claude.
-// Two in the same window get `:N.M` with the pane.
+// window at a time, so it matters only when a session holds more than one claude.
+// shortPath shows the claude's name in its place; without one, the window index, and
+// `:N.M` with the pane for two in the same window.
 function tagTabs(found) {
   for (const i of found) {
     const peers = found.filter((p) => p.session && p.session === i.session);

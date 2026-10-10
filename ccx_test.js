@@ -167,6 +167,10 @@ Deno.test("Instance: shortPath abbreviates HOME and carries the tab", () => {
   eq(new Instance({path: `${home}/ai/ccx`}).shortPath, "~/ai/ccx", "HOME becomes ~");
   eq(new Instance({path: `${home}/ai/ccx`, tab: "2"}).shortPath, "~/ai/ccx:2",
     "the tmux window index is appended only when there is one");
+  eq(new Instance({path: `${home}/ai/ccx`, tab: "2", name: "rex"}).shortPath, "~/ai/ccx:rex",
+    "the claude's name stands in for the index");
+  eq(new Instance({path: `${home}/ai/ccx`, name: "rex"}).shortPath, "~/ai/ccx",
+    "a name alone appends nothing");
   eq(new Instance({path: "/tmp/x"}).shortPath, "/tmp/x", "a path outside HOME is untouched");
   eq(new Instance({}).shortPath, "?", "no path at all");
 });
