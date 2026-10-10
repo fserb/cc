@@ -304,34 +304,71 @@ export function waitsOn(rec, recs, subs = subscriptions(rec.cwd ?? "", rec.sessi
 // When each instance entered its current state, and which ones just changed.
 // statusUpdatedAt is the transition itself, so it beats the poll that noticed it and the
 // log mtime, which only seeds instances with no record.
+//
+// on(fn) hears every change as a list of events, one per instance: first sight (`from`
+// ""), a new state or dialog, and `to: "gone"` once a pid leaves the listing. `seq` counts
+// up per clock, for a stream to resume on.
 export class StateClock {
-  constructor() {
-    this.seen = new Map();
-    this.woke = [];       // instances that went busy -> wait during the last update
+  constructor(host = "") {
+    this.host = host;
+    this.seen = new Map();  // pid -> {state, since, asking, waitsOn, name, sessionId, cwd}
+    this.woke = [];         // instances that went busy -> wait during the last update
+    this.listeners = [];
+    this.seq = 0;
+  }
+
+  on(fn) {
+    this.listeners.push(fn);
+    return () => this.listeners = this.listeners.filter((l) => l !== fn);
   }
 
   update(instances) {
     const now = Date.now() / 1000;
     this.woke = [];
+    const events = [];
     for (const i of instances) {
       const prev = this.seen.get(i.pid);
       // a screen we could not read is not a transition: an empty capture would otherwise
       // read as wait and ring every instance at once. || not ??, since 0 and "" mean absent
-      i.state = i.state || (prev ? prev[0] : "wait");
+      i.state = i.state || (prev ? prev.state : "wait");
       if (!prev) {                                  // first sight
         i.since = i.statusSince || i.lastWrite || now;
-      } else if (prev[0] === i.state) {
-        i.since = prev[1];
+      } else if (prev.state === i.state) {
+        i.since = prev.since;
       } else {
         i.since = i.statusSince || now;
       }
       // only busy -> wait rings; first sight is not a transition, so startup is silent
-      if (prev && prev[0] === "busy" && i.state === "wait") this.woke.push(i);
-      this.seen.set(i.pid, [i.state, i.since]);
+      if (prev && prev.state === "busy" && i.state === "wait") this.woke.push(i);
+      if (!prev || prev.state !== i.state || prev.asking !== i.asking) {
+        events.push(this.event(i, prev?.state ?? "", i.state, now));
+      }
+      this.seen.set(i.pid, {state: i.state, since: i.since, asking: i.asking,
+        waitsOn: i.waitsOn, name: i.name, sessionId: i.sessionId, cwd: i.cwd});
     }
     const live = new Set(instances.map((i) => i.pid));
-    for (const pid of [...this.seen.keys()]) if (!live.has(pid)) this.seen.delete(pid);
+    for (const [pid, prev] of [...this.seen]) {
+      if (live.has(pid)) continue;
+      this.seen.delete(pid);
+      events.push(this.event({pid, ...prev, asking: "", waitsOn: "", since: now},
+        prev.state, "gone", now));
+    }
+    if (events.length) {
+      for (const fn of this.listeners) {
+        try {
+          fn(events);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
     return instances;
+  }
+
+  event(i, from, to, at) {
+    return {seq: ++this.seq, host: this.host, pid: i.pid, name: i.name ?? "",
+      sessionId: i.sessionId ?? "", cwd: i.cwd ?? "", from, to, asking: i.asking ?? "",
+      waitsOn: i.waitsOn ?? "", since: i.since, at, source: "poll"};
   }
 }
 

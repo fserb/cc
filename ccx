@@ -1011,7 +1011,7 @@ async function cmdHost(...args) {
   const [srv, relayMod, remote] = await Promise.all([serverModule(), import("./relay.js"),
     import("./remote.js")]);
   port ??= srv.PORT;
-  const clock = new StateClock(), net = new Online();
+  const clock = new StateClock(remote.SELF), net = new Online();
   let instances = [], polling = false;
   const poll = async () => {
     net.tick();

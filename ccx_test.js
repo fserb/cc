@@ -815,6 +815,31 @@ Deno.test("StateClock: with no record, `since` seeds from the session log's mtim
   ok(Math.abs(blind.since - now) < 5, "and with neither, now");
 });
 
+Deno.test("StateClock.on: first sight, a change, a dialog, gone; nothing while still", () => {
+  const clock = new StateClock("marx"), got = [];
+  clock.on((evs) => got.push(evs.map((e) => [e.pid, e.from, e.to, e.asking])));
+  clock.update([inst(1, "busy", {name: "a"}), inst(2, "wait")]);
+  clock.update([inst(1, "busy", {name: "a"}), inst(2, "wait")]);
+  clock.update([inst(1, "wait", {name: "a", asking: "permission"}), inst(2, "wait")]);
+  clock.update([inst(1, "wait", {name: "a"})]);
+  eq(got, [
+    [[1, "", "busy", ""], [2, "", "wait", ""]],
+    [[1, "busy", "wait", "permission"]],
+    [[1, "wait", "wait", ""], [2, "wait", "gone", ""]],
+  ]);
+});
+
+Deno.test("StateClock.on: events carry host, name and a rising seq; off() stops them", () => {
+  const clock = new StateClock("marx"), got = [];
+  const off = clock.on((evs) => got.push(...evs));
+  clock.update([inst(1, "busy", {name: "a", sessionId: "s"})]);
+  clock.update([]);
+  off();
+  clock.update([inst(1, "busy")]);
+  eq(got.map((e) => [e.seq, e.host, e.name, e.sessionId, e.to, e.source]),
+    [[1, "marx", "a", "s", "busy", "poll"], [2, "marx", "a", "s", "gone", "poll"]]);
+});
+
 Deno.test("StateClock: a pid that went away is first sight again when it returns", () => {
   const clock = new StateClock();
   clock.update([inst(1, "busy")]);
