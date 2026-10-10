@@ -133,8 +133,10 @@ export class Remotes {
 
 // The command a kitty window runs to show a remote tmux session: a plain attach of the
 // whole session, since a kitty window is a session and its tabs one piece of work. Closing
-// the window hangs the client up, and tmux keeps a session whose client got SIGHUP
-const attachArgs = (i) => ["ssh", "-t", i.host, "tmux", "attach", "-t", i.session];
+// the window hangs the client up, and tmux keeps a session whose client got SIGHUP.
+// -u: an ssh session on nadya has no LANG, so tmux fell back to line-drawing and dropped
+// every non-ASCII glyph, the powerline ones included
+const attachArgs = (i) => ["ssh", "-t", i.host, "tmux", "-u", "attach", "-t", i.session];
 
 // Focus a remote instance: its host selects the window and pane, then the kitty window
 // already attached to that session comes to the front, or a new one opens attached.

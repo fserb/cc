@@ -927,20 +927,34 @@ async function cmdNew(dir, ...words) {
     (after ? `tmux window after ${after}` : "new kitty window"));
 }
 
-// ccx delete <name|pid>
+// ccx delete [host:]<name|pid>
 // An exact name or pid, never the fuzzy match `send` takes, and one instance only: a typo
 // that happens to match some other session would kill that one
 async function cmdDelete(spec) {
-  const needle = spec.toLowerCase();
-  const hits = (await discover()).filter((i) =>
-    String(i.pid) === spec || i.name.toLowerCase() === needle);
+  const [host, want] = splitHost(spec);
+  const {instances, down} = host ? await discoverAll(new StateClock())
+    : {instances: await discover(), down: []};
+  reportDown(down);
+  const needle = want.toLowerCase();
+  const hits = instances.filter((i) => i.host === host &&
+    (String(i.pid) === want || i.name.toLowerCase() === needle));
   if (hits.length !== 1) {
     console.error(hits.length
-      ? `delete: ${JSON.stringify(spec)} names ${hits.length}: ${hits.map((i) => i.pid).join(", ")}`
+      ? `delete: ${JSON.stringify(spec)} names ${hits.length}: ${hits.map(label).join(", ")}`
       : `delete: no instance is named ${JSON.stringify(spec)}`);
     Deno.exit(1);
   }
-  report("closed", hits, [], [await close(hits[0])]);
+  const i = hits[0];
+  report("closed", hits, [], [i.host
+    ? (await call(i.host, `/api/s/${i.pid}/close`, {}, 10000))[1] : await close(i)]);
+}
+
+// `host:rest` naming another host, as ["host", "rest"]; anything else is ours, ["", spec]
+function splitHost(spec) {
+  const colon = spec.indexOf(":");
+  const host = colon > 0 ? spec.slice(0, colon) : "";
+  if (!HOSTS.includes(host)) return ["", spec];
+  return [host === SELF ? "" : host, spec.slice(colon + 1)];
 }
 
 // ccx serve [--port N]
@@ -1206,7 +1220,7 @@ const HELP = [
   ["  doctor", "what resolves, and the kitty match it would use"],
   ["  focus <target>", "jump to one instance without the UI, on any host"],
   ["  new [host:]<dir> [name...]", "a claude in dir: beside one already there, else a kitty window"],
-  ["  delete <name|pid>", "end one instance and close its tmux pane"],
+  ["  delete [host:]<name|pid>", "end one instance and close its tmux pane"],
   ["  send <target> <message...>", "a chat message to one or more instances"],
   ["  user <target> <text...>", "typed into an instance as its user, /commands included"],
   ["  chat [--no-follow]", "what the agents here have said to each other"],
