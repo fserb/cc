@@ -18,7 +18,7 @@ import {byCodePoint, HOME} from "./sh.js";
 import {logPath, readFrom, readPage} from "./transcript.js";
 import {parseDialog, pick, screen} from "./dialog.js";
 import {select, sendKeys, tmuxBackground, typeInto} from "./jump.js";
-import {close, ensureSession, expandDir, paneIn, spawn} from "./spawn.js";
+import {close, expandDir, paneIn, spawn} from "./spawn.js";
 import {sendPeer} from "./peer.js";
 import {readUsage} from "./usage.js";
 import PAGE from "./page.html" with {type: "text"};
@@ -335,11 +335,6 @@ export class Server {
       return answer(await this.relay.deliver(await req.json().catch(() => ({}))));
     }
     if (get && path === "/api/dirs") return json(dirsUnder(url.searchParams.get("prefix") ?? ""));
-    if (post && path === "/api/session") {
-      const body = await req.json().catch(() => ({}));
-      const err = await ensureSession(String(body.session ?? ""), String(body.dir ?? ""));
-      return answer(err, {ok: true, background: await tmuxBackground()});
-    }
     if (post && path === "/api/spawn") {
       const body = await req.json().catch(() => ({}));
       // `beside`: after the last claude already in dir, what `ccx new` does on its own host

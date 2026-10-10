@@ -22,17 +22,6 @@ export function expandDir(dir) {
   return dir === "~" || dir.startsWith("~/") ? `${HOME}${dir.slice(1)}` : dir;
 }
 
-// A detached tmux session named `session` in dir, unless one by that name is already up.
-// An error message, or null
-export async function ensureSession(session, dir) {
-  if (!session) return "no session name";
-  if ((await run("tmux", "has-session", "-t", `=${session}`)).code === 0) return null;
-  const path = expandDir(dir || "~");
-  if (!isDir(path)) return `no such directory: ${path}`;
-  const r = await run("tmux", "new-session", "-d", "-s", session, "-c", path);
-  return r.code === 0 ? null : TMUX_ERR(r);
-}
-
 function isDir(dir) {
   try {
     return Deno.statSync(dir).isDirectory;
@@ -59,10 +48,10 @@ async function sessions() {
 // A new kitty OS window, which `ktmux` makes a new `kitty-<pid>` session. With no kitty
 // attached to tmux there is nothing to write the request to, so a detached session
 // instead, which the desk reaches with `tmux attach`.
-export async function newKittyWindow(dir, wait = 5000) {
+export async function newKittyWindow(dir, wait = 5000, name = "") {
   const clients = (await sh("tmux", "list-clients", "-F", "#{client_tty}\t#{client_session}"))
     .split("\n").map((l) => l.split("\t")).filter(([, s]) => s?.startsWith("kitty-"));
-  if (!clients.length) return detachedSession(dir);
+  if (!clients.length) return detachedSession(dir, name);
   const before = await sessions();
   if (MAC) {
     if (!sendKitty("launch", {type: "os-window", cwd: dir}, clients[0][0])) {
@@ -84,8 +73,10 @@ export async function newKittyWindow(dir, wait = 5000) {
   return {error: `no new kitty window after ${wait / 1000}s`};
 }
 
-async function detachedSession(dir) {
-  const base = `ccx-${dir.split("/").filter(Boolean).at(-1) ?? "root"}`.replace(/[.:]/g, "-");
+// named after the claude when it has a name, else ccx-<dir>
+async function detachedSession(dir, claude = "") {
+  const base = (claude || `ccx-${dir.split("/").filter(Boolean).at(-1) ?? "root"}`)
+    .replace(/[.:]/g, "-");
   const taken = await sessions();
   let name = base;
   for (let n = 2; taken.has(name); n++) name = `${base}-${n}`;
@@ -116,7 +107,8 @@ function shQuote(s) {
 
 // Start a claude in `dir`: after pane `after` when given, else in a new kitty window.
 // `name` is its `claude -n`. {pid, pane}, or {error} with the pane when one was made,
-// since the screen still works off it.
+// since the screen still works off it. A claude by that name already in dir is the one
+// asked for: nothing starts, and {pid, pane, existing: true} names it.
 export async function spawn({dir, after = "", mkdir = false, name = ""}) {
   dir = expandDir(dir ?? "");
   if (!dir.startsWith("/")) return {error: `not an absolute path: ${dir}`};
@@ -128,7 +120,13 @@ export async function spawn({dir, after = "", mkdir = false, name = ""}) {
       return {error: `cannot create ${dir}: ${e.message}`};
     }
   }
-  const made = after ? await newWindowAfter(after, dir) : await newKittyWindow(dir);
+  if (name) {
+    const real = Deno.realPathSync(dir);
+    const same = (await discover()).find((i) => i.name === name &&
+      [dir, real].includes(i.cwd || i.path));
+    if (same) return {pid: same.pid, pane: same.pane, existing: true};
+  }
+  const made = after ? await newWindowAfter(after, dir) : await newKittyWindow(dir, undefined, name);
   if (made.error) return made;
   const err = await typeInto({pid: 0, pane: made.pane},
     name ? `claude -n ${shQuote(name)}` : "claude");

@@ -12,7 +12,7 @@ import {jump, kittyWindowTitle, raiseTarget, tmuxWindowName, typeInto} from "./j
 import {Online} from "./online.js";
 import {byDay, HISTORY, readUsage, usageLine, USAGE} from "./usage.js";
 import {close, expandDir, paneIn, spawn} from "./spawn.js";
-import {base, bestUsage, call, discoverAll, HOSTS, jumpRemote, jumpSession, label, others, Remotes, SELF}
+import {base, bestUsage, call, discoverAll, HOSTS, jumpRemote, label, others, Remotes, SELF}
   from "./remote.js";
 
 // `peer.js` and `chat.js` load on use, not at startup: a missing one must cost `ccx send`
@@ -885,22 +885,6 @@ async function cmdFocus(spec) {
   Deno.exit(1);
 }
 
-// ccx attach host:<session> [dir]
-// A remote tmux session by name, focused the way `focus` does an instance's, made in dir
-// (the host's own; default its ~) if it is not up
-async function cmdAttach(spec, dir = "") {
-  if (!spec) usage();
-  const [host, session] = splitHost(spec);
-  if (!host) {
-    console.error(`attach: give another host's session as host:<session>, not ${JSON.stringify(spec)}`);
-    Deno.exit(1);
-  }
-  const err = await jumpSession(host, session, dir);
-  if (!err) return;
-  console.error(`attach: ${host}: ${err}`);
-  Deno.exit(1);
-}
-
 // ccx new [host:]<dir> [name]
 // The same spawn() as the page's +: a new tmux window after an instance already in `dir`,
 // else a new kitty window, or a detached tmux session on a host with no kitty attached
@@ -922,8 +906,9 @@ async function cmdNew(dir, ...words) {
       console.error(`new: ${host}: ${err}`);
       Deno.exit(1);
     }
-    console.log(`started ${host}:${r.pid} in ${host}:${rest}, ` +
-      (r.after ? `tmux window after ${r.after}` : `tmux pane ${r.pane}`));
+    console.log(r.existing ? `${host}:${r.pid} already running in ${host}:${rest}`
+      : `started ${host}:${r.pid} in ${host}:${rest}, ` +
+        (r.after ? `tmux window after ${r.after}` : `tmux pane ${r.pane}`));
     return;
   }
   let path = expandDir(dir);
@@ -939,8 +924,9 @@ async function cmdNew(dir, ...words) {
     console.error(`new: ${r.error}`);
     Deno.exit(1);
   }
-  console.log(`started ${r.pid} in ${path.replace(HOME, "~")}, ` +
-    (after ? `tmux window after ${after}` : "new kitty window"));
+  console.log(r.existing ? `${r.pid} already running in ${path.replace(HOME, "~")}`
+    : `started ${r.pid} in ${path.replace(HOME, "~")}, ` +
+      (after ? `tmux window after ${after}` : "new kitty window"));
 }
 
 // ccx delete [host:]<name|pid>
@@ -1213,7 +1199,6 @@ const COMMANDS = {
   usage: [cmdUsage, 0],
   doctor: [cmdDoctor, 0],
   focus: [cmdFocus, 1],
-  attach: [cmdAttach, -1],
   new: [cmdNew, -1],
   delete: [cmdDelete, 1],
   send: [cmdSend, -1],               // -1: its own validation, since the message is the rest
@@ -1239,8 +1224,7 @@ const HELP = [
   ["  usage", "the seven-day limit, the last 6h against what is left, the week by day"],
   ["  doctor", "what resolves, and the kitty match it would use"],
   ["  focus <target>", "jump to one instance without the UI, on any host"],
-  ["  attach host:<session> [dir]", "focus a tmux session on another host, made in dir if missing"],
-  ["  new [host:]<dir> [name...]", "a claude in dir: beside one already there, else a kitty window"],
+  ["  new [host:]<dir> [name...]", "a claude in dir: beside one already there, else a kitty window; none if name is there"],
   ["  delete [host:]<name|pid>", "end one instance and close its tmux pane"],
   ["  send <target> <message...>", "a chat message to one or more instances"],
   ["  user <target> <text...>", "typed into an instance as its user, /commands included"],

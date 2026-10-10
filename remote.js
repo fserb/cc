@@ -148,15 +148,6 @@ export async function jumpRemote(i) {
   return null;
 }
 
-// A remote tmux session by name, the way focus reaches one: the host makes it in dir if it
-// is not up and says its background, then its window comes up. An error message, or null
-export async function jumpSession(host, session, dir) {
-  const [r, err] = await call(host, "/api/session", {session, dir});
-  if (err) return err;
-  await attachSession(host, session, r?.background);
-  return null;
-}
-
 // The kitty window already attached to a remote tmux session comes to the front, or a new
 // one opens attached.
 //
