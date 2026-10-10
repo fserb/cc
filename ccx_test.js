@@ -7,8 +7,6 @@ import {fmtAge, Instance, IS_CLAUDE, openSubscriptions, paneState, StateClock, s
 import {fuzzy, NUMBERS, PALETTE, rank, SORTS, STATE} from "./view.js";
 import {iconDots, iconPng} from "./icon.js";
 import {baseFromSettings, Online, pickBase} from "./online.js";
-import {fmtMem, treeUsage} from "./top.js";
-import {claudeTree} from "./nice.js";
 
 // assertions
 
@@ -253,8 +251,8 @@ function cellsOf(line) {
 const at = (line, n, len = 1) => cellsOf(line).slice(n, n + len).join("");
 
 // 0-based display cells, the table body's own positions plus the one-cell left margin
-const NUM = 2, STATE_COL = 5, FOR = 13, CPU = 20, MEM = 27, PATH = 33, SUMMARY = 61;
-const PATH_W = 26, SUMMARY_W = 37;
+const NUM = 2, STATE_COL = 5, FOR = 13, PATH = 20, SUMMARY = 48;
+const PATH_W = 26, SUMMARY_W = 50;
 
 // SAMPLE in `ccx` after rank(): waits oldest-first, then busys, then hold, then free. Mirrored here
 // on purpose, so changing the fixture fails loudly instead of weakening the test
@@ -271,12 +269,10 @@ const ROWS = [
 ];
 const HEAD = 3;                 // bar, rule, header, then the rows
 
-Deno.test("snapshot: the content sits at cells 2, 5, 13, 20, 27, 33 and 61", async () => {
+Deno.test("snapshot: the content sits at cells 2, 5, 13, 20 and 48", async () => {
   const frame = await snapshot("100x14", "plain");
   eq(at(frame[2], STATE_COL, 5), "state", "the state header");
   eq(at(frame[2], FOR, 3), "for", "the for header");
-  eq(at(frame[2], CPU, 5), "  cpu", "the cpu header, right aligned");
-  eq(at(frame[2], MEM, 4), " mem", "the mem header, right aligned");
   eq(at(frame[2], PATH, 4), "path", "the path header");
   eq(at(frame[2], SUMMARY, 7), "summary", "the summary header");
 
@@ -294,7 +290,7 @@ Deno.test("snapshot: the content sits at cells 2, 5, 13, 20, 27, 33 and 61", asy
 Deno.test("snapshot: the gaps between the columns are two cells", async () => {
   const frame = await snapshot("100x14", "plain");
   for (const line of frame.slice(HEAD, HEAD + ROWS.length)) {
-    for (const n of [1, 3, 4, 11, 12, 18, 19, 25, 26, 31, 32, 59, 60]) {
+    for (const n of [1, 3, 4, 11, 12, 18, 19, 46, 47]) {
       eq(at(line, n), " ", `cell ${n} is a column gap or a margin`);
     }
   }
@@ -319,13 +315,13 @@ Deno.test("snapshot: every line is exactly as wide as the screen", async () => {
   }
 });
 
-Deno.test("snapshot: a path crops hard at 26 cells and a summary at 37", async () => {
+Deno.test("snapshot: a path crops hard at 26 cells and a summary at 50", async () => {
   const frame = await snapshot("100x14", "plain");
   const line = frame[HEAD + 5];                 // the over-long fixture row
   eq(at(line, PATH, PATH_W), "~/prj/a-very-long-director", "26 cells of path, no more");
   eq(at(line, PATH + PATH_W), " ", "and then the column gap");
-  eq(at(line, SUMMARY, SUMMARY_W), "a summary that is definitely longer t",
-    "37 cells of summary");
+  eq(at(line, SUMMARY, SUMMARY_W), "a summary that is definitely longer than fifty dis",
+    "50 cells of summary");
   eq(width(at(line, PATH, PATH_W)), PATH_W, "the path cell is full");
   eq(width(at(line, SUMMARY, SUMMARY_W)), SUMMARY_W, "the summary cell is full");
 });
@@ -1241,34 +1237,3 @@ Deno.test("validation: send with no message never reaches resolution", async () 
   ok(err.startsWith("usage: ccx"), `usage: ${err.split("\n")[0]}`);
 });
 
-Deno.test("treeUsage: a process counts toward its nearest listed ancestor, root included", () => {
-  const p = (pid, ppid, cpu, rss) => [pid, [ppid, `p${pid}`, cpu, rss]];
-  const table = new Map([p(1, 0, 0, 0), p(10, 1, 5, 100), p(11, 10, 20, 50),
-    p(12, 11, 1, 10), p(20, 12, 3, 30), p(21, 20, 2, 5), p(30, 1, 50, 999)]);
-  const sums = treeUsage([10, 20], table);
-  eq(sums.get(10), {cpu: 26, rss: 160, procs: 3}, "10's tree");
-  eq(sums.get(20), {cpu: 5, rss: 35, procs: 2}, "the nested root keeps its own");
-});
-
-Deno.test("claudeTree: every claude and what is under it, parents first, nothing else", () => {
-  const table = new Map([[1, [0, "launchd"]], [5, [1, "zsh"]], [10, [5, "claude"]],
-    [11, [10, "/bin/zsh -c make"]], [12, [11, "cc foo.c"]], [20, [1, "/opt/x/claude -p hi"]],
-    [30, [1, "less claude.md"]], [31, [30, "sh"]]]);
-  eq(claudeTree(table), [10, 20, 11, 12], "the tree");
-});
-
-Deno.test("fmtMem: K, then M, then G to one decimal", () => {
-  eq([fmtMem(512), fmtMem(2048), fmtMem(3 * 1024 * 1024 + 512 * 1024)], ["512K", "2M", "3.5G"],
-    "fmtMem");
-});
-
-Deno.test("snapshot: cpu and mem are right aligned, and only the hot cells are warn", async () => {
-  const plain = await snapshot("110x12", "plain");
-  ok(plain[2].includes("  cpu   mem  path"), `header: ${plain[2]}`);
-  ok(plain.some((l) => l.includes("  362%  586M  ~/prj/wrangler")), "the wrangler row");
-  const frame = (await snapshot("110x12")).join("\n");
-  const n = Number.parseInt(PALETTE.warn.slice(1), 16);
-  const warn = `\x1b[38;2;${(n >> 16) & 255};${(n >> 8) & 255};${n & 255}m`;
-  ok(frame.includes(`${warn} 362%`) && frame.includes(`${warn}3.3G`), "hot cells are warn");
-  ok(!frame.includes(`${warn}586M`), "a cool cell is not");
-});

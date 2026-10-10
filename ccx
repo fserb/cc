@@ -8,12 +8,10 @@
 
 import {discover, fmtAge, sessionRecords, StateClock} from "./claudes.js";
 import {HOME, ON_EXIT, sh} from "./sh.js";
-import {fuzzy, loadOf, NUMBERS, PALETTE, rank, SORTS, stateOf} from "./view.js";
+import {fuzzy, NUMBERS, PALETTE, rank, SORTS, stateOf} from "./view.js";
 import {jump, kittyWindowTitle, raiseTarget, tmuxWindowName, typeInto} from "./jump.js";
 import {Online} from "./online.js";
 import {byDay, HISTORY, readUsage, usageLine, USAGE} from "./usage.js";
-import {fmtMem} from "./top.js";
-import {setNice} from "./nice.js";
 import {close, expandDir, paneIn, spawn} from "./spawn.js";
 
 // `peer.js` and `chat.js` load on use, not at startup: a missing one must cost `ccx send`
@@ -121,9 +119,9 @@ function wrap(text, width) {
   return out;
 }
 
-// number, state, for, cpu, mem, path; the summary takes the rest. cpu is 5 for 1600%
-const WIDTHS = [1, 6, 5, 5, 4, 26];
-const HEADS = ["", "state", "for", "  cpu", " mem", "path", "summary"];
+// number, state, for, path; the summary takes the rest
+const WIDTHS = [1, 6, 5, 26];
+const HEADS = ["", "state", "for", "path", "summary"];
 const FIXED = WIDTHS.reduce((a, w) => a + w + 2, 0);
 
 function layout(cols) {
@@ -207,14 +205,10 @@ function headerLine(lay, cols) {
 
 function rowLine(inst, n, cursor, lay, cols, needle) {
   const state = stateOf(inst);
-  const {cpu, mem} = loadOf(inst);
-  const right = (cell, w) => ({...cell, t: cell.t.padStart(w)});
   return tableLine([
     [{t: n < NUMBERS.length ? NUMBERS[n] : " ", c: PALETTE.dim}],
     [{t: state.label, c: state.color}],
     [{t: inst.age, c: PALETTE.dim}],
-    [right(cpu, 5)],
-    [right(mem, 4)],
     marks(inst.shortPath, PALETTE.mauve, needle),
     marks(inst.summary, inst.state === "wait" ? PALETTE.text : PALETTE.idle, needle),
   ], lay, cols, cursor ? PALETTE.cursor : PALETTE.bg, cursor);
@@ -711,16 +705,11 @@ const SAMPLE = [
   // idle on another session, not on you
   ["hold", 900, "~/web/arcade", "PS2 blend modes, holding builds for a bench", "arcade-13"],
 ];
-// cpu and rss (KB) per row of SAMPLE: the second and the last are over the line
-const LOAD = [[3.2, 540000], [362, 600000], [0, 410000], [1.1, 520000], [12, 900000],
-  [0.4, 450000], [7, 1200000], [2.5, 3500000]];
-
 function sample() {
   // duck-typed: rank() and render() read shortPath, summary, state, since, pid, age,
   // asking; the resolver reads pid and name as well
   return SAMPLE.map(([state, ago, shortPath, summary, name, asking = ""], n) => ({
     pid: 1000 + n, state, summary, shortPath, name, asking, since: NOW - ago,
-    cpu: LOAD[n][0], rss: LOAD[n][1],
     age: ago < 60 ? `${ago}s`
       : ago < 3600 ? `${Math.floor(ago / 60)}m` : `${Math.floor(ago / 3600)}h`,
   }));
@@ -805,48 +794,6 @@ async function cmdList() {
     console.log(`${stateOf(i).label.padEnd(6)} ${i.age.padStart(4)}  ` +
       `${i.shortPath.padEnd(30)} ${i.summary}`);
   }
-}
-
-// ccx top [--mem]
-// Each instance with everything it started summed, heaviest first. Redraws every 2s into
-// a terminal, prints once into a pipe
-async function cmdTop(...args) {
-  let byMem = false;
-  for (const a of args) {
-    if (a !== "--mem") usage();
-    byMem = true;
-  }
-  const clock = new StateClock();
-  const frame = async () => {
-    const found = clock.update(await discover());
-    found.sort((a, b) => byMem ? b.rss - a.rss : b.cpu - a.cpu);
-    const total = found.reduce((t, i) => [t[0] + i.cpu, t[1] + i.rss], [0, 0]);
-    const cols = Deno.stdout.isTerminal() ? size().cols : Infinity;
-    const clip = (s) => cols === Infinity ? s : fit([{t: s}], cols).map((r) => r.t).join("");
-    const lines = [`${found.length} instances  ${total[0].toFixed(1)}% cpu  ` +
-      `${fmtMem(total[1])} rss`, "",
-      `${"CPU%".padStart(6)} ${"RSS".padStart(6)} ${"PROCS".padStart(6)}  STATE  PATH`];
-    for (const i of found) {
-      lines.push(clip(`${i.cpu.toFixed(1).padStart(6)} ${fmtMem(i.rss).padStart(6)} ` +
-        `${String(i.procs).padStart(6)}  ${stateOf(i).label.padEnd(6)} ` +
-        `${i.shortPath.padEnd(24)} ${i.summary}`));
-    }
-    return lines.join("\n");
-  };
-  if (!Deno.stdout.isTerminal()) return console.log(await frame());
-  for (;;) {
-    const text = await frame();
-    write(`${ESC}[H${ESC}[2J${text}\n`);
-    await new Promise((r) => setTimeout(r, 2000));
-  }
-}
-
-// ccx nice low|normal
-async function cmdNice(level) {
-  if (level !== "low" && level !== "normal") usage();
-  const [ok, bad] = await setNice(level === "low");
-  console.log(`${level}: ${ok} processes` + (bad ? `, ${bad} refused` : ""));
-  if (bad) Deno.exit(1);
 }
 
 // ccx usage
@@ -1159,8 +1106,6 @@ async function cmdChat(...args) {
 const COMMANDS = {
   ps: [cmdUi, 0],
   list: [cmdList, 0],
-  top: [cmdTop, -1],
-  nice: [cmdNice, 1],
   usage: [cmdUsage, 0],
   doctor: [cmdDoctor, 0],
   focus: [cmdFocus, 1],
@@ -1186,8 +1131,6 @@ const HELP = [
   "",
   ["  ps", "the listing as a TUI, and enter to jump to an instance"],
   ["  list", "the same listing, one line each, no UI"],
-  ["  top [--mem]", "what each instance and everything under it costs, by cpu or rss"],
-  ["  nice low|normal", "every claude and its process tree to background priority, or back"],
   ["  usage", "the seven-day limit, the last 6h against what is left, the week by day"],
   ["  doctor", "what resolves, and the kitty match it would use"],
   ["  focus <pid>", "jump to an instance without the UI"],

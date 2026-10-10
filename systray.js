@@ -7,7 +7,7 @@
 
 import {HOME, MAC} from "./sh.js";
 import {discover, StateClock} from "./claudes.js";
-import {fuzzy, loadOf, NUMBERS, PALETTE, rank, stateOf} from "./view.js";
+import {fuzzy, NUMBERS, PALETTE, rank, stateOf} from "./view.js";
 import {jump} from "./jump.js";
 import {iconPng} from "./icon.js";
 import {Online} from "./online.js";
@@ -384,7 +384,6 @@ class Model {
           label: state.label,
           color: state.color,
           age: inst.age,
-          ...loadOf(inst),
           path: inst.shortPath,
           pathHits: this.marks(inst.shortPath),
           summary: inst.summary,
@@ -483,12 +482,10 @@ html, body {
 .age { left: 84px; width: 34px; text-align: right; color: ${PALETTE.dim}; }
 /* direction: rtl truncates at the head, which keeps the part of a path that identifies it,
    and text-align: left puts back the alignment that rtl otherwise takes with it */
-.cpu { left: 126px; width: 48px; text-align: right; }
-.mem { left: 182px; width: 40px; text-align: right; }
-.path { left: 230px; width: 196px; color: ${PALETTE.mauve}; direction: rtl;
+.path { left: 126px; width: 196px; color: ${PALETTE.mauve}; direction: rtl;
   text-align: left; }
 .path > i { font-style: normal; direction: ltr; unicode-bidi: embed; }
-.sum { left: 434px; width: ${WIDTH - 434 - PAD}px; }
+.sum { left: 330px; width: ${WIDTH - 330 - PAD}px; }
 .m { color: ${PALETTE.accent}; font-weight: bold; }
 #foot { position: absolute; left: ${PAD + 2}px; width: ${WIDTH - 2 * PAD}px; bottom: 4px;
   height: ${FOOT - 4}px; }
@@ -554,8 +551,6 @@ function ccx(state) {
     row.appendChild(field("num", r.num, null, null));
     row.appendChild(field("state", r.label, r.color, null));
     row.appendChild(field("age", r.age, null, null));
-    row.appendChild(field("cpu", r.cpu.t, r.cpu.c, null));
-    row.appendChild(field("mem", r.mem.t, r.mem.c, null));
     row.appendChild(field("path", r.path, null, r.pathHits));
     row.appendChild(field("sum", r.summary, r.sumColor, r.sumHits));
     rows.appendChild(row);
