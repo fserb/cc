@@ -516,8 +516,8 @@ function burnView() {
   const tabs = `<div class="tabs" role="group" aria-label="window">${[["last", "last week"], ["this", "this week"], ["24h", "last 24h"]].map(([k, l]) => `<button data-qt="${k}" aria-pressed="${qTab === k}">${l}</button>`).join("")}</div>`;
   if (!b) return `${tabs}<p class="meta">loading…</p>`;
   if (b.error) return `${tabs}<p class="meta err">${esc(b.error)}</p>`;
-  // last 24h: % of a day's even share (the limit / 7), so 100% is on pace
-  const perDay = (w) => w === S.burn24 && w.used != null ? 7 : 1;
+  // last 24h and days: % of a day's even share (the limit / 7), so 100% is on pace
+  const perDay = (w) => (w === S.burn24 || b.days.includes(w)) && w.used != null ? 7 : 1;
   const val = (w, x) => fmtQ(w.used == null ? x.share : x.q * perDay(w));
   const down = b.down?.length ? `<p class="meta err">${b.down.map(([host, e]) => esc(`${host}: ${e}`)).join("<br>")}</p>` : "";
   // the TOPN busiest projects of the window, the rest in one "others" row, last
@@ -545,11 +545,11 @@ function burnView() {
     const k = `days/${d.from}`;
     const segs = group(d).map((x) => (inBars.add(x.others ? "" : x.p), x)).map((x) => `<i style="width:${(x.w / max * 100).toFixed(2)}%;background:${pcol(x)}" title="${esc(x.others ? `others (${x.others.length})` : x.p)}"></i>`).join("");
     const label = `${d.label} ${new Date(d.from).getDate()}${d.from === b.weeks[1].from ? " ↻" : ""}`;
-    return `<details class="bp bd" data-k="${esc(k)}" ${qOpen.has(k) ? "open" : ""}><summary><span class="nm">${esc(label)}</span><span class="bb">${segs}</span><b>${d.used == null ? "" : fmtQ(d.used)}</b></summary>${list(d, k)}</details>`;
+    return `<details class="bp bd" data-k="${esc(k)}" ${qOpen.has(k) ? "open" : ""}><summary><span class="nm">${esc(label)}</span><span class="bb">${segs}</span><b>${d.used == null ? "" : fmtQ(d.used * 7)}</b></summary>${list(d, k)}</details>`;
   }).join("");
   const lg = [...cmap.keys()].filter((p) => inBars.has(p)), gray = [...inBars].some((p) => !cmap.has(p));
   const legend = `<div class="legend">${lg.map((p) => `<span><i style="background:${cmap.get(p)}"></i>${esc(p)}</span>`).join("")}${gray ? `<span><i style="background:var(--gray)"></i>others</span>` : ""}</div>`;
-  return `${tabs}${view}<h3 class="qh">by day</h3>${legend}${rows}<p class="meta">A bar is the day's weighted tokens; the % what the usage log added that day; tap a day for its projects. ↻ the weekly reset.</p>${down}`;
+  return `${tabs}${view}<h3 class="qh">by day</h3>${legend}${rows}<p class="meta">A bar is the day's weighted tokens; the % what the usage log added that day, as a share of a day's even pace (the limit / 7, so 100% = on pace); tap a day for its projects. ↻ the weekly reset.</p>${down}`;
 }
 // a project's name as shown: a path's last part ("~/prj/bank" -> "bank"); /tmp dirs -> "tmp",
 // anything in .dotfiles or .claude -> "dotfiles" or "claude", "~/" -> "home", a dated dir -> its parent
