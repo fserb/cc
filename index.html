@@ -60,8 +60,8 @@
   .done { color: var(--green); font-weight: 600; } .err { color: var(--red); }
   .msgs { display: flex; flex-direction: column; gap: 0.5rem; }
   .m { max-width: 85%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--bubble); overflow-wrap: anywhere; } .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); }
-  .m small { display: block; font-size: 0.72rem; opacity: 0.7; }
-  .m p { margin: 0 0 0.4rem; } .m p:last-child { margin: 0; } .m ul { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; } .m code { font: 0.88em var(--mono); }
+  .m small { display: block; text-align: right; font-size: 0.65rem; opacity: 0.7; margin-top: 0.15rem; }
+  .m p { margin: 0 0 0.4rem; } .m p:last-of-type { margin: 0; } .m ul { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; } .m code { font: 0.88em var(--mono); }
   .tools { align-self: flex-start; font-size: 0.78rem; color: var(--muted); padding: 0 0.8rem; }
   #say[hidden] { display: none; }
   #say { display: flex; gap: 0.5rem; padding: 0.7rem 2rem 0.9rem; border-top: 1px solid var(--line); }
@@ -324,7 +324,7 @@ function chat(r) {
     if (e.type === "tool") { tools++; continue; }
     if (e.type !== "user" && e.type !== "text") continue;
     flush(false);
-    out.push(`<div class="m ${e.type === "user" ? "me" : ""}"><small>${hhmm(e.at)}</small>${e.type === "user" ? esc(unpaste(e.text).length > 600 ? unpaste(e.text).slice(0, 600) + "…" : unpaste(e.text)) : md(e.text)}</div>`);
+    out.push(`<div class="m ${e.type === "user" ? "me" : ""}">${e.type === "user" ? esc(unpaste(e.text).length > 600 ? unpaste(e.text).slice(0, 600) + "…" : unpaste(e.text)) : md(e.text)}<small>${hhmm(e.at)}</small></div>`);
   }
   flush(r.state === "busy");
   return `<details class="meta"><summary>${esc(r.pid)} · ${esc(r.path)} · ${r.state} ${ago(r.since)} · pane</summary><pre>${esc(sc.text ?? "")}</pre></details><div class="msgs">${out.join("") || `<p class="meta">${stream?.pid === r.pid ? "no messages yet" : "loading…"}</p>`}</div>`;
