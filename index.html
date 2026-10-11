@@ -344,7 +344,7 @@ function noteScroll() {
 $("#view").addEventListener("scroll", noteScroll);
 $("#newer").onclick = toBottom;
 // the typing bubble as last drawn: a reply up to 5 s later still grows out of it (the state can turn idle before the log has the reply)
-let dots = null;
+let dots = null, linger = null;
 function drawView(soft) {
   const i = items().find((x) => x.id === cur);
   const view = $("#view");
@@ -429,7 +429,12 @@ function chat(r) {
     const note = p.err ? `not sent: ${esc(p.err)} · tap to dismiss` : Date.now() - p.at > 120e3 ? "not seen yet" : "sending…";
     out.push(`<div class="m me ${p.err ? "fail" : "pend"}" data-pend="${p.id}">${esc(p.text.length > 600 ? p.text.slice(0, 600) + "…" : p.text)}<small>${note}</small></div>`);
   }
-  if (r.state === "busy") out.push(`<div class="typing" role="status" aria-label="working"><i></i><i></i><i></i></div>`);
+  // the state turns idle before the log has the reply: keep the dots up to 5 s until the reply shows, so it grows out of them
+  const said = msgs.filter((m) => m.body && !m.me).length;
+  if (r.state === "busy") linger = {pid: r.pid, said, until: Date.now() + 5e3};
+  else if (linger?.pid === r.pid && linger.said === said && Date.now() < linger.until) setTimeout(() => drawView(true), linger.until - Date.now() + 50);
+  else linger = null;
+  if (linger?.pid === r.pid) out.push(`<div class="typing" role="status" aria-label="working"><i></i><i></i><i></i></div>`);
   return `<details class="meta"><summary>${esc(r.pid)} · ${esc(r.path)} · ${r.state} ${ago(r.since)} · pane</summary><pre>${esc(sc.text ?? "")}</pre></details><div class="msgs">${out.join("") || `<p class="meta">${stream?.pid === r.pid ? "no messages yet" : "loading…"}</p>`}</div>`;
 }
 function nadyaView() {
