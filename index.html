@@ -294,7 +294,7 @@ function items() {
   const fresh = S.posts.filter((x) => Date.parse(x.time) > seen).length;
   it.push({id: "blog", d: fresh ? "green" : "", unread: fresh, title: "blog", sub: top?.title ?? "", t: top?.time ? `${fresh ? `${fresh} new · ` : ""}${ago(new Date(top.time.replace(" ", "T")) / 1000)}` : ""});
   const due = dueTodos();
-  it.push({id: "plan", d: due.length ? "blue" : "", hot: due.length, title: "plan", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : `${S.todo.length} todo · ${S.ideas.length} ideas`, t: ""});
+  it.push({id: "plan", d: due.length ? "blue" : "", hot: due.length, title: "plan", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : "", t: ""});
   const ps = projects(), run = ps.filter((x) => x.running).length;
   it.push({id: "projects", d: run ? "green" : "", title: "projects", sub: ps.filter((x) => x.running).map((x) => `${esc(x.file.replace(/\.md$/, ""))} running`).join(" · "), t: ""});
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, asks: asksFor(r.name), dialog: hasDialog(r)}));
@@ -425,8 +425,8 @@ function sessionView(r) {
 function todoView() {
   const due = dueTodos();
   return `<article><h1>plan</h1>${due.map((t) => `<div class="need"><b>${esc(t.text)}</b><p>due ${esc(t.date)} ${esc(t.time ?? "")}</p>${sent.has("todo:" + t.full) ? `<p class="done">✓ ${esc(sent.get("todo:" + t.full))}</p>` : `<div class="opts" data-todo="${esc(t.full)}"><button>done</button><button>snooze 1 h</button></div>`}</div>`).join("")}
-    <h2 class="h">todo</h2><ul class="rows">${S.todo.map((t) => `<li class="${t.mark === "!" ? "x" : ""}"><span>${esc(t.text)}</span><small>${t.date ? `${t.date}${t.time ? " " + t.time : ""}` : "note"}${t.mark === "!" ? " · reminded" : ""}</small></li>`).join("") || "<li><span class=meta>nothing</span></li>"}</ul>
-    <h2 class="h">ideas</h2><ul class="rows">${S.ideas.map((x) => `<li class="go" data-go="idea/${esc(x.file)}"><span>${esc(x.title)}</span><small>${esc(x.status)}</small></li>`).join("")}</ul></article>`;
+    <h2 class="h">todo</h2><ul class="rows">${S.todo.map((t) => `<li class="${t.mark === "!" ? "x" : ""}"><span>${esc(t.text)}</span>${t.date ? `<small>${t.date}${t.time ? " " + t.time : ""}${t.mark === "!" ? " · reminded" : ""}</small>` : ""}</li>`).join("") || "<li><span class=meta>nothing</span></li>"}</ul>
+    <h2 class="h">ideas</h2><ul class="rows">${S.ideas.map((x) => `<li class="go" data-go="idea/${esc(x.file)}"><span>${esc(x.title)}</span></li>`).join("")}</ul></article>`;
 }
 function projectsView() {
   const row = (x) => `<li class="go" data-go="project/${esc(x.file)}"><span>${esc(x.title)}</span>${x.running ? "<small>running</small>" : ""}</li>`;
