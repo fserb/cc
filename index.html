@@ -296,7 +296,7 @@ function items() {
   const due = dueTodos();
   it.push({id: "plan", d: due.length ? "blue" : "", hot: due.length, title: "plan", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : "", t: ""});
   const ps = projects(), run = ps.filter((x) => x.running).length;
-  it.push({id: "projects", d: run ? "green" : "", title: "projects", sub: ps.filter((x) => x.running).map((x) => `${esc(x.file.replace(/\.md$/, ""))} running`).join(" · "), t: ""});
+  it.push({id: "projects", d: run ? "green" : "", title: "projects", sub: ps.filter((x) => x.running).map((x) => `${x.file.replace(/\.md$/, "")} running`).join(" · "), t: ""});
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, asks: asksFor(r.name), dialog: hasDialog(r)}));
   ss.sort((a, b) => (b.dialog ? 2 : b.asks.length ? 1 : 0) - (a.dialog ? 2 : a.asks.length ? 1 : 0));
   for (const {r, asks, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "red" : asks.length ? "blue" : {busy: "green", wait: "", hold: "yel", free: "gray"}[r.state] ?? "gray", hot: dialog || asks.length,
@@ -388,15 +388,22 @@ function ackPending() {
 function chat(r) {
   const sc = S.screens[r.pid] ?? {};
   const log = stream?.pid === r.pid ? S.log : [];
-  const out = []; let tools = 0;
-  const flush = (busy) => { if (tools) out.push(`<div class="tools">${tools} tool call${tools > 1 ? "s" : ""}${busy ? " · working" : ""}</div>`); tools = 0; };
+  // tool calls after a message go on that message's time line: "16:34 · 3 tool calls"; on the user's (right-aligned) side "3 tool calls · 16:34"
+  const msgs = []; let tools = 0;
+  const flush = (busy) => {
+    if (!tools) return;
+    const note = `${tools} tool call${tools > 1 ? "s" : ""}${busy ? " · working" : ""}`;
+    msgs.length ? msgs.at(-1).note = note : msgs.push({tools: note});
+    tools = 0;
+  };
   for (const e of log) {
     if (e.type === "tool") { tools++; continue; }
     if (e.type !== "user" && e.type !== "text") continue;
     flush(false);
-    out.push(`<div class="m ${e.type === "user" ? "me" : ""}">${e.type === "user" ? esc(unpaste(e.text).length > 600 ? unpaste(e.text).slice(0, 600) + "…" : unpaste(e.text)) : md(e.text)}<small>${hhmm(e.at)}</small></div>`);
+    msgs.push({me: e.type === "user", body: e.type === "user" ? esc(unpaste(e.text).length > 600 ? unpaste(e.text).slice(0, 600) + "…" : unpaste(e.text)) : md(e.text), small: hhmm(e.at)});
   }
   flush(r.state === "busy");
+  const out = msgs.map((m) => m.tools ? `<div class="tools">${m.tools}</div>` : `<div class="m ${m.me ? "me" : ""}">${m.body}<small>${!m.note ? m.small : m.me ? `${m.note} · ${m.small}` : `${m.small} · ${m.note}`}</small></div>`);
   // sent from here, not in the log yet: kept below everything until the log shows it
   for (const p of pending.filter((x) => x.pid === r.pid)) {
     const note = p.err ? `not sent: ${esc(p.err)} · tap to dismiss` : Date.now() - p.at > 120e3 ? "not seen yet" : "sending…";
