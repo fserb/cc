@@ -344,8 +344,10 @@ function noteScroll() {
 $("#view").addEventListener("scroll", noteScroll);
 $("#newer").onclick = toBottom;
 // the typing bubble as last drawn: a reply up to 5 s later still grows out of it (the state can turn idle before the log has the reply)
-let dots = null, linger = null;
+let dots = null, linger = null, growing = 0;
 function drawView(soft) {
+  // a redraw replaces the view and would cut a reply's grow short: wait for it to end
+  if (soft && Date.now() < growing) { setTimeout(() => drawView(true), growing - Date.now() + 20); return; }
   const i = items().find((x) => x.id === cur);
   const view = $("#view");
   noteScroll();
@@ -370,7 +372,7 @@ function drawView(soft) {
   // keep the dots' bounce going across redraws; a reply that arrives grows out of the dots bubble
   view.querySelector(".typing")?.style.setProperty("--t", `-${Date.now() % 1200}ms`);
   const reply = dots?.cur === cur && Date.now() - dots.at < 5e3 && view.querySelectorAll(".m:not(.me)")[dots.said];
-  if (reply) { grow(reply, dots.rect); dots = null; }
+  if (reply) { grow(reply, dots.rect); growing = Date.now() + 350; dots = null; }
   $("#say").q.placeholder = ph;
   $("#say").hidden = !(!cur || cur === "nadya" || i?.r);  // the prompt only where it talks to nadya or a session
   const chatty = !cur || cur === "nadya" || isPid(cur);
