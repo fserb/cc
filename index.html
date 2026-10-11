@@ -60,6 +60,7 @@
   .done { color: var(--green); font-weight: 600; } .err { color: var(--red); }
   .msgs { display: flex; flex-direction: column; gap: 0.5rem; }
   .m { align-self: flex-start; max-width: 78%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--bubble); overflow-wrap: anywhere; } .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); } .m.me small { text-align: right; }
+  .m.me.pend { opacity: 0.5; } .m.me.fail { background: var(--red); opacity: 0.85; cursor: pointer; }
   .m small { display: block; text-align: left; font-size: 0.6rem; opacity: 0.7; margin-top: 0.15rem; }
   .m p { margin: 0 0 0.4rem; } .m p:last-of-type { margin: 0; } .m ul { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; } .m code { font: 0.88em var(--mono); }
   .tools { align-self: flex-start; font-size: 0.78rem; color: var(--muted); padding: 0 0.8rem; }
@@ -262,8 +263,8 @@ function follow(pid) {
   S.log = [];
   const es = new EventSource(`${CCX}/s/${pid}/events`);
   stream = {pid, es};
-  json(`${CCX}/s/${pid}/log`).then((d) => { if (stream?.pid === pid && !S.log.length) { S.log = d.events; drawView(); } }).catch(() => {});
-  es.addEventListener("log", (e) => { const d = JSON.parse(e.data); S.log = d.reset ? d.events : S.log.concat(d.events); drawView(true); });
+  json(`${CCX}/s/${pid}/log`).then((d) => { if (stream?.pid === pid && !S.log.length) { S.log = d.events; ackPending(); drawView(); } }).catch(() => {});
+  es.addEventListener("log", (e) => { const d = JSON.parse(e.data); S.log = d.reset ? d.events : S.log.concat(d.events); ackPending(); drawView(true); });
   es.addEventListener("screen", (e) => { (S.screens[pid] ??= {}).text = JSON.parse(e.data).text; drawView(true); });
   es.addEventListener("dialog", (e) => { (S.screens[pid] ??= {}).dialog = JSON.parse(e.data); drawView(true); draw(); });
 }
@@ -369,6 +370,21 @@ function drawView(soft) {
 }
 // Claude Code wraps pasted text in <pasted_content id="..."> ... </pasted_content id="...">: show only the text
 const unpaste = (t) => t.replace(/<\/?pasted_content(?: id="[^"]*")?>\n?/g, "");
+// messages sent from this page, shown at once and dropped when the session's log has them
+let pending = [], pendId = 0;
+const norm = (t) => unpaste(t).replace(/\s+/g, " ").trim();
+function ackPending() {
+  if (!stream || !pending.length) return;
+  const seen = S.log.filter((e) => e.type === "user").map((e) => ({at: e.at * 1000, t: norm(e.text)}));
+  pending = pending.filter((p) => {
+    if (p.err || p.pid !== stream.pid) return true;
+    const t = norm(p.text);
+    // a log entry acks one bubble only (the same text sent twice); 10 s for clock skew between hosts
+    const k = seen.findIndex((e) => e.at > p.at - 10e3 && (e.t.includes(t) || (e.t.length >= 40 && t.startsWith(e.t.slice(0, 200)))));
+    if (k >= 0) seen.splice(k, 1);
+    return k < 0;
+  });
+}
 // a session's transcript as a chat, the same for nadya and every other session
 function chat(r) {
   const sc = S.screens[r.pid] ?? {};
@@ -382,6 +398,11 @@ function chat(r) {
     out.push(`<div class="m ${e.type === "user" ? "me" : ""}">${e.type === "user" ? esc(unpaste(e.text).length > 600 ? unpaste(e.text).slice(0, 600) + "…" : unpaste(e.text)) : md(e.text)}<small>${hhmm(e.at)}</small></div>`);
   }
   flush(r.state === "busy");
+  // sent from here, not in the log yet: kept below everything until the log shows it
+  for (const p of pending.filter((x) => x.pid === r.pid)) {
+    const note = p.err ? `not sent: ${esc(p.err)} · tap to dismiss` : Date.now() - p.at > 120e3 ? "not seen yet" : "sending…";
+    out.push(`<div class="m me ${p.err ? "fail" : "pend"}" data-pend="${p.id}">${esc(p.text.length > 600 ? p.text.slice(0, 600) + "…" : p.text)}<small>${note}</small></div>`);
+  }
   return `<details class="meta"><summary>${esc(r.pid)} · ${esc(r.path)} · ${r.state} ${ago(r.since)} · pane</summary><pre>${esc(sc.text ?? "")}</pre></details><div class="msgs">${out.join("") || `<p class="meta">${stream?.pid === r.pid ? "no messages yet" : "loading…"}</p>`}</div>`;
 }
 function nadyaView() {
@@ -597,15 +618,18 @@ $("#say").onsubmit = async (e) => {
   e.preventDefault();
   const q = e.target.q.value.trim(); if (!q) return;
   const r = isPid(cur) ? S.rows.find((x) => x.pid === cur) : null;
-  const c = context();
-  try {
-    if (r) await post(`${CCX}/s/${r.pid}/type`, {text: q});
-    else { await toNadya(c ? `[cc, ${c}] ${q}` : q); if (cur !== "nadya") { cur = "nadya"; open(); } }
-    e.target.q.value = "";
-  }
-  catch (err) { alert(`Not sent: ${err.message}`); }
+  const c = context(), text = r || !c ? q : `[cc, ${c}] ${q}`, to = r ?? nadyaRow();
+  if (!to) return alert("Not sent: nadya isn't running");
+  const p = {id: ++pendId, pid: to.pid, text, at: Date.now()};
+  pending.push(p); e.target.q.value = "";
+  setTimeout(() => drawView(true), 121e3);
+  if (!r && cur !== "nadya") { cur = "nadya"; open(); } else drawView(true);
+  toBottom();
+  try { await post(`${CCX}/s/${to.pid}/type`, {text}); }
+  catch (err) { p.err = err.message; if (!e.target.q.value) e.target.q.value = q; drawView(true); }
 };
 document.addEventListener("click", async (e) => {
+  const pd = e.target.closest(".m.fail[data-pend]"); if (pd) { pending = pending.filter((p) => p.id !== +pd.dataset.pend); drawView(true); return; }
   if (e.target.closest("#qbtn")) { cur = "quota"; push(); open(); loadBurn(); return; }
   const qt = e.target.closest("[data-qt]"); if (qt) { qTab = qt.dataset.qt; drawView(true); return; }
   if (e.target.closest("#add")) { cur = "new"; push(); open(); dirHints($("#new")); return; }
