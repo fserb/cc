@@ -6,6 +6,8 @@
 <title>nadya</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ffffff">
 <style>
   :root {
     --bg: #fff; --text: #212529; --muted: #6c757d; --line: #e9ecef; --track: #f7f8f9; --hover: #f3f4f6;
@@ -140,6 +142,7 @@
 //   files/                todo.md, ideas/, projects/, research/: links to ~/nadya (caddy lists the dirs)
 const CCX = "../ccx/api";
 const BLOG = "../blog/";
+navigator.serviceWorker?.register("sw.js");
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
 const S = {rows: [], usage: null, burn: null, asks: [], posts: [], todo: [], ideas: [], projects: [], log: [], screens: {}};
