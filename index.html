@@ -157,6 +157,8 @@ function ago(t) {
   return `${Math.floor(s / 86400)}d`;
 }
 const hhmm = (t) => new Date(t * 1000).toLocaleTimeString("en-CA", {hour: "2-digit", minute: "2-digit", hour12: false});
+// bare http(s) URLs in escaped text become links; skips ones already in an href or link text, and trailing punctuation
+const autolink = (s) => s.replace(/(^|[^"=>\w])(https?:\/\/[^\s<"]+?)(?=[.,;:!?)\]]*(?:\s|<|&quot;|&gt;|&#39;|$))/g, (m, pre, u) => `${pre}<a href="${u}">${u}</a>`);
 function md(text, doc) {
   // a small markdown subset: # headings, paragraphs, - and 1. lists (nested by indent), ``` code, | tables,
   // **bold**, *italic*, `code`, links. doc: hard-wrapped lines join into one paragraph (chat keeps its line breaks)
@@ -165,7 +167,7 @@ function md(text, doc) {
     const code = [];  // code spans wait outside, so ** and _ inside them stay as typed
     return esc(s).replace(/`([^`]+)`/g, (m, c) => `\0${code.push(c) - 1}\0`)
       .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/(^|[^\w*])\*(?=\S)(.+?)\*(?!\w)/g, "$1<i>$2</i>").replace(/(^|\W)_(?=\S)(.+?)_(?!\w)/g, "$1<i>$2</i>")
-      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, link).replace(/\0(\d+)\0/g, (m, k) => `<code>${code[k]}</code>`);
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, link).replace(/^.*$/s, autolink).replace(/\0(\d+)\0/g, (m, k) => `<code>${code[k]}</code>`);
   };
   const cells = (row) => row.trim().replace(/^\||\|$/g, "").split("|").map((c) => inline(c.trim()));
   const out = [], lists = [];
@@ -418,7 +420,7 @@ function chat(r) {
     if (e.type === "tool") { tools++; continue; }
     if (e.type !== "user" && e.type !== "text") continue;
     flush();
-    msgs.push({me: e.type === "user", body: e.type === "user" ? esc(unpaste(e.text).length > 600 ? unpaste(e.text).slice(0, 600) + "…" : unpaste(e.text)) : md(e.text), small: hhmm(e.at)});
+    msgs.push({me: e.type === "user", body: e.type === "user" ? autolink(esc(unpaste(e.text).length > 600 ? unpaste(e.text).slice(0, 600) + "…" : unpaste(e.text))) : md(e.text), small: hhmm(e.at)});
   }
   flush();
   const out = msgs.map((m) => m.tools ? `<div class="tools">${m.tools}</div>` : `<div class="m ${m.me ? "me" : ""}">${m.body}<small>${!m.note ? m.small : m.me ? `${m.note} · ${m.small}` : `${m.small} · ${m.note}`}</small></div>`);
