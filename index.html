@@ -290,7 +290,7 @@ function items() {
   const nadyaHot = (n && hasDialog(n)) || nAsks.length;
   const lastText = [...S.log].reverse().find((e) => e.type === "text");
   it.push({id: "nadya", d: nadyaHot ? (n && hasDialog(n) ? "red" : "blue") : n ? {busy: "green", wait: "", hold: "yel", free: "gray"}[n.state] : "gray", hot: nadyaHot, title: "nadya",
-    sub: n && hasDialog(n) ? `waits on a dialog: ${n.asking || "see pane"}` : nAsks[0] ? nAsks[0].text : lastText?.text.split("\n")[0] ?? (n ? n.summary : "not running"), t: n ? `${n.state} ${ago(n.since)}` : ""});
+    sub: n && hasDialog(n) ? `waits on a dialog: ${n.asking || "see pane"}` : nAsks[0] ? nAsks[0].text : lastText?.text.split("\n")[0] ?? (n ? n.summary : "not running"), t: n ? ago(n.since) : ""});
   if (!localStorage.cc_blog_seen && S.posts.length) localStorage.cc_blog_seen = Date.now();
   const seen = +localStorage.cc_blog_seen || 0, top = S.posts[0];
   const fresh = S.posts.filter((x) => Date.parse(x.time) > seen).length;
@@ -302,7 +302,7 @@ function items() {
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, asks: asksFor(r.name), dialog: hasDialog(r)}));
   ss.sort((a, b) => (b.dialog ? 2 : b.asks.length ? 1 : 0) - (a.dialog ? 2 : a.asks.length ? 1 : 0));
   for (const {r, asks, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "red" : asks.length ? "blue" : {busy: "green", wait: "", hold: "yel", free: "gray"}[r.state] ?? "gray", hot: dialog || asks.length,
-    title: r.name, sub: dialog ? `waits on a dialog: ${r.asking || "see pane"}` : asks[0] ? asks[0].text : r.summary !== r.name ? r.summary : r.path, t: `${r.pid.split(".")[0] === "nadya" ? "" : r.pid.split(".")[0] + " · "}${r.state} ${ago(r.since)}`});
+    title: r.name, sub: dialog ? `waits on a dialog: ${r.asking || "see pane"}` : asks[0] ? asks[0].text : r.summary !== r.name ? r.summary : r.path, t: `${r.pid.split(".")[0] === "nadya" ? "" : r.pid.split(".")[0] + " · "}${ago(r.since)}`});
   return it;
 }
 function draw() {
