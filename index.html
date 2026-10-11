@@ -63,11 +63,11 @@
   .m.me.pend { opacity: 0.5; } .m.me.fail { background: var(--red); opacity: 0.85; cursor: pointer; }
   .m small { display: block; text-align: left; font-size: 0.6rem; opacity: 0.7; margin-top: 0.15rem; }
   .m p { margin: 0 0 0.4rem; } .m p:last-of-type { margin: 0; } .m ul { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; } .m code { font: 0.88em var(--mono); }
-  .typing { align-self: flex-start; display: flex; gap: 4px; padding: 0.75rem 0.9rem; border-radius: 12px; background: var(--bubble); }
+  .typing { align-self: center; display: flex; flex-direction: column; align-items: center; gap: 0.4rem; padding: 0.75rem 0.9rem; border-radius: 12px; background: var(--bubble); }
+  .typing small { font-size: 0.72rem; color: var(--muted); line-height: 1; } .typing span { display: flex; gap: 4px; }
   .typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: bob 1.2s ease-in-out infinite; animation-delay: var(--t, 0s); }
   .typing i:nth-child(2) { animation-delay: calc(var(--t, 0s) + 0.15s); } .typing i:nth-child(3) { animation-delay: calc(var(--t, 0s) + 0.3s); }
   @keyframes bob { 0%, 60%, 100% { opacity: 0.3; transform: none; } 30% { opacity: 1; transform: translateY(-3px); } }
-  .tools { align-self: flex-start; font-size: 0.78rem; color: var(--muted); padding: 0 0.8rem; }
   #say[hidden] { display: none; }
   #say { display: flex; gap: 0.5rem; padding: 0.7rem 2rem 0.9rem; border-top: 1px solid var(--line); }
   #say input { flex: 1; font: inherit; border: 1px solid var(--line); border-radius: 999px; padding: 0.55rem 1rem; }
@@ -391,9 +391,10 @@ function drawView(soft) {
   if (chatty && view.querySelector(".msgs")?.innerHTML !== msgs) $("#newer").hidden = false;
 }
 function grow(el, from) {
-  const {width, height} = el.getBoundingClientRect();
+  // clip the reply to where the dots were (centered), then open it to its full size
+  const r = el.getBoundingClientRect(), w = Math.min(from.width, r.width), x = Math.min(Math.max(0, from.left - r.left), r.width - w);
   const ease = {duration: 350, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)"};
-  el.animate([{clipPath: `inset(0 ${Math.max(0, width - from.width)}px ${Math.max(0, height - from.height)}px 0 round 12px)`}, {clipPath: "inset(0 round 12px)"}], ease);
+  el.animate([{clipPath: `inset(0 ${Math.max(0, r.width - x - w)}px ${Math.max(0, r.height - from.height)}px ${x}px round 12px)`}, {clipPath: "inset(0 round 12px)"}], ease);
   for (const c of el.children) c.animate([{opacity: 0}, {opacity: 0, offset: 0.4}, {opacity: 1}], ease);
 }
 // Claude Code wraps pasted text in <pasted_content id="..."> ... </pasted_content id="...">: show only the text
@@ -420,22 +421,15 @@ const metaLine = (r) => `<p class="meta">${esc(r.pid)} · ${esc(r.path)} · ${r.
 function chat(r) {
   if (term) return `<pre class="term">${esc(S.screens[r.pid]?.text ?? "loading…")}</pre>`;
   const log = stream?.pid === r.pid ? S.log : [];
-  // tool calls after a message go on that message's time line: "16:34 · 3 tool calls"; on the user's (right-aligned) side "3 tool calls · 16:34"
+  // tool calls since the last message: shown only while busy, above the dots (user)
   const msgs = []; let tools = 0;
-  const flush = () => {
-    if (!tools) return;
-    const note = `${tools} tool call${tools > 1 ? "s" : ""}`;
-    msgs.length ? msgs.at(-1).note = note : msgs.push({tools: note});
-    tools = 0;
-  };
   for (const e of log) {
     if (e.type === "tool") { tools++; continue; }
     if (e.type !== "user" && e.type !== "text") continue;
-    flush();
+    tools = 0;
     msgs.push({me: e.type === "user", body: e.type === "user" ? autolink(esc(unpaste(e.text).length > 600 ? unpaste(e.text).slice(0, 600) + "…" : unpaste(e.text))) : md(e.text), small: hhmm(e.at)});
   }
-  flush();
-  const out = msgs.map((m) => m.tools ? `<div class="tools">${m.tools}</div>` : `<div class="m ${m.me ? "me" : ""}">${m.body}<small>${!m.note ? m.small : m.me ? `${m.note} · ${m.small}` : `${m.small} · ${m.note}`}</small></div>`);
+  const out = msgs.map((m) => `<div class="m ${m.me ? "me" : ""}">${m.body}<small>${m.small}</small></div>`);
   // sent from here, not in the log yet: kept below everything until the log shows it
   for (const p of pending.filter((x) => x.pid === r.pid)) {
     const note = p.err ? `not sent: ${esc(p.err)} · tap to dismiss` : Date.now() - p.at > 120e3 ? "not seen yet" : "sending…";
@@ -446,7 +440,7 @@ function chat(r) {
   if (r.state === "busy") linger = {pid: r.pid, said, until: Date.now() + 5e3};
   else if (linger?.pid === r.pid && linger.said === said && Date.now() < linger.until) setTimeout(() => drawView(true), linger.until - Date.now() + 50);
   else linger = null;
-  if (linger?.pid === r.pid) out.push(`<div class="typing" role="status" aria-label="working"><i></i><i></i><i></i></div>`);
+  if (linger?.pid === r.pid) out.push(`<div class="typing" role="status" aria-label="working">${tools ? `<small>${tools} tool call${tools > 1 ? "s" : ""}</small>` : ""}<span><i></i><i></i><i></i></span></div>`);
   return `<div class="msgs">${out.join("") || `<p class="meta">${stream?.pid === r.pid ? "no messages yet" : "loading…"}</p>`}</div>`;
 }
 function nadyaView() {

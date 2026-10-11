@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tool counts</title>
+<style>
+  :root { --text: #212529; --muted: #6c757d; --line: #e9ecef; --accent: #0b7bd3; --on-accent: #fff; --bubble: #f3f4f6; --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { margin: 0; font: 15px/1.5 var(--font); color: var(--text); }
+  main { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; padding: 1.2rem; }
+  section { border: 1px solid var(--line); border-radius: 8px; padding: 0.8rem 1rem 1rem; }
+  h2 { font-size: 1rem; margin: 0 0 0.2rem; } h2 + p { color: var(--muted); font-size: 0.82rem; margin: 0 0 0.8rem; }
+  .msgs { display: flex; flex-direction: column; gap: 0.5rem; }
+  .m { align-self: flex-start; max-width: 85%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--bubble); }
+  .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); } .m.me small { text-align: right; }
+  .m small { display: block; font-size: 0.6rem; opacity: 0.7; margin-top: 0.15rem; }
+  .m small.top { margin: 0 0 0.15rem; }
+  .tools { align-self: flex-start; font-size: 0.72rem; color: var(--muted); padding: 0 0.8rem; }
+  .typing { align-self: flex-start; display: flex; align-items: center; gap: 4px; padding: 0.75rem 0.9rem; border-radius: 12px; background: var(--bubble); }
+  .typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: bob 1.2s ease-in-out infinite; }
+  .typing i:nth-child(2) { animation-delay: 0.15s; } .typing i:nth-child(3) { animation-delay: 0.3s; }
+  .typing span { font-size: 0.72rem; color: var(--muted); margin-left: 0.4rem; line-height: 7px; }
+  .row { display: flex; align-items: center; gap: 0.5rem; align-self: flex-start; } .row .tools { padding: 0; align-self: center; }
+  @keyframes bob { 0%, 60%, 100% { opacity: 0.3; transform: none; } 30% { opacity: 1; transform: translateY(-3px); } }
+  h3 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 1rem 0 0.4rem; font-weight: 400; }
+</style>
+</head>
+<body>
+<main>
+<section>
+  <h2>A. top and bottom of the agent bubble</h2>
+  <p>Calls before the agent's text on its top line, calls after on its time line.</p>
+  <div class="msgs">
+    <div class="m me">fix the scroll bug<small>16:30</small></div>
+    <div class="m"><small class="top">4 tool calls</small>Found it: the view resets scrollTop on every redraw.<small>16:31 · 2 tool calls</small></div>
+    <div class="m">Fixed and committed.<small>16:34</small></div>
+    <div class="m me">thanks<small>16:35</small></div>
+  </div>
+  <h3>while busy</h3>
+  <div class="msgs">
+    <div class="m me">now the header<small>16:36</small></div>
+    <div class="typing"><i></i><i></i><i></i><span>3 tool calls</span></div>
+  </div>
+</section>
+<section>
+  <h2>B. one total on the agent bubble</h2>
+  <p>All calls since the previous agent message, summed on the next agent's time line.</p>
+  <div class="msgs">
+    <div class="m me">fix the scroll bug<small>16:30</small></div>
+    <div class="m">Found it: the view resets scrollTop on every redraw.<small>16:31 · 4 tool calls</small></div>
+    <div class="m">Fixed and committed.<small>16:34 · 2 tool calls</small></div>
+    <div class="m me">thanks<small>16:35</small></div>
+  </div>
+  <h3>while busy</h3>
+  <div class="msgs">
+    <div class="m me">now the header<small>16:36</small></div>
+    <div class="row"><div class="typing"><i></i><i></i><i></i></div><span class="tools">3 tool calls</span></div>
+  </div>
+</section>
+<section>
+  <h2>C. own gray line, left side</h2>
+  <p>Counts never on a bubble: a small line between bubbles, always on the agent's side.</p>
+  <div class="msgs">
+    <div class="m me">fix the scroll bug<small>16:30</small></div>
+    <div class="tools">4 tool calls</div>
+    <div class="m">Found it: the view resets scrollTop on every redraw.<small>16:31</small></div>
+    <div class="tools">2 tool calls</div>
+    <div class="m">Fixed and committed.<small>16:34</small></div>
+    <div class="m me">thanks<small>16:35</small></div>
+  </div>
+  <h3>while busy</h3>
+  <div class="msgs">
+    <div class="m me">now the header<small>16:36</small></div>
+    <div class="tools">3 tool calls</div>
+    <div class="typing"><i></i><i></i><i></i></div>
+  </div>
+</section>
+</main>
+</body>
+</html>
