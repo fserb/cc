@@ -72,6 +72,11 @@
   #say { display: flex; gap: 0.5rem; padding: 0.7rem 2rem 0.9rem; border-top: 1px solid var(--line); }
   #say input { flex: 1; font: inherit; border: 1px solid var(--line); border-radius: 999px; padding: 0.55rem 1rem; }
   #say button { border: 0; background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 0 1.1rem; cursor: pointer; font: inherit; }
+  #say #mode { background: none; border: 1px solid var(--line); color: var(--muted); padding: 0 0.75rem; font: 0.85rem var(--mono); }
+  #say #mode[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  #say #mode[hidden] { display: none; }
+  article:has(> pre.term) { max-width: none; }
+  pre.term { white-space: pre; overflow-x: auto; overflow-wrap: normal; margin: 0 0 1rem; }
   #say .note { font-size: 0.78rem; color: var(--muted); align-self: center; }
   #back { display: none; }
   details summary { cursor: pointer; }
@@ -127,7 +132,7 @@
 <header><button id="back" aria-label="back">‹</button><b id="title">nadya</b><span class="sum" id="sum"></span></header>
 <section id="home">
   <nav id="left"></nav>
-  <section id="center"><div id="view"></div><button id="newer" hidden>↓ new</button><form id="say"><input name="q" autocomplete="off"><button>send</button></form></section>
+  <section id="center"><div id="view"></div><button id="newer" hidden>↓ new</button><form id="say"><button type="button" id="mode" aria-pressed="false" title="terminal view" aria-label="terminal view">&gt;_</button><input name="q" autocomplete="off"><button>send</button></form></section>
 </section>
 <script type="module">
 // A static page (no box): everything it shows comes from these, all same origin:
@@ -343,6 +348,7 @@ function noteScroll() {
 }
 $("#view").addEventListener("scroll", noteScroll);
 $("#newer").onclick = toBottom;
+$("#mode").onclick = () => { term = !term; drawView(); };
 // the typing bubble as last drawn: a reply up to 5 s later still grows out of it (the state can turn idle before the log has the reply)
 let dots = null, linger = null, growing = 0;
 function drawView(soft) {
@@ -352,7 +358,7 @@ function drawView(soft) {
   const view = $("#view");
   noteScroll();
   const keep = atBottom(view) || Date.now() - pausedAt > 30e3;
-  const {scrollTop} = view, pane = view.querySelector("details")?.open, msgs = view.querySelector(".msgs")?.innerHTML;
+  const {scrollTop} = view, msgs = view.querySelector(".msgs")?.innerHTML;
   let html, ph = "Message nadya";
   if (cur === "quota") html = quotaView();
   else if (!cur || cur === "nadya") html = nadyaView();
@@ -376,8 +382,9 @@ function drawView(soft) {
   $("#say").q.placeholder = ph;
   $("#say").hidden = !(!cur || cur === "nadya" || i?.r);  // the prompt only where it talks to nadya or a session
   const chatty = !cur || cur === "nadya" || isPid(cur);
+  $("#mode").hidden = !chatty;
+  $("#mode").setAttribute("aria-pressed", term);
   if (!soft) { pausedAt = 0; $("#newer").hidden = true; }
-  if (soft && pane) view.querySelector("details")?.setAttribute("open", "");
   if (chatty && (!soft || keep)) return toBottom();
   view.scrollTop = soft ? scrollTop : 0;
   autoTop = view.scrollTop;
@@ -407,8 +414,11 @@ function ackPending() {
   });
 }
 // a session's transcript as a chat, the same for nadya and every other session
+// chat or terminal (the pane text); each session opens in chat
+let term = false;
+const metaLine = (r) => `<p class="meta">${esc(r.pid)} · ${esc(r.path)} · ${r.state} ${ago(r.since)}</p>`;
 function chat(r) {
-  const sc = S.screens[r.pid] ?? {};
+  if (term) return `<pre class="term">${esc(S.screens[r.pid]?.text ?? "loading…")}</pre>`;
   const log = stream?.pid === r.pid ? S.log : [];
   // tool calls after a message go on that message's time line: "16:34 · 3 tool calls"; on the user's (right-aligned) side "3 tool calls · 16:34"
   const msgs = []; let tools = 0;
@@ -437,13 +447,13 @@ function chat(r) {
   else if (linger?.pid === r.pid && linger.said === said && Date.now() < linger.until) setTimeout(() => drawView(true), linger.until - Date.now() + 50);
   else linger = null;
   if (linger?.pid === r.pid) out.push(`<div class="typing" role="status" aria-label="working"><i></i><i></i><i></i></div>`);
-  return `<details class="meta"><summary>${esc(r.pid)} · ${esc(r.path)} · ${r.state} ${ago(r.since)} · pane</summary><pre>${esc(sc.text ?? "")}</pre></details><div class="msgs">${out.join("") || `<p class="meta">${stream?.pid === r.pid ? "no messages yet" : "loading…"}</p>`}</div>`;
+  return `<div class="msgs">${out.join("") || `<p class="meta">${stream?.pid === r.pid ? "no messages yet" : "loading…"}</p>`}</div>`;
 }
 function nadyaView() {
   const n = nadyaRow();
   if (!n) return `<article><h1>nadya</h1><p class="meta">nadya isn't running.</p></article>`;
   const nAsks = S.asks.filter((a) => !S.rows.some((r) => r.name === a.from && r.name !== "nadya"));
-  return `<article>${chat(n)}${dialogBox(n)}${nAsks.map(askBox).join("")}</article>`;
+  return `<article>${metaLine(n)}${chat(n)}${dialogBox(n)}${nAsks.map(askBox).join("")}</article>`;
 }
 function askBox(a) {
   return `<div class="need"><b>${esc(a.project)} · ${esc(a.from)} asks</b> <small class="meta">${esc(a.when)}</small><p>${esc(a.text)}</p>${a.suggest ? `<p class="suggest">nadya suggests: ${esc(a.suggest)}</p>` : ""}${sent.has(a.id) ? `<p class="done">✓ ${esc(sent.get(a.id))}</p>` : `<div class="opts" data-ask="${esc(a.id)}">${a.options.map((o) => `<button>${esc(o)}</button>`).join("")}</div><form class="free" data-ask="${esc(a.id)}"><input name="a" placeholder="Other answer" aria-label="Other answer" autocomplete="off"><button>Send</button></form>`}</div>`;
@@ -455,7 +465,7 @@ function dialogBox(r) {
   return `<div class="need red"><b>${esc(dg.title ?? dg.question ?? "Dialog")}</b>${dg.detail ? `<p>${esc(dg.detail)}</p>` : ""}<div class="opts" data-pick="${esc(r.pid)}" data-labels="${esc(JSON.stringify(labels))}">${labels.map((l, k) => `<button data-i="${k}">${esc(l)}</button>`).join("")}</div></div>`;
 }
 function sessionView(r) {
-  return `<article><h1>${esc(r.name)}</h1>${chat(r)}${asksFor(r.name).map(askBox).join("")}${S.asks.filter((a) => a.from === r.name && sent.has(a.id)).map(askBox).join("")}${dialogBox(r)}</article>`;
+  return `<article><h1>${esc(r.name)}</h1>${metaLine(r)}${chat(r)}${asksFor(r.name).map(askBox).join("")}${S.asks.filter((a) => a.from === r.name && sent.has(a.id)).map(askBox).join("")}${dialogBox(r)}</article>`;
 }
 function todoView() {
   const due = dueTodos();
@@ -693,6 +703,7 @@ addEventListener("popstate", (e) => {
 });
 function open() {
   document.body.classList.add("view");
+  term = false;
   setHash();
   const pid = cur === "nadya" || cur === null ? nadyaRow()?.pid : isPid(cur) ? cur : null;
   follow(pid);
