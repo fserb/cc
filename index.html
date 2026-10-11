@@ -63,6 +63,8 @@
   .m.me.pend { opacity: 0.5; } .m.me.fail { background: var(--red); opacity: 0.85; cursor: pointer; }
   .m small { display: block; text-align: left; font-size: 0.6rem; opacity: 0.7; margin-top: 0.15rem; }
   .m p { margin: 0 0 0.4rem; } .m p:last-of-type { margin: 0; } .m ul { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; } .m code { font: 0.88em var(--mono); }
+  .spin { align-self: flex-start; width: 0.9rem; height: 0.9rem; margin: 0.1rem 0.8rem; border: 2px solid var(--line); border-top-color: var(--muted); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .tools { align-self: flex-start; font-size: 0.78rem; color: var(--muted); padding: 0 0.8rem; }
   #say[hidden] { display: none; }
   #say { display: flex; gap: 0.5rem; padding: 0.7rem 2rem 0.9rem; border-top: 1px solid var(--line); }
@@ -390,25 +392,26 @@ function chat(r) {
   const log = stream?.pid === r.pid ? S.log : [];
   // tool calls after a message go on that message's time line: "16:34 · 3 tool calls"; on the user's (right-aligned) side "3 tool calls · 16:34"
   const msgs = []; let tools = 0;
-  const flush = (busy) => {
+  const flush = () => {
     if (!tools) return;
-    const note = `${tools} tool call${tools > 1 ? "s" : ""}${busy ? " · working" : ""}`;
+    const note = `${tools} tool call${tools > 1 ? "s" : ""}`;
     msgs.length ? msgs.at(-1).note = note : msgs.push({tools: note});
     tools = 0;
   };
   for (const e of log) {
     if (e.type === "tool") { tools++; continue; }
     if (e.type !== "user" && e.type !== "text") continue;
-    flush(false);
+    flush();
     msgs.push({me: e.type === "user", body: e.type === "user" ? esc(unpaste(e.text).length > 600 ? unpaste(e.text).slice(0, 600) + "…" : unpaste(e.text)) : md(e.text), small: hhmm(e.at)});
   }
-  flush(r.state === "busy");
+  flush();
   const out = msgs.map((m) => m.tools ? `<div class="tools">${m.tools}</div>` : `<div class="m ${m.me ? "me" : ""}">${m.body}<small>${!m.note ? m.small : m.me ? `${m.note} · ${m.small}` : `${m.small} · ${m.note}`}</small></div>`);
   // sent from here, not in the log yet: kept below everything until the log shows it
   for (const p of pending.filter((x) => x.pid === r.pid)) {
     const note = p.err ? `not sent: ${esc(p.err)} · tap to dismiss` : Date.now() - p.at > 120e3 ? "not seen yet" : "sending…";
     out.push(`<div class="m me ${p.err ? "fail" : "pend"}" data-pend="${p.id}">${esc(p.text.length > 600 ? p.text.slice(0, 600) + "…" : p.text)}<small>${note}</small></div>`);
   }
+  if (r.state === "busy") out.push(`<div class="spin" role="status" aria-label="working"></div>`);
   return `<details class="meta"><summary>${esc(r.pid)} · ${esc(r.path)} · ${r.state} ${ago(r.since)} · pane</summary><pre>${esc(sc.text ?? "")}</pre></details><div class="msgs">${out.join("") || `<p class="meta">${stream?.pid === r.pid ? "no messages yet" : "loading…"}</p>`}</div>`;
 }
 function nadyaView() {
