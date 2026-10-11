@@ -296,8 +296,7 @@ function items() {
   const due = dueTodos();
   it.push({id: "plan", d: due.length ? "blue" : "", hot: due.length, title: "plan", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : `${S.todo.length} todo · ${S.ideas.length} ideas`, t: ""});
   const ps = projects(), run = ps.filter((x) => x.running).length;
-  const counts = Object.entries(Object.groupBy(ps.filter((x) => x.state !== "done"), (x) => x.state)).map(([k, v]) => `${v.length} ${k}`);
-  it.push({id: "projects", d: run ? "green" : "", title: "projects", sub: counts.join(" · ") || `${ps.length} done`, t: ""});
+  it.push({id: "projects", d: run ? "green" : "", title: "projects", sub: ps.filter((x) => x.running).map((x) => `${esc(x.file.replace(/\.md$/, ""))} running`).join(" · "), t: ""});
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, asks: asksFor(r.name), dialog: hasDialog(r)}));
   ss.sort((a, b) => (b.dialog ? 2 : b.asks.length ? 1 : 0) - (a.dialog ? 2 : a.asks.length ? 1 : 0));
   for (const {r, asks, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "red" : asks.length ? "blue" : {busy: "green", wait: "", hold: "yel", free: "gray"}[r.state] ?? "gray", hot: dialog || asks.length,
@@ -430,7 +429,7 @@ function todoView() {
     <h2 class="h">ideas</h2><ul class="rows">${S.ideas.map((x) => `<li class="go" data-go="idea/${esc(x.file)}"><span>${esc(x.title)}</span><small>${esc(x.status)}</small></li>`).join("")}</ul></article>`;
 }
 function projectsView() {
-  const row = (x) => `<li class="go" data-go="project/${esc(x.file)}"><span>${esc(x.title)}</span><small>${esc(x.state)}</small></li>`;
+  const row = (x) => `<li class="go" data-go="project/${esc(x.file)}"><span>${esc(x.title)}</span>${x.running ? "<small>running</small>" : ""}</li>`;
   const ps = projects(), open = ps.filter((x) => x.state !== "done"), done = ps.filter((x) => x.state === "done");
   return `<article><h1>projects</h1><ul class="rows">${open.map(row).join("") || "<li><span class=meta>none</span></li>"}</ul>${done.length ? `<details><summary class="h">done (${done.length})</summary><ul class="rows">${done.map(row).join("")}</ul></details>` : ""}</article>`;
 }
