@@ -63,7 +63,7 @@
   .m.me.pend { opacity: 0.5; } .m.me.fail { background: var(--red); opacity: 0.85; cursor: pointer; }
   .m small { display: block; text-align: left; font-size: 0.6rem; opacity: 0.7; margin-top: 0.15rem; }
   .m p { margin: 0 0 0.4rem; } .m p:last-of-type { margin: 0; } .m ul { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; } .m code { font: 0.88em var(--mono); }
-  .typing { align-self: center; display: flex; gap: 4px; padding: 0.75rem 0.9rem; border-radius: 12px; background: var(--bubble); }
+  .typing { align-self: flex-start; display: flex; gap: 4px; padding: 0.75rem 0.9rem; border-radius: 12px; background: var(--bubble); }
   .typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: bob 1.2s ease-in-out infinite; animation-delay: var(--t, 0s); }
   .typing i:nth-child(2) { animation-delay: calc(var(--t, 0s) + 0.15s); } .typing i:nth-child(3) { animation-delay: calc(var(--t, 0s) + 0.3s); }
   @keyframes bob { 0%, 60%, 100% { opacity: 0.3; transform: none; } 30% { opacity: 1; transform: translateY(-3px); } }
