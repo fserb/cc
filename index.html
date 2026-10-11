@@ -437,8 +437,8 @@ function projectsView() {
 const docParent = (c) => c.startsWith("project/") ? "projects" : "plan";
 function projects() {
   // state: running (a live <stem>-co, or <last part>-co: arcade-switch -> switch-co), else the Status: line's first word
-  const live = new Set(S.rows.map((r) => r.name)), order = ["running", "paused", "todo"];
-  const rank = (x) => (order.indexOf(x.state) + 4) % 4 + (x.state === "done") * 4;  // running, paused, todo, other words, done
+  const live = new Set(S.rows.map((r) => r.name)), order = ["running", "todo"];
+  const rank = (x) => (order.indexOf(x.state) + 3) % 3 + (x.state === "done") * 3;  // running, todo, other words, done
   return S.projects.map((x) => {
     const stem = x.file.replace(/\.md$/, "");
     const running = live.has(`${stem}-co`) || live.has(`${stem.split("-").pop()}-co`);
