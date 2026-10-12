@@ -86,11 +86,22 @@ export class Relay {
     }
     const listener = Deno.listen({transport: "unix", path});
     this.links.set(path, {host, sock, listener});
+    // Not `for await (... of listener)`: that ends on the first accept error, which left the
+    // socket file listening with nothing accepting, so every send to it waited out Claude
+    // Code's 5s and answered "Failed to send to <name>." (marx, 2026-10-12)
     (async () => {
-      try {
-        for await (const conn of listener) this.forward(conn, host, sock);
-      } catch {
-        // closed
+      while (this.links.get(path)?.listener === listener) {
+        let conn;
+        try {
+          conn = await listener.accept();
+        } catch (e) {
+          if (e instanceof Deno.errors.BadResource) return;
+          if (this.links.get(path)?.listener !== listener) return;
+          console.error(`relay ${path}: accept: ${e.message ?? e}`);
+          await new Promise((ok) => setTimeout(ok, 50));
+          continue;
+        }
+        this.forward(conn, host, sock);
       }
     })();
     return path;
@@ -112,6 +123,13 @@ export class Relay {
       if (buf.trim()) await this.send(host, sock, [buf]);
     } catch (e) {
       console.error(`relay ${host}:${sock}: ${e.message ?? e}`);
+    } finally {
+      // the sender counts it sent only when we close
+      try {
+        conn.close();
+      } catch {
+        // closed with its readable
+      }
     }
   }
 

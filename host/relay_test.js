@@ -74,6 +74,31 @@ Deno.test("Relay.deliver: refuses a bad request, writes rewritten lines to the s
   l.close();
 });
 
+// marx, 2026-10-12: one accept error ended the accept loop and the socket took connections
+// nobody read, so every SendMessage to that stand-in failed after 5s
+Deno.test("Relay.link: keeps accepting after an accept error, closes what it forwards", async () => {
+  const got = [];
+  const r = new Relay("relay-test", (host, body) => (got.push(body.lines[0]), null));
+  const path = r.link("other", "/tmp/cc-socks/1.sock");
+  const l = r.links.get(path).listener, accept = l.accept.bind(l);
+  let n = 0;
+  l.accept = () => n++ === 0 ? Promise.reject(new Error("simulated ECONNABORTED")) : accept();
+  const send = async (i) => {
+    const c = await Deno.connect({transport: "unix", path});
+    await c.write(new TextEncoder().encode(`{"type":"user","msg_id":"m${i}"}\n`));
+    await c.closeWrite();
+    eq(await c.read(new Uint8Array(8)), null, `send ${i} closed`);
+    c.close();
+  };
+  try {
+    await send(1);  // the accept already waiting when we swapped accept() takes this one
+    await send(2);  // the next accept fails once, then this one is taken
+    eq(got, ['{"type":"user","msg_id":"m1"}', '{"type":"user","msg_id":"m2"}'], "both forwarded");
+  } finally {
+    r.close();
+  }
+});
+
 Deno.test("tailnetOrLocal: loopback and the tailnet ranges only", () => {
   for (const a of ["127.0.0.1", "::1", "100.64.0.1", "100.127.255.1", "::ffff:100.100.1.2",
     "fd7a:115c:a1e0::1"]) eq(tailnetOrLocal(a), true, a);
