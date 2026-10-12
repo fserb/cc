@@ -409,13 +409,15 @@ function quiet(r) {
   const log = stream?.pid === r.pid ? S.log : [];
   return log.findLast((e) => e.type === "user" || e.type === "text")?.type === "user";
 }
+// a session's dot: green when it waits on you, none while it works (user, 2026-10-12: it was green for busy)
+const DOT = {busy: "", wait: "green", hold: "yel", free: "gray"};
 function items() {
   const it = [];
   const n = nadyaRow();
   const nadyaHot = n && hasDialog(n);
   const nLog = n && stream?.pid === n.pid ? S.log : [];
   const lastText = nLog.findLast((e) => e.type === "text" && !blank(e));
-  it.push({id: "nadya", d: nadyaHot ? "q" : n ? {busy: "green", wait: "", hold: "yel", free: "gray"}[n.state] : "gray", hot: nadyaHot, title: "nadya",
+  it.push({id: "nadya", d: nadyaHot ? "q" : n ? DOT[n.state] : "gray", hot: nadyaHot, title: "nadya",
     sub: nadyaHot ? `waits on a dialog: ${n.asking || "see pane"}` : n && quiet(n) ? "\u00a0" : lastText?.text.split("\n")[0] ?? (n ? n.summary : "not running"), t: n ? ago(n.since) : ""});
   if (!localStorage.cc_blog_seen && S.posts.length) localStorage.cc_blog_seen = Date.now();
   const seen = +localStorage.cc_blog_seen || 0, top = S.posts[0];
@@ -432,7 +434,7 @@ function items() {
   it.push({id: "files", d: "", title: "files", sub: "", t: ""});
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, dialog: !!hasDialog(r)}));
   ss.sort((a, b) => b.dialog - a.dialog);
-  for (const {r, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "q" : {busy: "green", wait: "", hold: "yel", free: "gray"}[r.state] ?? "gray", hot: dialog,
+  for (const {r, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "q" : DOT[r.state] ?? "gray", hot: dialog,
     title: r.name, sub: dialog ? `waits on a dialog: ${r.asking || "see pane"}` : quiet(r) ? "\u00a0" : r.summary !== r.name ? r.summary : r.path, t: `${r.pid.split(".")[0] === "nadya" ? "" : r.pid.split(".")[0] + " · "}${ago(r.since)}`});
   return it;
 }
