@@ -105,7 +105,7 @@ export function readPage(path, before = null, size = PAGE, want = WANT, budget =
 
 function short(e) {
   if (e.type === "tool") return {...e, input: clip(e.input, PAGE_CLIP)};
-  if (e.type === "result") return {...e, text: clip(e.text, PAGE_CLIP)};
+  if (e.type === "result" && !e.ask) return {...e, text: clip(e.text, PAGE_CLIP)};
   return e;
 }
 
@@ -169,9 +169,12 @@ function userEvents(rec, at) {
   const content = rec.message?.content;
   if (typeof content === "string") return stringEvents(content, at);
   if (!Array.isArray(content)) return [];
+  // An AskUserQuestion result is the questions and the answers picked, which a page shows
+  // as what you said: kept whole, not cut like other results
+  const ask = rec.toolUseResult?.answers !== undefined;
   const results = content.filter((b) => b?.type === "tool_result")
     .map((b) => ({type: "result", at, id: b.tool_use_id ?? "", error: b.is_error === true,
-      ...blocksText(b.content)}));
+      ...blocksText(b.content, ask ? Infinity : CLIP), ...(ask && {ask})}));
   if (results.length) return results;
   const {text, images} = blocksText(content);
   if (text.startsWith("[Request interrupted")) return [{type: "note", at, text}];
@@ -233,11 +236,11 @@ function systemEvents(rec, at) {
 }
 
 // Text and image blocks, or a bare string, as text plus how many images were in it.
-function blocksText(content) {
-  if (typeof content === "string") return {text: clip(content), images: 0};
+function blocksText(content, n = CLIP) {
+  if (typeof content === "string") return {text: clip(content, n), images: 0};
   if (!Array.isArray(content)) return {text: "", images: 0};
   const text = content.filter((b) => b?.type === "text").map((b) => b.text ?? "").join("\n");
-  return {text: clip(text), images: content.filter((b) => b?.type === "image").length};
+  return {text: clip(text, n), images: content.filter((b) => b?.type === "image").length};
 }
 
 // The one argument that says what a tool call did, on one line.
