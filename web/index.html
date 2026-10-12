@@ -58,7 +58,9 @@
   .need { border-left: 4px solid var(--accent); background: var(--need); border-radius: 0 6px 6px 0; padding: 0.7rem 0.9rem; margin: 1rem 0; } .need.red { border-color: var(--red); background: var(--need-red); } .need p { margin: 0.2rem 0 0; white-space: pre-line; overflow-wrap: anywhere; } .opts button small { display: block; opacity: 0.75; white-space: pre-line; }
   .opts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0 0; }
   .opts button { font: inherit; text-align: left; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: 6px; padding: 0.35rem 0.9rem; cursor: pointer; }
-  .opts:not(.multi) button:first-child, .opts button[aria-pressed=true] { background: var(--accent); color: var(--on-accent); }
+  /* no option is filled until you point at one: Claude Code's cursor on option 1 read as a pick (user, 2026-10-12) */
+  .opts button[aria-pressed=true] { background: var(--accent); color: var(--on-accent); }
+  @media (hover: hover) { .opts button:not(:disabled):hover { background: var(--accent); color: var(--on-accent); } }
   .opts button:disabled { opacity: 0.5; cursor: default; }
   .opts form.free { display: flex; gap: 0.4rem; flex: 1 1 100%; } .free input { flex: 1; min-width: 0; font: inherit; border: 1px solid var(--accent); border-radius: 6px; padding: 0.35rem 0.6rem; }
   .free input:focus { outline: 2px solid var(--accent); outline-offset: -1px; } .opts .free button { background: var(--accent); color: var(--on-accent); }
