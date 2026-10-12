@@ -37,10 +37,11 @@ export function sendKitty(command, payload, tty = null) {
 }
 
 // A tty to write kitty commands to when we have no terminal of our own, as when Raycast or
-// launchd runs us: a kitty window's tmux client, whose tty kitty reads like its own pane.
-// One in a ktmux `kitty-` session, else any client with kitty above it, as a window that
-// focus switched to an instance's session. null when /dev/tty or tmux will carry them, ""
-// when nothing can
+// launchd runs us: one of kitty's windows, whose pty kitty reads the bytes off like any
+// output. A ktmux `kitty-` session's client first, else any process kitty started with a
+// tty, as an `ssh -t <host> tmux attach` window, which is no tmux client here: with only
+// those open, the reopen in openKitty() raised one of them and opened nothing. null when
+// /dev/tty or tmux will carry them, "" when nothing can
 export async function kittyTty() {
   if (Deno.env.get("TMUX")) return null;
   try {
@@ -49,12 +50,14 @@ export async function kittyTty() {
   } catch {
     // no controlling terminal
   }
-  const clients = (await sh("tmux", "list-clients", "-F",
-    "#{client_tty}\t#{client_session}\t#{client_pid}")).split("\n").map((l) => l.split("\t"));
-  const own = clients.find(([, s]) => s?.startsWith("kitty-"));
+  const own = (await sh("tmux", "list-clients", "-F", "#{client_tty}\t#{client_session}"))
+    .split("\n").map((l) => l.split("\t")).find(([, s]) => s?.startsWith("kitty-"));
   if (own) return own[0];
-  const procs = clients.length ? await processes() : null;
-  return clients.find(([t, , pid]) => t && kittyOwner(Number(pid), procs)[1])?.[0] ?? "";
+  const rows = (await sh("ps", MAC ? "-axo" : "-eo", "pid=,ppid=,tty=,comm=")).split("\n")
+    .map((l) => l.trim().split(/\s+/)).filter((r) => r.length >= 4);
+  const kitty = new Set(rows.filter((r) => r[3].split("/").pop() === "kitty").map((r) => r[0]));
+  const win = rows.find(([, ppid, tty]) => kitty.has(ppid) && /^(ttys|pts\/)\d+$/.test(tty));
+  return win ? `/dev/${win[2]}` : "";
 }
 
 // The niri window id for a process, or null. A kitty process owns exactly one OS window,

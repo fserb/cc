@@ -452,6 +452,7 @@ export class Server {
     if (!this.allHosts().includes(on)) return json({error: `no host ${on}`}, 404);
     if (on !== this.self) return await this.subsElsewhere("POST", on, "/api/focus", body);
     const [, host, pid] = m;
+    console.log(`focus ${host}.${pid}`);
     if (host === this.self) {
       const inst = this.find(Number(pid));
       if (!inst) return json({error: `no claude instance with pid ${pid}`}, 404);
