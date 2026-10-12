@@ -392,6 +392,8 @@ const day = (d) => d.toLocaleString("en-CA", {weekday: "short", hour: "2-digit",
 
 // ---------- list
 // a busy session, or one whose last chat message is the user's (known only for the open one), shows a blank line under its title (a space, so the row keeps its height)
+// a reply that is empty or only "·": nadya's answer to a routine ccx notice; not drawn, and not a row's subtitle
+const blank = (e) => e.type === "text" && ["", "·"].includes(e.text?.trim() ?? "");
 function quiet(r) {
   if (r.state === "busy") return true;
   const log = stream?.pid === r.pid ? S.log : [];
@@ -403,7 +405,7 @@ function items() {
   const nAsks = S.asks.filter((a) => !sent.has(a.id) && !S.rows.some((r) => r.name === a.from && r.name !== "nadya"));
   const nadyaHot = (n && hasDialog(n)) || nAsks.length;
   const nLog = n && stream?.pid === n.pid ? S.log : [];
-  const lastText = nLog.findLast((e) => e.type === "text");
+  const lastText = nLog.findLast((e) => e.type === "text" && !blank(e));
   it.push({id: "nadya", d: nadyaHot ? (n && hasDialog(n) ? "red" : "blue") : n ? {busy: "green", wait: "", hold: "yel", free: "gray"}[n.state] : "gray", hot: nadyaHot, title: "nadya",
     sub: n && hasDialog(n) ? `waits on a dialog: ${n.asking || "see pane"}` : nAsks[0] ? nAsks[0].text : n && quiet(n) ? "\u00a0" : lastText?.text.split("\n")[0] ?? (n ? n.summary : "not running"), t: n ? ago(n.since) : ""});
   if (!localStorage.cc_blog_seen && S.posts.length) localStorage.cc_blog_seen = Date.now();
@@ -613,7 +615,7 @@ function chat(r) {
       const qa = answers(e.text);
       if (qa.length) msgs.push({at: e.at, me: true, body: qa.map(([q, a]) => `<span class="q">${esc(q.length > 80 ? q.slice(0, 80) + "…" : q)}</span>${autolink(esc(a))}`).join("<br>"), small: hhmm(e.at)});
     }
-    if (e.type !== "user" && e.type !== "text") continue;
+    if ((e.type !== "user" && e.type !== "text") || blank(e)) continue;
     msgs.push({at: e.at, me: e.type === "user", body: e.type === "user" ? autolink(esc(unpaste(e.text).length > 600 ? unpaste(e.text).slice(0, 600) + "…" : unpaste(e.text))) : md(e.text), small: hhmm(e.at)});
   }
   const out = msgs.map((m) => `<div class="m ${m.me ? "me" : ""}" data-at="${m.at}">${m.body}<small>${m.small}</small></div>`);
