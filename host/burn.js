@@ -42,8 +42,8 @@ const LIVE = 60_000; // the hour in progress is rescanned at most this often
 const CHUNK = 1 << 20;
 const W = { in: 1, cw5: 1.25, cw1: 2, cr: 0.1, out: 5 };
 const TOKENS = ["w", "out", "cw", "cr", "in", "m"];
-// a project renamed, by its old dir name
-const ALIAS = { head: "nadya" };
+// a project renamed, by its old name (~/ai/ccx became ~/ai/cc on 2026-10-12)
+const ALIAS = { head: "nadya", ccx: "cc" };
 
 function modelWeight(m = "") {
   if (m.includes("haiku")) return 0.2;
@@ -153,19 +153,34 @@ function liveNames() {
   return out;
 }
 
-// ~/web/arcade + arcade-switch-a -> arcade-switch; ~/web/bb + bb-a0 -> bb; ~/ai/ccx -> ccx;
-// ~/nadya -> nadya. cwd is on whichever host ran the session
+// A project's name, from a path or from a name this already gave (the store keeps names,
+// so rows written by older rules are renamed when read): a /tmp dir is "tmp", anything in
+// .dotfiles or .claude "dotfiles" or "claude", "~/" "home", else the last part with no
+// leading dot, a dated dir's parent. Then ALIAS. The same name twice is one project, so
+// "~/prj/ccx" and "ccx" are both "cc"
+export function projectName(p) {
+  if (/^(\/private)?\/tmp(\/|$)/.test(p)) return "tmp";
+  if (p.includes(".dotfiles")) return "dotfiles";
+  if (p.includes(".claude")) return "claude";
+  const parts = p.split("/").filter((x) => x && x !== "~");
+  if (!parts.length) return "home";
+  const last = /^\d/.test(parts.at(-1)) && parts.length > 1 ? parts.at(-2) : parts.at(-1);
+  const n = last.replace(/^\./, "");
+  return ALIAS[n] ?? n;
+}
+
+// ~/web/arcade + arcade-switch-a -> arcade-switch; ~/web/bb + bb-a0 -> bb; ~/ai/cc -> cc;
+// ~/nadya -> nadya; ~/prj/bank -> bank. cwd is on whichever host ran the session
 export function projectOf(cwd, name) {
   const rel = cwd.replace(/^\/(Users|home)\/[^/]+\/?/, "");
   const parts = rel.split("/");
-  let base = ["web", "ai"].includes(parts[0]) && parts[1]
-    ? parts[1]
-    : parts.length === 1 && rel
-    ? rel
-    : rel.startsWith("/")
-    ? rel
-    : `~/${rel}`;
-  base = ALIAS[base] ?? base;
+  const base = projectName(
+    ["web", "ai"].includes(parts[0]) && parts[1]
+      ? parts[1]
+      : rel.startsWith("/")
+      ? rel
+      : `~/${rel}`,
+  );
   if (name.startsWith(`${base}-`)) {
     const rest = name.slice(base.length + 1).split("-");
     if (rest.length >= 2) return `${base}-${rest[0]}`;
@@ -354,10 +369,11 @@ function add(a, b) {
 export function group(rows, used = null) {
   const projects = new Map(), all = blank();
   for (const r of rows) {
-    if (!projects.has(r.p)) {
-      projects.set(r.p, { p: r.p, ...blank(), sessions: new Map() });
+    const name = projectName(r.p);
+    if (!projects.has(name)) {
+      projects.set(name, { p: name, ...blank(), sessions: new Map() });
     }
-    const p = projects.get(r.p);
+    const p = projects.get(name);
     if (!p.sessions.has(r.n)) {
       p.sessions.set(r.n, { n: r.n, host: r.host, ...blank() });
     }

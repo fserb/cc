@@ -770,7 +770,7 @@ let pcolMap = null;
 function projColors(b) {
   if (pcolMap) return pcolMap;
   const tot = new Map();
-  for (const w of [...b.weeks, ...b.days]) for (const x of merged(w.projects ?? [])) tot.set(x.p, (tot.get(x.p) ?? 0) + x.w);
+  for (const w of [...b.weeks, ...b.days]) for (const x of w.projects ?? []) tot.set(x.p, (tot.get(x.p) ?? 0) + x.w);
   const ranked = [...tot].filter(([, w]) => w > 0).sort((a, b) => b[1] - a[1]);
   pcolMap = new Map(ranked.slice(0, PCOL.length).map(([p], n) => [p, PCOL[n]]));
   return pcolMap;
@@ -806,7 +806,7 @@ function burnView() {
   const down = b.down?.length ? `<p class="meta err">${b.down.map(([host, e]) => esc(`${host}: ${e}`)).join("<br>")}</p>` : "";
   // the TOPN busiest projects of the window, the rest in one "others" row, last
   const group = (w) => {
-    const ps = merged(w.projects).filter((x) => x.w > 0).sort((a, b) => b.w - a.w);
+    const ps = w.projects.filter((x) => x.w > 0).sort((a, b) => b.w - a.w);
     const shown = ps.slice(0, TOPN), rest = ps.slice(TOPN);
     if (rest.length < 2) return shown.concat(rest);
     const sum = (f) => rest.reduce((a, x) => a + (x[f] ?? 0), 0);
@@ -834,28 +834,6 @@ function burnView() {
   const lg = [...cmap.keys()].filter((p) => inBars.has(p)), gray = [...inBars].some((p) => !cmap.has(p));
   const legend = `<div class="legend">${lg.map((p) => `<span><i style="background:${cmap.get(p)}"></i>${esc(p)}</span>`).join("")}${gray ? `<span><i style="background:var(--gray)"></i>others</span>` : ""}</div>`;
   return `${tabs}${view}<h3 class="qh">by day</h3>${legend}${rows}<p class="meta">A bar is the day's weighted tokens; the % what the usage log added that day, as a share of a day's even pace (the limit / 7, so 100% = on pace); tap a day for its projects. ↻ the weekly reset.</p>${down}`;
-}
-// a project's name as shown: a path's last part ("~/prj/bank" -> "bank"); /tmp dirs -> "tmp",
-// anything in .dotfiles or .claude -> "dotfiles" or "claude", "~/" -> "home", a dated dir -> its parent
-function pname(p) {
-  if (/^(\/private)?\/tmp\//.test(p)) return "tmp";
-  if (p.includes(".dotfiles")) return "dotfiles";
-  if (p.includes(".claude")) return "claude";
-  const parts = p.split("/").filter((x) => x && x !== "~");
-  if (!parts.length) return "home";
-  const last = /^\d/.test(parts.at(-1)) && parts.length > 1 ? parts.at(-2) : parts.at(-1);
-  return last.replace(/^\./, "");
-}
-// projects with the same shown name become one row (e.g. "ccx" and "~/prj/ccx")
-function merged(projects) {
-  const by = new Map();
-  for (const x of projects) {
-    const n = pname(x.p), m = by.get(n);
-    if (!m) { by.set(n, {...x, p: n}); continue; }
-    for (const f of ["w", "q", "share"]) m[f] = (m[f] ?? 0) + (x[f] ?? 0);
-    m.sessions = m.sessions.concat(x.sessions).sort((a, b) => b.w - a.w);
-  }
-  return [...by.values()];
 }
 const fmtQ = (q) => q == null ? "" : q < 0.05 ? "<0.1%" : `${q < 10 ? q.toFixed(1) : Math.round(q)}%`;
 document.addEventListener("toggle", (e) => { const k = e.target.dataset?.k; if (k) e.target.open ? qOpen.add(k) : qOpen.delete(k); }, true);
