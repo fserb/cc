@@ -105,7 +105,7 @@ export function readPage(path, before = null, size = PAGE, want = WANT, budget =
 
 function short(e) {
   if (e.type === "tool") return {...e, input: clip(e.input, PAGE_CLIP)};
-  if (e.type === "result" && !e.ask) return {...e, text: clip(e.text, PAGE_CLIP)};
+  if (e.type === "result") return {...e, text: clip(e.text, PAGE_CLIP)};
   return e;
 }
 
@@ -169,12 +169,14 @@ function userEvents(rec, at) {
   const content = rec.message?.content;
   if (typeof content === "string") return stringEvents(content, at);
   if (!Array.isArray(content)) return [];
-  // An AskUserQuestion result is the questions and the answers picked, which a page shows
-  // as what you said: kept whole, not cut like other results
-  const ask = rec.toolUseResult?.answers !== undefined;
+  // An AskUserQuestion result is the questions and the answers picked, which cc shows as
+  // what you said: `toolUseResult.answers` is {question: answer}, in the questions' order
+  const picked = rec.toolUseResult?.answers;
+  const answers = picked && typeof picked === "object" &&
+    Object.entries(picked).map(([q, a]) => [q, String(a ?? "")]);
   const results = content.filter((b) => b?.type === "tool_result")
     .map((b) => ({type: "result", at, id: b.tool_use_id ?? "", error: b.is_error === true,
-      ...blocksText(b.content, ask ? Infinity : CLIP), ...(ask && {ask})}));
+      ...blocksText(b.content, CLIP), ...(answers && {answers})}));
   if (results.length) return results;
   const {text, images} = blocksText(content);
   if (text.startsWith("[Request interrupted")) return [{type: "note", at, text}];

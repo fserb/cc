@@ -613,7 +613,8 @@ function ackPending() {
     return k < 0;
   });
 }
-// an AskUserQuestion result reads `Your questions have been answered: "Q1"="A1", "Q2"="A2". You can now continue…`
+// an AskUserQuestion result's `answers` is [[question, answer], ...]; a cchost older than 2026-10-12 sends only the text,
+// `Your questions have been answered: "Q1"="A1", "Q2"="A2". You can now continue…`, read back with this
 const answers = (t) => [...(t ?? "").matchAll(/"([^]*?)"="([^]*?)(?:"(?=, "|\. You can)|(…)$)/g)].map((m) => [m[1], m[2] + (m[3] ?? "")]);
 // a session's transcript as a chat, the same for nadya and every other session
 // chat or terminal (the pane text); each session opens in chat
@@ -624,8 +625,8 @@ function chat(r) {
   const log = stream?.pid === r.pid ? S.log : [];
   const msgs = [];
   for (const e of log) {
-    if (e.type === "result" && !e.error && e.text?.startsWith("Your questions have been answered:")) {
-      const qa = answers(e.text);
+    if (e.type === "result" && !e.error && (e.answers || e.text?.startsWith("Your questions have been answered:"))) {
+      const qa = e.answers ?? answers(e.text);
       if (qa.length) msgs.push({at: e.at, me: true, body: qa.map(([q, a]) => `<span class="q">${esc(q.length > 80 ? q.slice(0, 80) + "…" : q)}</span>${autolink(esc(a))}`).join("<br>"), small: hhmm(e.at)});
     }
     if ((e.type !== "user" && e.type !== "text") || blank(e)) continue;

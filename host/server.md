@@ -246,6 +246,10 @@ The session log is `~/.claude/projects/<slug>/<sessionId>.jsonl`. One measured h
   are also written as a `user` record, so peer events carry `msg_id` and repeats drop
 - a tool's result is its own event, `result`, joined to its `tool` on `id` by the client.
   They can sit on different pages, and while following, the result arrives later
+- an AskUserQuestion result carries `answers: [[question, answer], ...]`, from the record's
+  `toolUseResult.answers` ({question: answer}), uncut; its `text` is cut like any result.
+  cc shows them as what you said (2026-10-12; before, cc read them back out of the text
+  with a regex, which it still does for an event with no `answers`)
 
 Built: `transcript.js`, `readPage(path, before)` and `readFrom(path, offset)`, events
 `user`, `peer`, `text`, `tool`, `result`, `command` (a slash command or `!`), `output`

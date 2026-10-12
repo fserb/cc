@@ -142,17 +142,20 @@ Deno.test("readPage: a tail of many tools and few texts still holds `want` chat 
   eq([t.input.length <= 601, r.text.length <= 601, t.arg], [true, true, "c0"], "cut to PAGE_CLIP");
 });
 
-Deno.test("readPage and readFrom: an AskUserQuestion result is kept whole", () => {
-  const q = "q".repeat(5000), text = `Your questions have been answered: "${q}"="Green". You can now continue with these answers in mind.`;
+Deno.test("readPage and readFrom: an AskUserQuestion result carries its answers whole", () => {
+  const q = "q".repeat(5000), text = `Your questions have been answered: "${q}"="Green", "Sizes?"="S, M". You can now continue with these answers in mind.`;
   const path = file([
     user("go"),
     assistant({type: "tool_use", id: "a1", name: "AskUserQuestion", input: {questions: [{question: q}]}}),
-    user([{type: "tool_result", tool_use_id: "a1", content: text}], {toolUseResult: {answers: {[q]: "Green"}}}),
-    assistant({type: "text", text: "ok"}),
+    user([{type: "tool_result", tool_use_id: "a1", content: text}],
+      {toolUseResult: {answers: {[q]: "Green", "Sizes?": "S, M"}}}),
+    assistant({type: "tool_use", id: "b1", name: "Bash", input: {command: "ls"}}),
+    user([{type: "tool_result", tool_use_id: "b1", content: "x"}]),
   ]);
   for (const events of [readPage(path, null, undefined, 40).events, readFrom(path, 0).events]) {
-    const r = events.find((e) => e.type === "result");
-    eq([r.text === text, r.ask], [true, true], "the whole answer text");
+    const [r, plain] = events.filter((e) => e.type === "result");
+    eq(r.answers, [[q, "Green"], ["Sizes?", "S, M"]], "the answers, as data, uncut");
+    eq("answers" in plain, false, "no answers on another result");
   }
 });
 
