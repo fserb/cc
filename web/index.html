@@ -36,14 +36,14 @@
   #left > * { flex-shrink: 0; }
   .addbar { position: sticky; bottom: 0; margin-top: auto; background: var(--bg); padding: 0.6rem 1.1rem calc(0.6rem + env(safe-area-inset-bottom)); }
   .sec { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 0.8rem 1.1rem 0.25rem; }
-  .it { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 0 0.7rem; padding: 0.45rem 1.1rem; cursor: pointer; align-items: baseline; }
+  .it { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 0 0.7rem; padding: 0.35rem 1.1rem; cursor: pointer; align-items: baseline; }
   .it:hover { background: var(--hover); }
   .it[aria-current=true] { background: var(--cur); }
   .it.hot { background: var(--hot); } .it.hot.q { background: var(--hot-red); } .it.hot[aria-current=true] { box-shadow: inset 3px 0 0 var(--accent); }
   .it .d { width: 8px; height: 8px; border-radius: 50%; position: relative; top: calc(4px - 0.5ex); }  /* bottom on the title's baseline, then up so its center is mid x-height */
   .d.red { background: var(--red); } .d.blue { background: var(--accent); } .d.green { background: var(--green); } .d.yel { background: var(--yel); } .d.gray { background: var(--gray); }
   .it .d.q { width: auto; height: auto; top: 0; border-radius: 0; color: var(--red); font-weight: 700; text-align: center; }  /* a session waiting on a dialog: "?" instead of the dot */
-  .it .tx div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .it .tx small { display: block; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.82rem; }
+  .it .tx div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .it .tx small { display: block; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.82rem; line-height: 1.3; }
   .it.hot .tx div, .it.unread .tx div { font-weight: 600; }
   .it time { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
   #center { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
@@ -135,7 +135,7 @@
     body.view #center { display: grid; } body.view #left { display: none; }
     #back { display: inline-flex; all: unset; cursor: pointer; font-size: 1.4rem; padding: 0 0.3rem; } body:not(.view) #back { visibility: hidden; }
     #left { border-right: 0; } .addbar { padding: 0; } .add { border-width: 1px 0 0; border-radius: 0; padding: 0.6rem 0 calc(0.6rem + env(safe-area-inset-bottom)); }
-    .it { padding: 12px 14px; gap: 2px 10px; line-height: 1.4; } .it .tx div, .it .d { font-size: 17px; } .it .tx small { font-size: 15px; margin-top: 2px; } .it time { font-size: 14px; }
+    .it { padding: 10px 14px; gap: 2px 10px; line-height: 1.4; min-height: 44px; } .it .tx div, .it .d { font-size: 17px; } .it .tx small { font-size: 15px; line-height: 1.25; } .it time { font-size: 14px; }
     .sec { font-size: 13px; padding: 1rem 14px 0.35rem; }
     article { padding: 1rem; } .fl .sz { display: none; } #say { padding: 0.6rem 0.8rem calc(0.7rem + env(safe-area-inset-bottom)); } #say textarea, .free input { font-size: 16px; }
   }
