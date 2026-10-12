@@ -75,11 +75,35 @@ export function parseDialog(text) {
   if (chat > 1 && free.n !== null && options.every((o) => o.checked === null)) free.free = true;
   let top = from - 1;
   while (top >= 0 && !RULE.test(lines[top])) top--;
-  const card = lines.slice(Math.max(top + 1, from - 12), from)
-    .filter((l) => !DASHED.test(l)).map((l) => l.replace(/^\s*│/, "").trim());
+  const card = cardLines(lines.slice(top < 0 ? Math.max(0, from - 12) : top + 1, from));
   while (card.length && !card[0]) card.shift();
   const body = card.slice(1).join("\n").replace(/\n{3,}/g, "\n\n").trim();
   return {title: card[0] ?? "", body, options};
+}
+
+// The card's lines trimmed, except what sits between two `╌` rules (a command, a diff, a
+// file): that comes back as a ``` block with its indentation as drawn, less the `│` gutter
+// and the indent all its lines share, so cc can show it as code. The card runs up to the
+// dialog's `─` rule however far up it is, or a long command cuts its title off
+function cardLines(lines) {
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!DASHED.test(lines[i])) {
+      out.push(lines[i].replace(/^\s*│/, "").trim());
+      continue;
+    }
+    const end = lines.findIndex((l, k) => k > i && DASHED.test(l));
+    if (end < 0) continue;
+    let code = lines.slice(i + 1, end);
+    if (code.every((l) => !l.trim() || /^\s*│/.test(l))) code = code.map((l) => l.replace(/^\s*│ ?/, ""));
+    const cut = Math.min(...code.filter((l) => l.trim()).map(indentOf));
+    code = code.map((l) => l.slice(cut));
+    // longer than any run of backticks inside, so none of them closes it
+    const fence = "`".repeat(Math.max(3, ...code.map((l) => Math.max(0, ...(l.match(/`+/g) ?? []).map((b) => b.length + 1)))));
+    out.push(fence, ...code, fence);
+    i = end;
+  }
+  return out;
 }
 
 // The block of numbered options around the cursor: up and down while a line is an option

@@ -1,0 +1,50 @@
+
+ ▐▛███▛█   Claude Code v2.1.296
+▝▜██████▀  Opus 5.5 with medium effort · Claude API
+ ▝▝   ▝▝   /tmp/perm-test
+
+
+❯ Run exactly this as ONE Bash tool call (do not change it, do not split it), then stop:
+
+  cat <<'X' > /tmp/perm-test/out.txt
+    a * b & c < d > e "quoted" 'single' tick bold _u_ &amp; &lt;
+      tab-indented line
+  X
+  python3 -c "import json,base64; print(json.dumps({'a': base64.b64encode(b'x<y>&z').decode()}))" && ffmpeg
+  -version | head -1 | sed -e "s/ / /g" > /dev/null; rm -rf /tmp/perm-test/tl/
+
+● Writing test file, printing base64 JSON, checking ffmpeg, clear tl dir
+  ⎿  $ cat <<'X' > /tmp/perm-test/out.txt
+     a * b & c < d > e "quoted" 'single' `tick` **bold** _u_ &amp; &lt;
+     tab-indented line
+     X
+     python3 -c "import json,base64; print(json.dumps({'a': base64.b64encode(b'x<y>&z').decode()}))" && ffmpeg
+     -version | head -1 | sed -e "s/ */ /g" > /dev/null; rm -rf /tmp/perm-…
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+ Tip: auto mode handles these prompts for you — choose "switch to auto mode" below
+ Write test file, print base64 JSON, check ffmpeg, clear tl dir
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ │ cat <<'X' > /tmp/perm-test/out.txt
+ │   a * b & c < d > e "quoted" 'single' `tick` **bold** _u_ &amp; &lt;
+ │     tab-indented line
+ │ X
+ │ python3 -c "import json,base64; print(json.dumps({'a': base64.b64encode(b'x<y>&z').decode()}))" && ffmpeg
+ │ -version | head -1 | sed -e "s/ */ /g" > /dev/null; rm -rf /tmp/perm-test/tl/*
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ A file redirect in this command can't be checked before it runs
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and switch to auto mode · auto mode handles these prompts for you
+   3. No
+
+ Esc to cancel · Tab to amend
+
+
+
+
+
+
+

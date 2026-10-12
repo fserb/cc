@@ -146,3 +146,13 @@ Deno.test("imageParts: each image where its mark is, the unmarked first", () => 
   eq(imageParts("hi", ["/1"]), [{path: "/1"}, "hi"], "no mark");
   eq(imageParts(`${IMAGE}x${IMAGE}`, ["/1"]), [{path: "/1"}, `x${IMAGE}`], "a mark too many stays");
 });
+
+Deno.test("parseDialog: a long command keeps the title, and comes as a ``` block as drawn", () => {
+  const d = parseDialog(fixture("bash-code"));
+  eq(d.title, "Bash command", "title past 12 lines up");
+  const code = d.body.match(/^```\n([^]*?)\n```$/m)[1].split("\n");
+  eq(code.slice(0, 4), ["cat <<'X' > /tmp/perm-test/out.txt",
+    "  a * b & c < d > e \"quoted\" 'single' `tick` **bold** _u_ &amp; &lt;",
+    "    tab-indented line", "X"], "indentation and characters kept, no │");
+  eq(d.body.endsWith("Do you want to proceed?"), true, "the question after it");
+});

@@ -226,12 +226,13 @@ function md(text, doc) {
   if (fm > 0) { out.push(`<pre class="fm">${esc(lines.slice(1, fm).join("\n"))}</pre>`); lines = lines.slice(fm + 1); }
   for (let k = 0; k < lines.length; k++) {
     const line = lines[k];
-    if (!line.trim()) { endPara(); if (!/^\s+\S/.test(lines[k + 1] ?? "")) endLists(); continue; }
-    // a fence may be indented (inside a list item) and closes on the same mark, at least as long; the code shows as written
+    // a blank line ends the lists unless what follows is indented under them or is their next item
+    if (!line.trim()) { endPara(); if (!/^\s+\S|^([-*]|\d+\.) /.test(lines.slice(k + 1).find((l) => l.trim()) ?? "")) endLists(); continue; }
+    // a fence may be indented, inside a list item, and closes on the same mark, at least as long; the code shows as written
     const fence = line.match(/^(\s*)(`{3,}|~{3,})/);
     if (fence) {
-      endPara(); endLists();
       const code = [], [, ind, mark] = fence;
+      endPara(); if (lists.length && ind) endItem(); else endLists();
       while (++k < lines.length && !(lines[k].trim().startsWith(mark) && /^[`~]+$/.test(lines[k].trim()) && lines[k].trim()[0] === mark[0])) code.push(lines[k].startsWith(ind) ? lines[k].slice(ind.length) : lines[k].trimStart());
       out.push(`<pre><code>${esc(code.join("\n"))}</code></pre>`); continue;
     }
@@ -260,7 +261,7 @@ function md(text, doc) {
       endLists(ind);
       const top = lists.at(-1);
       if (top?.ind === ind && top.tag === tag) out.push("</li>");
-      else { if (top?.ind === ind) endLists(ind - 1); lists.push({ind, tag}); out.push(`<${tag}>`); }
+      else { if (top?.ind === ind) endLists(ind - 1); lists.push({ind, tag}); out.push(tag === "ol" && parseInt(li[2]) !== 1 ? `<ol start="${parseInt(li[2])}">` : `<${tag}>`); }
       const box = li[3].match(/^\[([ xX])\] (.*)$/);
       item = {pre: box ? `<li><input type="checkbox" disabled${box[1] === " " ? "" : " checked"}>` : "<li>", lines: [box ? box[2] : li[3]]};
       continue;
@@ -703,7 +704,7 @@ function chat(r) {
       if (qa.length) msgs.push({at: e.at, me: true, body: qa.map(([q, a]) => `<span class="q">${esc(q.length > 80 ? q.slice(0, 80) + "…" : q)}</span>${autolink(esc(a))}`).join("<br>"), small: hhmm(e.at)});
     }
     if ((e.type !== "user" && e.type !== "text") || blank(e)) continue;
-    msgs.push({at: e.at, me: e.type === "user", body: e.type === "user" ? autolink(esc(clip(unpic(unpaste(e.text))))) : md(e.text), small: hhmm(e.at)});
+    msgs.push({at: e.at, me: e.type === "user", body: e.type === "user" ? autolink(esc(clip(unpic(unpaste(e.text)).trim()))) : md(e.text), small: hhmm(e.at)});
   }
   const out = msgs.map((m) => `<div class="m ${m.me ? "me" : ""}" data-at="${m.at}">${m.body}<small>${m.small}</small></div>`);
   // sent from here, not in the log yet: kept below everything until the log shows it
