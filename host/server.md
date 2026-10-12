@@ -145,6 +145,13 @@ daemons' relay streams and ccx call them that way, and marx may run older code.
     POST api/spawn                 `after` `<host>/<pane>` or dir `<host>:dir` runs it on
                                    that host, the answer's pid and pane tagged; neither,
                                    here as before
+    POST api/focus {id, on}        `id` `<host>.<pid>` shown in a kitty window on host `on`
+                                   (default this one), passed to `on`'s daemon. There: its
+                                   own session by jump() when a tmux client shows it, else
+                                   a new kitty window attached; another host's by its
+                                   `select` (which answers `session` too) and a kitty
+                                   window running `ssh -t <host> tmux attach`, as `ccx
+                                   focus`. cc's ⧉ button, with on=marx (2026-10-12)
     GET  api/dirs?prefix=<host>:p  that host's dirs, each `<host>:`-tagged; a bare prefix
                                    with `all=1` asks every host
 

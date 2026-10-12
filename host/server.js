@@ -19,7 +19,7 @@
 import {byCodePoint, HOME} from "./sh.js";
 import {logPath, readFrom, readPage} from "./transcript.js";
 import {parseDialog, pick, screen} from "./dialog.js";
-import {select, sendKeys, tmuxBackground, typeInto, unqueue} from "./jump.js";
+import {attachSession, select, sendKeys, show, tmuxBackground, typeInto, unqueue} from "./jump.js";
 import {close, expandDir, paneIn, spawn} from "./spawn.js";
 import {sendPeer} from "./peer.js";
 import {byDay, pace, readUsage} from "./usage.js";
@@ -442,6 +442,35 @@ export class Server {
     return await fetch(`${this.base(host)}${path}`, {method: req.method, headers, body, signal});
   }
 
+  // api/focus {id: "<host>.<pid>", on: host}: the instance shown in a kitty window on `on`,
+  // the machine you sit at, so it runs there. One of its own by show(); another host's by
+  // selecting its pane there and a kitty window attached over ssh, as `ccx focus` does
+  async focusRoute(req) {
+    const body = await req.json().catch(() => ({}));
+    const on = String(body.on ?? this.self), m = String(body.id ?? "").match(/^([a-z][\w-]*)\.(\d+)$/i);
+    if (!m) return json({error: "id is <host>.<pid>"}, 400);
+    if (!this.allHosts().includes(on)) return json({error: `no host ${on}`}, 404);
+    if (on !== this.self) return await this.subsElsewhere("POST", on, "/api/focus", body);
+    const [, host, pid] = m;
+    if (host === this.self) {
+      const inst = this.find(Number(pid));
+      if (!inst) return json({error: `no claude instance with pid ${pid}`}, 404);
+      return answer(await show(inst));
+    }
+    if (!this.allHosts().includes(host)) return json({error: `no host ${host}`}, 404);
+    try {
+      const r = await fetch(`${this.base(host)}/api/s/${pid}/select`, {method: "POST",
+        headers: {"content-type": "application/json"}, body: "{}",
+        signal: AbortSignal.timeout(15_000)});
+      const got = await r.json().catch(() => ({}));
+      if (!r.ok) return json({error: got.error ?? `${host}: HTTP ${r.status}`}, r.status);
+      if (!got.session) return json({error: `${host}'s cchost has no session in select; restart it on newer code`}, 502);
+      return answer(await attachSession(host, got.session, got.background));
+    } catch (e) {
+      return json({error: `${host}: ${e.message}`}, 502);
+    }
+  }
+
   // api/s/<host>.<pid>/<verb> of another host, as it answered
   async proxy(req, host, pid, verb, search) {
     if (verb === "events") return this.proxyEvents(req, host, pid, search);
@@ -616,6 +645,7 @@ export class Server {
       return json(await this.dirs(url.searchParams.get("prefix") ?? "", all));
     }
     if (post && path === "/api/spawn") return await this.spawnRoute(req);
+    if (post && path === "/api/focus") return await this.focusRoute(req);
     // `<host>.<pid>`, the merged list's id: another host's goes there, this host's is `<pid>`
     let tag = "";
     const hm = path.match(/^\/api\/s\/([a-z][\w-]*)\.(\d+)\/(\w+)$/i);
@@ -669,7 +699,8 @@ export class Server {
     if (verb === "now") return answer(await sendKeys(inst, ["C-x", "C-s"]));
     if (verb === "unqueue") return answer(await unqueue(inst));
     if (verb === "select") {
-      return answer(await select(inst), {ok: true, background: await tmuxBackground()});
+      return answer(await select(inst), {ok: true, background: await tmuxBackground(),
+        session: inst.session});
     }
     if (verb === "close") return answer(await close(inst));
     return json({error: "not found"}, 404);

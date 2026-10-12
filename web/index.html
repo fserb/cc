@@ -82,7 +82,10 @@
   #say button { height: 2.6rem; border: 0; background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 0 1.1rem; cursor: pointer; font: inherit; }
   #say #mode { background: none; border: 1px solid var(--line); color: var(--muted); padding: 0 0.75rem; font: 0.85rem var(--mono); }
   #say #mode[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-  #say #mode[hidden] { display: none; }
+  #say #mode[hidden], #say #focus[hidden] { display: none; }
+  #say #focus { background: none; border: 1px solid var(--line); color: var(--muted); padding: 0 0.75rem; font: 0.85rem var(--mono); }
+  #say #focus.err { border-color: var(--red); color: var(--red); }
+  @media (pointer: coarse), (max-width: 760px) { #say #focus { display: none; } }  /* a kitty window opens on marx, where the desktop is */
   article:has(> pre.term) { max-width: none; }
   pre.term { white-space: pre; overflow-x: auto; overflow-wrap: normal; margin: 0 0 1rem; }
   #say .note { font-size: 0.78rem; color: var(--muted); align-self: center; }
@@ -145,7 +148,7 @@
 <header><button id="back" aria-label="back">‹</button><b id="title">nadya</b><span class="sum" id="sum"></span></header>
 <section id="home">
   <nav id="left"></nav>
-  <section id="center"><div id="view"></div><button id="newer" hidden>↓ new</button><form id="say"><button type="button" id="mode" aria-pressed="false" title="terminal view" aria-label="terminal view">&gt;_</button><textarea name="q" rows="1" autocomplete="off"></textarea><button>send</button></form></section>
+  <section id="center"><div id="view"></div><button id="newer" hidden>↓ new</button><form id="say"><button type="button" id="focus" title="focus in kitty" aria-label="focus in kitty">⧉</button><button type="button" id="mode" aria-pressed="false" title="terminal view" aria-label="terminal view">&gt;_</button><textarea name="q" rows="1" autocomplete="off"></textarea><button>send</button></form></section>
 </section>
 <script type="module">
 // A static page (no box): everything it shows comes from these, all same origin:
@@ -466,6 +469,12 @@ function noteScroll() {
 $("#view").addEventListener("scroll", (e) => { noteScroll(); if (e.target.scrollTop < 300 && e.target.querySelector(".msgs")) older(chatCount() + 20); });
 $("#newer").onclick = toBottom;
 $("#mode").onclick = () => { term = !term; drawView(); };
+// the session in a kitty window on marx, attached to its tmux pane (cchost's api/focus, as `ccx focus`)
+$("#focus").onclick = async () => {
+  const b = $("#focus"), id = cur === "nadya" || cur === null ? nadyaRow()?.pid : cur;
+  b.classList.remove("err"); b.title = "focus in kitty";
+  try { await post(`${CCX}/focus`, {id, on: "marx"}); } catch (err) { b.classList.add("err"); b.title = `focus: ${err.message}`; }
+};
 // the typing bubble as last drawn: a reply up to 5 s later still grows out of it (the state can turn idle before the log has the reply)
 let dots = null, linger = null, growing = 0, later = 0, shown;
 const replyAts = (v) => [...v.querySelectorAll(".m:not(.me)[data-at]")].map((m) => +m.dataset.at);
@@ -531,6 +540,7 @@ function drawView(soft) {
   loadDraft();
   $("#center").classList.toggle("nadya", !cur || cur === "nadya");
   $("#mode").hidden = !chatty;
+  $("#focus").hidden = !chatty || (!isPid(cur) && !nadyaRow());
   $("#mode").setAttribute("aria-pressed", term);
   if (!soft) { pausedAt = 0; $("#newer").hidden = true; }
   if (chatty && !soft) return toBottom();

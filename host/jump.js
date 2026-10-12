@@ -242,7 +242,11 @@ export async function withClient(inst) {
 // the window hangs the client up, and tmux keeps a session whose client got SIGHUP.
 // -u: an ssh session on nadya has no LANG, so tmux fell back to line-drawing and dropped
 // every non-ASCII glyph, the powerline ones included
-const attachArgs = (host, session) => ["ssh", "-t", host, "tmux", "-u", "attach", "-t", session];
+// With no host it is this machine's tmux, by its full path: kitty runs the command with its
+// own PATH, which on macOS has no /opt/homebrew/bin
+const attachArgs = (host, session, tmux = "tmux") => host
+  ? ["ssh", "-t", host, "tmux", "-u", "attach", "-t", session]
+  : [tmux, "-u", "attach", "-t", session];
 
 // The kitty window already attached to a remote tmux session comes to the front, or a new
 // one opens attached.
@@ -256,7 +260,9 @@ export async function attachSession(host, session, background = "") {
   const tty = await kittyTty();
   if (tty === "") return "no terminal of our own and no kitty window in tmux to reach kitty by";
   const bg = /^#[0-9a-f]{6}$/.test(background ?? "") ? background : "";
-  const want = attachArgs(host, session).join(" "), procs = await processes();
+  const tmux = host ? "tmux" : (await sh("sh", "-c", "command -v tmux")).trim() || "tmux";
+  const args = attachArgs(host, session, tmux);
+  const want = args.join(" "), procs = await processes();
   for (const [pid, [, cmd]] of procs) {
     if (cmd !== want) continue;
     const [child, kitty] = kittyOwner(pid, procs);
@@ -274,8 +280,8 @@ export async function attachSession(host, session, background = "") {
   // out when it made the window, still black; set-colors recomputes it (kitty 0.49.2,
   // launch.py apply_colors against colors.py patch_colors). The user var is how the
   // set-colors finds a window that has no process to look up yet
-  const tag = `${host}.${session}`;
-  if (!sendKitty("launch", {args: attachArgs(host, session), type: "os-window",
+  const tag = `${host || "local"}.${session}`;
+  if (!sendKitty("launch", {args, type: "os-window",
     var: [`ccx_remote=${tag}`], ...(bg ? {color: PAINTED.map((c) => `${c}=${bg}`)} : {})}, tty)) {
     return "cannot reach kitty";
   }
@@ -286,4 +292,14 @@ export async function attachSession(host, session, background = "") {
   }
   if (MAC) await sh("open", "-a", "kitty");
   return null;
+}
+
+// Focus one of this machine's instances from a daemon, which has no terminal: jump() when a
+// tmux client shows its session, else its pane selected and a new kitty window attached to
+// the session. An error message, or null
+export async function show(inst) {
+  if (!inst.pane) return `pid ${inst.pid} is not inside tmux; nothing to focus`;
+  const w = await withClient(inst);
+  if (w.clientTty) return await jump(w);
+  return await select(inst) ?? await attachSession("", inst.session, await tmuxBackground());
 }
