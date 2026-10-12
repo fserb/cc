@@ -235,7 +235,7 @@ function rowsOf(r) {
 // An empty body never matches: the 5 empty ones here are notify_when_idle subscriptions,
 // which carry no message at all and would otherwise all collapse into each other. Every
 // one of the other 102 bodies in this directory is distinct.
-const PAIR_WINDOW = 1800;
+export const PAIR_WINDOW = 1800;
 
 function twinOf(rows, row) {
   if (!row.body) return undefined;
@@ -303,6 +303,41 @@ export function watchChat(cwd, onMsg, {interval = 1500, root = CLAUDE} = {}) {
   };
   stop.ready = ready;
   return stop;
+}
+
+// Two hosts' copies of one message: a SendMessage between sessions in the same directory on
+// two hosts is on disk on both, the sender's where it was sent and the receiver's where it
+// arrived. The relay passes msg_id through as is (seen: nadya's send to arcade-a and marx's
+// receipt both 7ce82fcd), so that is the join, and the body as twinOf matches it otherwise;
+// either way within PAIR_WINDOW
+export function sameMessage(a, b) {
+  if (a.host === b.host) return false;
+  if (a.msgId && b.msgId) return a.msgId === b.msgId;
+  return !!a.body && a.body === b.body && Math.abs(a.at - b.at) <= PAIR_WINDOW;
+}
+
+// [[host, msgs], ...] as one log, oldest first, each message with its `host`: where the
+// earlier copy was written, which is the sender's. `from` is the later one's, the
+// receiver's, which recorded the sender's name where the sender only looked it up; `to` is
+// the address as the sender typed it, unless that did not resolve
+export function mergeChats(lists) {
+  const out = [];
+  for (const m of lists.flatMap(([host, msgs]) => msgs.map((m) => ({...m, host})))
+    .sort((a, b) => a.at - b.at)) {
+    let twin;
+    for (let n = out.length - 1; n >= 0 && m.at - out[n].at <= PAIR_WINDOW; n--) {
+      if (!out[n].merged && sameMessage(out[n], m)) twin = out[n];
+    }
+    if (!twin) {
+      out.push(m);
+      continue;
+    }
+    twin.merged = true;
+    twin.from = m.from || twin.from;
+    if (twin.to === "?") twin.to = m.to;
+    twin.msgId ||= m.msgId;
+  }
+  return out.map(({merged: _, ...m}) => m);
 }
 
 // A row gains its msg_id when the other copy arrives, so the id alone would emit the same

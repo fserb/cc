@@ -27,7 +27,7 @@ import {byDay, pace, readUsage} from "./usage.js";
 import {localRows} from "./burn.js";
 import {base, burnReport, call, HOSTS, mergedUsage, SELF} from "./remote.js";
 import {STATES} from "./subs.js";
-import {chatLog, watchChat} from "./chat.js";
+import {chatLog, mergeChats, PAIR_WINDOW, sameMessage, watchChat} from "./chat.js";
 import {Online} from "./online.js";
 
 export const PORT = 7681;
@@ -484,6 +484,61 @@ export class Server {
     return c.response;
   }
 
+  // api/chat?all=1: every host's log of one directory, merged (chat.js mergeChats). A path
+  // under HOME is the same path under each host's own, so ~/ai/cc is /home/fserb/ai/cc on
+  // nadya and /Users/fserb/ai/cc on marx; any other path is asked for as it is. `down`
+  // [host, why] for each host that did not answer
+  async allChat(cwd, since = 0) {
+    const tilde = cwd === HOME || cwd.startsWith(`${HOME}/`) ? `~${cwd.slice(HOME.length)}` : cwd;
+    const q = `/api/chat?cwd=${encodeURIComponent(tilde)}&since=${since}`;
+    const lists = [], down = [];
+    await Promise.all(this.allHosts().map(async (h) => {
+      if (h === this.self) return lists.push([h, await chatLog(cwd, {since, root: this.chatRoot})]);
+      try {
+        const r = await fetch(`${this.base(h)}${q}`, {signal: AbortSignal.timeout(30_000)});
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body.error ?? `answered ${r.status}`);
+        lists.push([h, body.msgs]);
+      } catch (e) {
+        down.push([h, e.message]);
+      }
+    }));
+    return {msgs: mergeChats(lists), down};
+  }
+
+  // api/chat/events?all=1: allChat's log, then every 2s what is new. A poll, since the
+  // other hosts' logs are only reachable by asking; each asks for what was written since
+  // the stream started less PAIR_WINDOW, so a copy that arrives late still finds its twin
+  allChatEvents(cwd) {
+    let timer = 0, stopped = false;
+    const c = stream(() => {
+      this.chats.delete(c);
+      stopped = true;
+      clearTimeout(timer);
+    });
+    this.chats.add(c);
+    const since = Date.now() / 1000 - PAIR_WINDOW, sent = [];
+    const seen = (m) => sent.some((s) => sameMessage(s, m) || (s.host === m.host &&
+      s.sessionId === m.sessionId && s.at === m.at && s.body === m.body));
+    const tick = async (first) => {
+      const {msgs, down} = await this.allChat(cwd, first ? 0 : since);
+      if (stopped) return;
+      if (first) {
+        c.send("log", {msgs, down});
+        sent.push(...msgs.filter((m) => m.at >= since));
+      } else {
+        for (const m of msgs) {
+          if (seen(m)) continue;
+          sent.push(m);
+          c.send("msg", m);
+        }
+      }
+      timer = setTimeout(() => tick(false).catch((e) => console.error(e)), 2000);
+    };
+    tick(true).catch((e) => console.error(e));
+    return c.response;
+  }
+
   // api/subs and api/unsub of another host, `host` in the query or the body: passed to
   // its daemon as it would have been called there
   async subsElsewhere(method, host, path, body) {
@@ -680,10 +735,14 @@ export class Server {
       return json({self: this.self, api: {url: net.url, from: net.from, ...probe}});
     }
     if (get && (path === "/api/chat" || path === "/api/chat/events")) {
-      const cwd = url.searchParams.get("cwd") ?? "";
-      if (!cwd.startsWith("/")) return json({error: "cwd is an absolute path"}, 400);
-      if (path === "/api/chat/events") return this.chatEvents(cwd);
-      return json({cwd, msgs: await chatLog(cwd, {root: this.chatRoot})});
+      let cwd = url.searchParams.get("cwd") ?? "";
+      if (cwd === "~" || cwd.startsWith("~/")) cwd = HOME + cwd.slice(1);
+      if (!cwd.startsWith("/")) return json({error: "cwd is an absolute path or ~/..."}, 400);
+      const all = url.searchParams.get("all") === "1";
+      const since = Number(url.searchParams.get("since")) || 0;
+      if (path === "/api/chat/events") return all ? this.allChatEvents(cwd) : this.chatEvents(cwd);
+      if (all) return json({cwd, ...await this.allChat(cwd, since)});
+      return json({cwd, msgs: await chatLog(cwd, {since, root: this.chatRoot})});
     }
     if (path === "/api/subs" || path === "/api/unsub") {
       if (!get && !post) return json({error: "not found"}, 404);

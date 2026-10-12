@@ -188,8 +188,13 @@ daemons' relay streams and ccx call them that way, and marx may run older code.
                                    with `all=1` asks every host
 
     GET  api/chat?cwd=<dir>        {cwd, msgs}: chat.js's messages between the sessions
-                                   that ran in dir, this host's transcripts only
-    GET  api/chat/events?cwd=<dir> SSE; `log` {msgs} at once, then `msg` per new message
+                                   that ran in dir, this host's transcripts only. dir is
+                                   absolute or `~/...`; `since` (epoch s) keeps the later
+    GET  api/chat?all=1&cwd=<dir>  {cwd, msgs, down}: every host's, a path under HOME asked
+                                   for as `~/...`; each message with its `host`, one row
+                                   for a message's two copies (chat.js mergeChats)
+    GET  api/chat/events?cwd=<dir> SSE; `log` {msgs} at once, then `msg` per new message.
+                                   With all=1 `log` {msgs, down}, then a poll every 2s
     GET  api/doctor                {self, api: {url, from, ok, note, ms}}, one probe
     *    api/subs, api/unsub       with `host` (query or body) another host's, passed on
 

@@ -1100,9 +1100,9 @@ Deno.test("api: list shows this host's rows bare and another's as host:, and who
       eq(r.code, 0, `exit: ${r.err}`);
       const lines = r.out.split("\n");
       eq(lines.length, 3, `three rows: ${r.out}`);
-      ok(/^● wait\s+1m\s+\/tmp\/alpha\s+the alpha$/.test(lines[0]), lines[0]);
+      ok(/^● wait\s+1m\s+\d+\s+\/tmp\/alpha\s+the alpha$/.test(lines[0]), lines[0]);
       ok(/^◐ busy .*\/tmp\/beta/.test(lines[1]), lines[1]);
-      ok(/^○ hold .*b:~\/g\s+on b$/.test(lines[2]), lines[2]);
+      ok(/^○ hold .* b:\d+\s+~\/g\s+on b$/.test(lines[2]), lines[2]);
       eq(r.err, "c: down, connection refused", "the host that is down, on stderr");
     });
   });

@@ -639,14 +639,15 @@ function scrollChat(delta) {
  * list: they are the way out of ccx, and a key that means quit in one view and back in
  * another is worse than the one keystroke it saves.
  *
- * The conversation is cchost's api/chat/events for this directory: `log` once, then `msg`.
+ * The conversation is cchost's api/chat/events?all=1 for this directory on every host: `log`
+ * once, then `msg`, which a host that answered late can send older than the last one.
  */
 async function toggleChat() {
   if (app.chat.on) return closeChat();
   const c = app.chat, ctl = new AbortController();
   let r;
   try {
-    r = await openStream(`/api/chat/events?cwd=${encodeURIComponent(CWD)}`, ctl);
+    r = await openStream(`/api/chat/events?all=1&cwd=${encodeURIComponent(CWD)}`, ctl);
   } catch (e) {
     toast(`no chat here: ${e.message}`);
     return draw();
@@ -660,7 +661,7 @@ async function toggleChat() {
   };
   frames(r, ctl, (event, body) => {
     if (event === "log") c.msgs = body.msgs;
-    else if (event === "msg") c.msgs = [...c.msgs, body];
+    else if (event === "msg") c.msgs = [...c.msgs, body].sort((a, b) => a.at - b.at);
     else return;
     pin();
   }).catch(() => {}).finally(() => {
@@ -990,7 +991,8 @@ function fail(cmd, err) {
 async function cmdList() {
   for (const i of await listing()) {
     console.log(`${stateOf(i).label.padEnd(6)} ${i.age.padStart(4)}  ` +
-      `${i.shortPath.padEnd(30)} ${i.summary}`);
+      `${(i.host ? `${i.host}:${i.pid}` : `${i.pid}`).padEnd(12)} ` +
+      `${i.shortPath.replace(`${i.host}:`, "").padEnd(30)} ${i.summary}`);
   }
 }
 
@@ -1309,14 +1311,16 @@ async function cmdUser(...args) {
     (await api(`/api/s/${i.id}/type`, {text, force}, 10_000))[1])));
 }
 
-// ccx chat [--no-follow]
-// What the agents in this directory said to each other, out of this host's transcripts:
-// cchost's api/chat, or api/chat/events to follow
+// ccx chat [--no-follow] [--here]
+// What the agents in this directory said to each other, out of the transcripts of every
+// host (the same path under each one's home) or with --here this host's: cchost's api/chat,
+// or api/chat/events to follow
 async function cmdChat(...args) {
-  let follow = true;
+  let follow = true, all = true;
   for (const a of args) {
-    if (a !== "--no-follow") usage();
-    follow = false;
+    if (a === "--no-follow") follow = false;
+    else if (a === "--here") all = false;
+    else usage();
   }
   // colour only into a terminal, so a pipe carries the words and nothing else
   const colour = Deno.stdout.isTerminal();
@@ -1327,10 +1331,14 @@ async function cmdChat(...args) {
     }
     console.log("");
   };
-  const q = `cwd=${encodeURIComponent(CWD)}`;
+  const q = `${all ? "all=1&" : ""}cwd=${encodeURIComponent(CWD)}`;
+  const down = (body) => {
+    for (const [h, why] of body.down ?? []) console.error(`${h}: down, ${why}`);
+  };
   if (!follow) {
-    const [body, err] = await api(`/api/chat?${q}`, undefined, 30_000);
+    const [body, err] = await api(`/api/chat?${q}`, undefined, 40_000);
     if (err) fail("chat", err);
+    down(body);
     for (const m of body.msgs) show(m);
     return;
   }
@@ -1344,7 +1352,10 @@ async function cmdChat(...args) {
   // ctrl+c is the way out, the same as `tail -f`
   try {
     await frames(r, ctl, (event, body) => {
-      if (event === "log") for (const m of body.msgs) show(m);
+      if (event === "log") {
+        down(body);
+        for (const m of body.msgs) show(m);
+      }
       else if (event === "msg") show(body);
     });
   } catch (e) {
@@ -1492,7 +1503,8 @@ const HELP = [
   ["  send <target> <message...>", "a chat message to one or more instances"],
   ["  user [--force] <target> <text...>", "typed into an instance as its user, /commands included;"],
   ["", "refused while it shows a dialog, which the Enter would answer, unless --force"],
-  ["  chat [--no-follow]", "what the agents here have said to each other"],
+  ["  chat [--no-follow] [--here]", "what the agents in this dir have said to each other, on every"],
+  ["", "host (the same path under its home); --here this host's only"],
   ["  notify <who> when <target>", "message who (`me` inside a claude) from `ccx` when target's"],
   ["  [is <state>] [for <time>]", "state changes, or goes to wait|busy|hold|free|gone; once,"],
   ["", "or every time for 30m, 2h, 1d. Lives in target's host daemon"],

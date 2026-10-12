@@ -285,3 +285,41 @@ Deno.test("rowOf: the named fields and no others, with or without a record", () 
     ["shell", 5, "2.1.296", ["x"], 7], "the record's fields");
   eq([rowOf(bare).status, rowOf(bare).statusUpdatedAt], ["", 0], "empty without one");
 });
+
+Deno.test("Server: api/chat?all=1 merges every host's log of the same ~ path", async () => {
+  const dir = (name) => {
+    const root = Deno.makeTempDirSync();
+    const proj = `${root}/projects/${`${HOME}/demo`.replace(/[^a-zA-Z0-9]/g, "-")}`;
+    Deno.mkdirSync(proj, {recursive: true});
+    Deno.mkdirSync(`${root}/sessions`);
+    return [root, `${proj}/${name}.jsonl`];
+  };
+  const [rootA, logA] = dir("s1"), [rootB, logB] = dir("s2");
+  const sent = (at) => JSON.stringify({type: "assistant", timestamp: at, sessionId: "s1",
+    message: {role: "assistant", content: [{type: "tool_use", id: "u1", name: "SendMessage",
+      input: {to: "b1", message: "hi"}}]}});
+  const got = (at, id, body) => JSON.stringify({type: "user", timestamp: at, sessionId: "s2",
+    origin: {kind: "peer", name: "a1", msg_id: id, body}});
+  Deno.writeTextFileSync(logA, `${sent("2026-10-12T10:00:00Z")}\n`);
+  Deno.writeTextFileSync(logB, `${got("2026-10-12T10:00:02Z", "", "hi")}\n`);
+  const b = runServer({source: () => ({instances: [], net: null}), port: 7696});
+  b.server.chatRoot = rootB;
+  const s = hosts([], "http://127.0.0.1:7696");
+  s.chatRoot = rootA;
+  const r = await (await call(s, "/api/chat?all=1&cwd=~/demo")).json();
+  eq(r.msgs.map((m) => [m.host, m.from, m.to, m.body]), [["a", "a1", "b1", "hi"]],
+    "one row for the two copies, named as b recorded it");
+  eq(r.down.map(([h]) => h), ["c"], "c is down");
+  const ev = await call(s, "/api/chat/events?all=1&cwd=~/demo");
+  const reader = ev.body.getReader();
+  let text = "";
+  while (!text.includes("event: log")) text += new TextDecoder().decode((await reader.read()).value);
+  const now = new Date().toISOString();
+  Deno.writeTextFileSync(logB, `${got(now, "m2", "back")}\n`, {append: true});
+  while (!text.includes("event: msg")) text += new TextDecoder().decode((await reader.read()).value);
+  const m = JSON.parse(text.split("event: msg\ndata: ")[1].split("\n")[0]);
+  eq([m.host, m.body], ["b", "back"], "b's new one, by the poll");
+  await reader.cancel();
+  s.stop();
+  await b.stop();
+});

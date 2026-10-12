@@ -2,7 +2,7 @@
 // written to while the suite runs. `root` is the .claude directory, so one temp dir gives
 // both halves of it, projects/ and sessions/, and the real one is not touched.
 
-import {chatLog, watchChat} from "./chat.js";
+import {chatLog, mergeChats, watchChat} from "./chat.js";
 
 // the two assertions ccx_test.js writes for itself, since the project takes no
 // dependencies and `deno test` brings no assertion library of its own
@@ -415,4 +415,27 @@ Deno.test("watchChat: stop ends the polling", async () => {
     {to: "ccx-49", body: "after the stop", use: "toolu_1"}))}\n`);
   await new Promise((r) => setTimeout(r, 120));
   eq(seen, [], "nothing is delivered after the stop");
+});
+
+Deno.test("mergeChats: one message on two hosts is one row, the sender's", () => {
+  const send = {at: 100, from: "a1", to: "b1", body: "hi", msgId: "m1", sessionId: "s1"};
+  const got = {at: 101.5, from: "a1", to: "b1", body: "hi", msgId: "m1", sessionId: "s2"};
+  const other = {at: 102, from: "b1", to: "a1", body: "hi", msgId: "m2", sessionId: "s2"};
+  const rows = mergeChats([["b", [got, other]], ["a", [send]]]);
+  eq(rows.map((m) => [m.host, m.sessionId, m.msgId]), [["a", "s1", "m1"], ["b", "s2", "m2"]],
+    "joined on msg_id; a different id is another message, same body or not");
+});
+
+Deno.test("mergeChats: with no id on one side the body joins, inside the window only", () => {
+  const send = {at: 100, from: "a1", to: "?", body: "hi", msgId: "", sessionId: "s1"};
+  const got = {at: 105, from: "a1", to: "b1", body: "hi", msgId: "m1", sessionId: "s2"};
+  const late = {at: 100 + 3600, from: "a1", to: "b1", body: "hi", msgId: "m9", sessionId: "s2"};
+  const rows = mergeChats([["a", [send]], ["b", [got, late]]]);
+  eq(rows.map((m) => [m.host, m.to, m.msgId]), [["a", "b1", "m1"], ["b", "b1", "m9"]],
+    "the twin gives its names and id; an hour later is a second message");
+  const empty = {at: 100, from: "a1", to: "b1", body: "", msgId: "", sessionId: "s1"};
+  eq(mergeChats([["a", [empty]], ["b", [{...empty, sessionId: "s2"}]]]).length, 2,
+    "an empty body never joins");
+  eq(mergeChats([["a", [send, {...send, sessionId: "s3"}]]]).length, 2,
+    "one host's rows are never joined here; chatLog did that");
 });
