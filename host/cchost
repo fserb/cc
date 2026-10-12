@@ -46,7 +46,7 @@ async function serve(args) {
         again = false;
         instances = clock.update(await discover());
       } while (again);
-      server?.pushList();
+      server?.tick().catch((e) => console.error(e));
     } finally {
       polling = false;
       clearTimeout(timer);

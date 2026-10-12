@@ -31,7 +31,7 @@ import {chatLog, watchChat} from "./chat.js";
 import {Online} from "./online.js";
 
 export const PORT = 7681;
-const TICK = 1500;
+const TICK = 500;            // the open sessions' panes are read this often, for the screen and its dialog
 const KEEPALIVE = 15000;     // an SSE comment this often, so no proxy calls it idle
 const PASS = ["content-type", "sec-fetch-site", "last-event-id"];   // what a proxied call keeps
 
@@ -331,7 +331,25 @@ export class Server {
     }
   }
 
+  // one at a time: `cchost` also calls it when a record changes, so a dialog shows once the
+  // record says wait, and a call during one runs once more after it
   async tick() {
+    if (this.ticking) {
+      this.again = true;
+      return;
+    }
+    this.ticking = true;
+    try {
+      do {
+        this.again = false;
+        await this.tickOnce();
+      } while (this.again);
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  async tickOnce() {
     this.pushList();
     // one capture per pane per tick, however many clients watch it
     const screens = new Map();
@@ -407,7 +425,15 @@ export class Server {
     Object.assign(c, {pid, tag, end: from, path: undefined, row: "", screen: null, dialog: ""});
     this.sessions.add(c);
     const inst = this.find(pid);
-    if (inst) this.follow(c, inst, null).catch((e) => console.error(e));
+    if (!inst) return c.response;
+    // the row and the log at once, then the screen and its dialog as soon as tmux gives it,
+    // not on the next tick
+    this.follow(c, inst, null).catch((e) => console.error(e));
+    if (inst.pane) {
+      screen(inst.pane).then((text) => {
+        if (text !== null && this.sessions.has(c)) return this.follow(c, inst, text);
+      }).catch((e) => console.error(e));
+    }
     return c.response;
   }
 
