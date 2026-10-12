@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>nadya</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -63,7 +63,7 @@
   .done { color: var(--green); font-weight: 600; } .err { color: var(--red); }
   .msgs { display: flex; flex-direction: column; gap: 0.5rem; }
   .m { align-self: flex-start; max-width: 78%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--bubble); overflow-wrap: anywhere; } .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); } .m.me small { text-align: right; }
-  .m.me.pend { opacity: 0.5; } .m.me.stale { opacity: 0.5; cursor: pointer; } .m.me.fail { background: var(--red); opacity: 0.85; cursor: pointer; }
+  .m.me.pend { opacity: 0.5; } .m.me[data-pend] { white-space: pre-wrap; } .m.me.stale { opacity: 0.5; cursor: pointer; } .m.me.fail { background: var(--red); opacity: 0.85; cursor: pointer; }
   .m small { display: block; text-align: left; font-size: 0.6rem; opacity: 0.7; margin-top: 0.15rem; }
   .m p { margin: 0 0 0.4rem; } .m p:last-of-type { margin: 0; } .m ul { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; } .m code { font: 0.88em var(--mono); }
   .typing { align-self: flex-start; display: flex; gap: 4px; padding: 0.75rem 0.9rem; border-radius: 12px; background: var(--bubble); }
@@ -71,10 +71,10 @@
   .typing i:nth-child(2) { animation-delay: calc(var(--t, 0s) + 0.15s); } .typing i:nth-child(3) { animation-delay: calc(var(--t, 0s) + 0.3s); }
   @keyframes bob { 0%, 60%, 100% { opacity: 0.3; transform: none; } 30% { opacity: 1; transform: translateY(-3px); } }
   #say[hidden] { display: none; }
-  #say { display: flex; gap: 0.5rem; padding: 0.7rem 2rem 0.9rem; border-top: 1px solid var(--line); }
-  #say input { flex: 1; font: inherit; border: 1px solid var(--line); border-radius: 999px; padding: 0.55rem 1rem; }
-  #say input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  #say button { border: 0; background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 0 1.1rem; cursor: pointer; font: inherit; }
+  #say { display: flex; align-items: flex-end; gap: 0.5rem; padding: 0.7rem 2rem 0.9rem; border-top: 1px solid var(--line); }
+  #say textarea { flex: 1; box-sizing: border-box; min-height: 2.6rem; font: inherit; line-height: 1.4; border: 1px solid var(--line); border-radius: 1.3rem; padding: 0.55rem 1rem; resize: none; overflow-y: auto; }
+  #say textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  #say button { height: 2.6rem; border: 0; background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 0 1.1rem; cursor: pointer; font: inherit; }
   #say #mode { background: none; border: 1px solid var(--line); color: var(--muted); padding: 0 0.75rem; font: 0.85rem var(--mono); }
   #say #mode[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   #say #mode[hidden] { display: none; }
@@ -129,7 +129,7 @@
     #left { border-right: 0; } .addbar { padding: 0; } .add { border-width: 1px 0 0; border-radius: 0; padding: 0.6rem 0 calc(0.6rem + env(safe-area-inset-bottom)); }
     .it { padding: 12px 14px; gap: 2px 10px; line-height: 1.4; } .it .tx div { font-size: 17px; } .it .tx small { font-size: 15px; margin-top: 2px; } .it time { font-size: 14px; }
     .sec { font-size: 13px; padding: 1rem 14px 0.35rem; }
-    article { padding: 1rem; } #say { padding: 0.6rem 0.8rem calc(0.7rem + env(safe-area-inset-bottom)); }
+    article { padding: 1rem; } #say { padding: 0.6rem 0.8rem calc(0.7rem + env(safe-area-inset-bottom)); } #say textarea { font-size: 16px; }
   }
 </style>
 </head>
@@ -137,7 +137,7 @@
 <header><button id="back" aria-label="back">‹</button><b id="title">nadya</b><span class="sum" id="sum"></span></header>
 <section id="home">
   <nav id="left"></nav>
-  <section id="center"><div id="view"></div><button id="newer" hidden>↓ new</button><form id="say"><button type="button" id="mode" aria-pressed="false" title="terminal view" aria-label="terminal view">&gt;_</button><input name="q" autocomplete="off"><button>send</button></form></section>
+  <section id="center"><div id="view"></div><button id="newer" hidden>↓ new</button><form id="say"><button type="button" id="mode" aria-pressed="false" title="terminal view" aria-label="terminal view">&gt;_</button><textarea name="q" rows="1" autocomplete="off"></textarea><button>send</button></form></section>
 </section>
 <script type="module">
 // A static page (no box): everything it shows comes from these, all same origin:
@@ -398,8 +398,9 @@ function drawView(soft) {
   view.querySelector(".typing")?.style.setProperty("--t", `-${Date.now() % 1200}ms`);
   const reply = dots?.cur === cur && Date.now() - dots.at < 5e3 && view.querySelectorAll(".m:not(.me)")[dots.said];
   if (reply) { grow(reply, dots.rect); growing = Date.now() + 350; dots = null; }
-  $("#say").q.placeholder = ph; loadDraft();
+  $("#say").q.placeholder = ph;
   $("#say").hidden = !(!cur || cur === "nadya" || i?.r);  // the prompt only where it talks to nadya or a session
+  loadDraft();
   const chatty = !cur || cur === "nadya" || isPid(cur);
   $("#center").classList.toggle("nadya", !cur || cur === "nadya");
   $("#mode").hidden = !chatty;
@@ -681,9 +682,24 @@ function setDraft(k, t) {
 }
 function loadDraft() {
   const k = cur ?? "nadya"; if (k === draftKey) return;
-  draftKey = k; $("#say").q.value = drafts[k]?.t ?? "";
+  draftKey = k; $("#say").q.value = drafts[k]?.t ?? ""; fit();
 }
-$("#say").q.oninput = (e) => setDraft(draftKey, e.target.value);
+// the box grows up with its text, to 40% of the visible height (the part above the phone's keyboard), then scrolls
+function fit() {
+  const q = $("#say").q, v = $("#view"), low = !pausedAt || atBottom(v);
+  const top = q.scrollTop;
+  q.style.height = "auto";
+  q.style.height = `${Math.min(q.scrollHeight + 2, (visualViewport?.height ?? innerHeight) * 0.4)}px`;
+  q.scrollTop = q.selectionEnd === q.value.length ? 1e9 : top;  // typing at the end: keep the last line in sight
+  if (low) toBottom();
+}
+visualViewport?.addEventListener("resize", () => { fit(); if (!pausedAt) toBottom(); });
+$("#say").q.oninput = (e) => { setDraft(draftKey, e.target.value); fit(); };
+// desktop: Enter sends, Shift+Enter is a newline; phone: Enter is a newline, the button sends
+$("#say").q.onkeydown = (e) => {
+  if (e.key !== "Enter" || e.shiftKey || e.isComposing || !matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+  e.preventDefault(); $("#say").requestSubmit();
+};
 $("#say").onsubmit = async (e) => {
   e.preventDefault();
   const q = e.target.q.value.trim(); if (!q) return;
@@ -694,13 +710,13 @@ $("#say").onsubmit = async (e) => {
   // a dialog takes the paste and the Enter (which can pick its first option), so the text never reaches the session
   if (hasDialog(to)) p.err = `${to.name} waits on a dialog; answer it first`;
   const dk = draftKey;
-  pending.push(p); e.target.q.value = p.err ? q : ""; setDraft(dk, e.target.q.value);
+  pending.push(p); e.target.q.value = p.err ? q : ""; setDraft(dk, e.target.q.value); fit();
   setTimeout(() => drawView(true), 121e3);
   if (!r && cur !== "nadya") { cur = "nadya"; open(); } else drawView(true);
   toBottom();
   if (p.err) return;
   try { await post(`${CCX}/s/${to.pid}/type`, {text}); }
-  catch (err) { p.err = err.message; if (!drafts[dk]) { setDraft(dk, q); if (draftKey === dk) e.target.q.value = q; } drawView(true); }
+  catch (err) { p.err = err.message; if (!drafts[dk]) { setDraft(dk, q); if (draftKey === dk) { e.target.q.value = q; fit(); } } drawView(true); }
 };
 document.addEventListener("click", async (e) => {
   const pd = e.target.closest(".m.fail[data-pend], .m.stale[data-pend]"); if (pd) { pending = pending.filter((p) => p.id !== +pd.dataset.pend); drawView(true); return; }
@@ -737,7 +753,7 @@ function open() {
   setHash();
   const pid = cur === "nadya" || cur === null ? nadyaRow()?.pid : isPid(cur) ? cur : null;
   follow(pid);
-  draw(); drawView();
+  draw(); drawView(); fit();  // a draft restored while the view was hidden had no height to measure
 }
 
 // ---------- start
