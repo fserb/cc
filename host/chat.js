@@ -53,12 +53,22 @@ function nameIndex(root) {
   return {bySession, bySocket};
 }
 
-// One reader per directory: the byte offset already parsed for each log, and every event
-// seen so far. Re-reading only the tail is the point: a first pass over this directory is
-// 70MB across 131 logs and 115ms, against 0.3ms for a poll that finds nothing appended.
+// One reader per directory, kept for the life of the process and shared by every chatLog()
+// and watchChat(): the byte offset already parsed for each log, and every event seen so
+// far. Re-reading only the tail is the point: a first pass over this directory is 70MB
+// across 131 logs and 115ms, against 0.3ms for a poll that finds nothing appended. On
+// marx, ~/web/arcade is 2.1GB across 558 logs; a reader per request read all of it on
+// the event loop each time, and a chat left open there starved cchost's poll for 40
+// minutes (2026-10-12): its ps outlived the 4s timeout and every session read as gone.
+const readers = new Map();
+
 function reader(cwd, root) {
-  return {dir: projectDir(root, cwd), root, offsets: new Map(),
-    events: [], receipts: new Map(), emitted: new Set()};
+  const key = `${root}\0${cwd}`;
+  if (!readers.has(key)) {
+    readers.set(key, {dir: projectDir(root, cwd), root, offsets: new Map(),
+      events: [], receipts: new Map(), reading: Promise.resolve()});
+  }
+  return readers.get(key);
 }
 
 // Three substrings, and only a line holding one is worth a JSON.parse: 426 of the 14836
@@ -67,7 +77,12 @@ function reader(cwd, root) {
 // `\"msg_id\"` and a quoted marker would miss every one of them.
 const MARKERS = ['"kind":"peer"', '"SendMessage"', "msg_id"];
 
+// One read at a time per reader, each after the one before it
 function read(r) {
+  return r.reading = r.reading.then(() => readNow(r));
+}
+
+async function readNow(r) {
   let entries;
   try {
     entries = [...Deno.readDirSync(r.dir)];
@@ -86,35 +101,50 @@ function read(r) {
     const seen = r.offsets.get(path) ?? 0;
     if (size === seen) continue;
     // a log that shrank was replaced rather than appended to, so read it from the top
-    const [lines, offset] = tail(path, size < seen ? 0 : seen, size);
-    r.offsets.set(path, offset);
     const sessionId = e.name.slice(0, -".jsonl".length);
-    for (const line of lines) parse(line, sessionId, r);
+    r.offsets.set(path, await tail(path, size < seen ? 0 : seen, size,
+      (line) => parse(line, sessionId, r)));
   }
 }
 
-// The bytes past `from`, cut at the last newline. The final line of a log being written is
-// half a JSON object, and leaving it out of the offset is what makes it arrive whole on
-// the next pass instead of being parsed once, failing, and never being looked at again.
-function tail(path, from, size) {
+// Each complete line between `from` and `size` to onLine, CHUNK bytes at a time with a turn
+// of the event loop after each; the offset after the last newline. The final line of a log
+// being written is half a JSON object, and leaving it out of the offset is what makes it
+// arrive whole on the next pass instead of being parsed once, failing, and never being
+// looked at again.
+const CHUNK = 4 << 20;
+
+async function tail(path, from, size, onLine) {
   let f;
   try {
     f = Deno.openSync(path, {read: true});
   } catch {
-    return [[], from];
+    return from;
   }
+  let done = from;                       // the offset just past the last newline handled
   try {
     f.seekSync(from, Deno.SeekMode.Start);
-    const buf = new Uint8Array(size - from);
-    let got = 0;
-    while (got < buf.length) {
-      const n = f.readSync(buf.subarray(got));
-      if (n === null || n === 0) break;
-      got += n;
+    let carry = new Uint8Array(0), pos = from;
+    while (pos < size) {
+      const buf = new Uint8Array(carry.length + Math.min(CHUNK, size - pos));
+      buf.set(carry);
+      let got = carry.length;
+      while (got < buf.length) {
+        const n = f.readSync(buf.subarray(got));
+        if (n === null || n === 0) break;
+        got += n;
+      }
+      pos += got - carry.length;
+      const end = buf.subarray(0, got).lastIndexOf(10);
+      if (end >= 0) {
+        for (const line of UTF8.decode(buf.subarray(0, end)).split("\n")) onLine(line);
+        done += end + 1;
+      }
+      carry = buf.slice(end + 1, got);
+      if (got < buf.length) break;       // the file ended before `size`
+      await new Promise((ok) => setTimeout(ok, 0));
     }
-    const end = buf.subarray(0, got).lastIndexOf(10);
-    if (end < 0) return [[], from];        // nothing complete yet
-    return [UTF8.decode(buf.subarray(0, end)).split("\n"), from + end + 1];
+    return done;
   } finally {
     f.close();
   }
@@ -237,29 +267,42 @@ function msgOf(row) {
 
 // Every peer message seen by any session that has run in `cwd`, oldest first. `since` is
 // epoch seconds and keeps what is at or after it.
-export function chatLog(cwd, {since = 0, root = CLAUDE} = {}) {
+export async function chatLog(cwd, {since = 0, root = CLAUDE} = {}) {
   const r = reader(cwd, root);
-  read(r);
+  await read(r);
   return rowsOf(r).filter((row) => row.at >= since).map(msgOf);
 }
 
 // Follow the same log: onMsg for each message after the initial read, which only seeds.
-// Returns the stop. A poll and not a file watcher, since the first read is the expensive
-// one and every one after it reads only the bytes appended since.
+// Returns the stop at once; `stop.ready` resolves to the seed's messages, oldest first. A poll and not a file watcher, since
+// the first read is the expensive one and every one after it reads only the bytes appended
+// since.
 export function watchChat(cwd, onMsg, {interval = 1500, root = CLAUDE} = {}) {
-  const r = reader(cwd, root);
-  read(r);
-  for (const row of rowsOf(r)) for (const k of keysOf(row)) r.emitted.add(k);
-  const timer = setInterval(() => {
-    read(r);
-    for (const row of rowsOf(r)) {
-      const keys = keysOf(row);
-      if (keys.some((k) => r.emitted.has(k))) continue;
-      for (const k of keys) r.emitted.add(k);
-      onMsg(msgOf(row));
-    }
-  }, interval);
-  return () => clearInterval(timer);
+  const r = reader(cwd, root), emitted = new Set();
+  let stopped = false, timer = 0;
+  const ready = read(r).then(() => {
+    const seed = rowsOf(r);
+    for (const row of seed) for (const k of keysOf(row)) emitted.add(k);
+    const tick = async () => {
+      if (stopped) return;
+      await read(r);
+      for (const row of rowsOf(r)) {
+        const keys = keysOf(row);
+        if (stopped || keys.some((k) => emitted.has(k))) continue;
+        for (const k of keys) emitted.add(k);
+        onMsg(msgOf(row));
+      }
+      if (!stopped) timer = setTimeout(tick, interval);
+    };
+    if (!stopped) timer = setTimeout(tick, interval);
+    return seed.map(msgOf);
+  });
+  const stop = () => {
+    stopped = true;
+    clearTimeout(timer);
+  };
+  stop.ready = ready;
+  return stop;
 }
 
 // A row gains its msg_id when the other copy arrives, so the id alone would emit the same

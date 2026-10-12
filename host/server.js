@@ -446,8 +446,8 @@ export class Server {
       stop();
     });
     this.chats.add(c);
-    c.send("log", {msgs: chatLog(cwd, {root: this.chatRoot})});
     stop = watchChat(cwd, (m) => c.send("msg", m), {root: this.chatRoot});
+    stop.ready.then((msgs) => c.send("log", {msgs}));
     return c.response;
   }
 
@@ -647,7 +647,7 @@ export class Server {
       const cwd = url.searchParams.get("cwd") ?? "";
       if (!cwd.startsWith("/")) return json({error: "cwd is an absolute path"}, 400);
       if (path === "/api/chat/events") return this.chatEvents(cwd);
-      return json({cwd, msgs: chatLog(cwd, {root: this.chatRoot})});
+      return json({cwd, msgs: await chatLog(cwd, {root: this.chatRoot})});
     }
     if (path === "/api/subs" || path === "/api/unsub") {
       if (!get && !post) return json({error: "not found"}, 404);

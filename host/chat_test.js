@@ -76,13 +76,13 @@ function receipt(at, {use, msgId, sessionId = SEND}) {
 
 // chatLog
 
-Deno.test("chatLog: an incoming record is one message, named out of origin", () => {
+Deno.test("chatLog: an incoming record is one message, named out of origin", async () => {
   const dir = root();
   session(dir, 28789, SEND, "ccx-ef");
   session(dir, 40694, RECV, "ccx-49");
   log(dir, RECV, [incoming("2026-09-16T17:51:07.696Z",
     {name: "ccx-ef", body: "do the thing", msgId: "m1"})]);
-  const out = chatLog(CWD, {root: dir});
+  const out = await chatLog(CWD, {root: dir});
   eq(out.length, 1, "one record is one message");
   eq(out[0].from, "ccx-ef", "from is origin.name");
   eq(out[0].to, "ccx-49", "to is the transcript that received it");
@@ -92,12 +92,12 @@ Deno.test("chatLog: an incoming record is one message, named out of origin", () 
   eq(out[0].at, epoch("2026-09-16T17:51:07.696Z"), "at is the timestamp in seconds");
 });
 
-Deno.test("chatLog: an outgoing tool_use is one message, sender out of the transcript", () => {
+Deno.test("chatLog: an outgoing tool_use is one message, sender out of the transcript", async () => {
   const dir = root();
   session(dir, 28789, SEND, "ccx-ef");
   log(dir, SEND, [outgoing("2026-09-16T17:51:06.000Z",
     {to: "ccx-85", body: "port the TUI", use: "toolu_1"})]);
-  const out = chatLog(CWD, {root: dir});
+  const out = await chatLog(CWD, {root: dir});
   eq(out.length, 1, "one tool_use is one message");
   eq(out[0].from, "ccx-ef", "from is the sending session's name");
   eq(out[0].to, "ccx-85", "to is input.to");
@@ -105,19 +105,19 @@ Deno.test("chatLog: an outgoing tool_use is one message, sender out of the trans
   eq(out[0].msgId, "", "no tool_result yet, so no id to carry");
 });
 
-Deno.test("chatLog: the sender's msg_id is in the tool_result, not the tool_use", () => {
+Deno.test("chatLog: the sender's msg_id is in the tool_result, not the tool_use", async () => {
   const dir = root();
   session(dir, 28789, SEND, "ccx-ef");
   log(dir, SEND, [
     outgoing("2026-09-16T17:51:06.000Z", {to: "ccx-85", body: "hi", use: "toolu_1"}),
     receipt("2026-09-16T17:51:06.100Z", {use: "toolu_1", msgId: "m9"}),
   ]);
-  const out = chatLog(CWD, {root: dir});
+  const out = await chatLog(CWD, {root: dir});
   eq(out.length, 1, "the receipt is not a message of its own");
   eq(out[0].msgId, "m9", "the id joins to the tool_use on tool_use_id");
 });
 
-Deno.test("chatLog: both copies of one message collapse into one row with both names", () => {
+Deno.test("chatLog: both copies of one message collapse into one row with both names", async () => {
   const dir = root();
   session(dir, 28789, SEND, "ccx-ef");
   session(dir, 40694, RECV, "ccx-49");
@@ -128,7 +128,7 @@ Deno.test("chatLog: both copies of one message collapse into one row with both n
   ]);
   log(dir, RECV, [incoming("2026-09-16T17:51:07.750Z",
     {name: "ccx-ef", body: "do the thing", msgId: "m1"})]);
-  const out = chatLog(CWD, {root: dir});
+  const out = await chatLog(CWD, {root: dir});
   eq(out.length, 1, "on disk twice, in the listing once");
   eq([out[0].from, out[0].to], ["ccx-ef", "ccx-49"], "the row carries both ends");
   eq(out[0].at, epoch("2026-09-16T17:51:06.000Z"),
@@ -136,7 +136,7 @@ Deno.test("chatLog: both copies of one message collapse into one row with both n
   eq(out[0].sessionId, SEND, "the sender's transcript holds the tool call");
 });
 
-Deno.test("chatLog: two ids that differ stay two rows, however equal the bodies", () => {
+Deno.test("chatLog: two ids that differ stay two rows, however equal the bodies", async () => {
   const dir = root();
   session(dir, 28789, SEND, "ccx-ef");
   session(dir, 40694, RECV, "ccx-49");
@@ -150,11 +150,11 @@ Deno.test("chatLog: two ids that differ stay two rows, however equal the bodies"
     incoming("2026-09-16T17:51:07.000Z", {name: "ccx-ef", body: "ok", msgId: "m1"}),
     incoming("2026-09-16T17:52:07.000Z", {name: "ccx-ef", body: "ok", msgId: "m2"}),
   ]);
-  eq(chatLog(CWD, {root: dir}).map((m) => m.msgId), ["m1", "m2"],
+  eq((await chatLog(CWD, {root: dir})).map((m) => m.msgId), ["m1", "m2"],
     "the id decides, so an identical body is not a merge");
 });
 
-Deno.test("chatLog: a send with no receipt still pairs, on the body inside the window", () => {
+Deno.test("chatLog: a send with no receipt still pairs, on the body inside the window", async () => {
   const dir = root();
   session(dir, 28789, SEND, "ccx-ef");
   session(dir, 40694, RECV, "ccx-49");
@@ -162,13 +162,13 @@ Deno.test("chatLog: a send with no receipt still pairs, on the body inside the w
     {to: "ccx-49", body: "no receipt for this one", use: "toolu_1"})]);
   log(dir, RECV, [incoming("2026-09-16T17:51:07.750Z",
     {name: "ccx-ef", body: "no receipt for this one", msgId: "m1"})]);
-  const out = chatLog(CWD, {root: dir});
+  const out = await chatLog(CWD, {root: dir});
   eq(out.length, 1, "5 of 107 sends here have no receipt, and must not double");
   eq([out[0].from, out[0].to], ["ccx-ef", "ccx-49"], "both ends survive the body join");
   eq(out[0].msgId, "m1", "the id the receiver had");
 });
 
-Deno.test("chatLog: a receiver 16 minutes behind still pairs, not doubles", () => {
+Deno.test("chatLog: a receiver 16 minutes behind still pairs, not doubles", async () => {
   const dir = root();
   session(dir, 28789, SEND, "ccx-ef");
   session(dir, 40694, RECV, "ccx-49");
@@ -178,12 +178,12 @@ Deno.test("chatLog: a receiver 16 minutes behind still pairs, not doubles", () =
     {to: "ccx-49", body: "answered late", use: "toolu_1"})]);
   log(dir, RECV, [incoming("2026-09-16T00:40:49.000Z",
     {name: "ccx-ef", body: "answered late", msgId: "m1"})]);
-  const out = chatLog(CWD, {root: dir});
+  const out = await chatLog(CWD, {root: dir});
   eq(out.length, 1, "966s apart is still one message");
   eq(out[0].at, epoch("2026-09-16T00:24:42.000Z"), "timed at the send, not the arrival");
 });
 
-Deno.test("chatLog: empty bodies never join each other", () => {
+Deno.test("chatLog: empty bodies never join each other", async () => {
   const dir = root();
   session(dir, 28789, SEND, "ccx-ef");
   session(dir, 40694, RECV, "ccx-49");
@@ -194,40 +194,40 @@ Deno.test("chatLog: empty bodies never join each other", () => {
   ]);
   log(dir, RECV, [incoming("2026-09-16T17:51:02.000Z",
     {name: "ccx-ef", body: "", msgId: "m1"})]);
-  eq(chatLog(CWD, {root: dir}).length, 3, "three sends with no body are three rows");
+  eq((await chatLog(CWD, {root: dir})).length, 3, "three sends with no body are three rows");
 });
 
-Deno.test("chatLog: the same body an hour apart is two messages, not one", () => {
+Deno.test("chatLog: the same body an hour apart is two messages, not one", async () => {
   const dir = root();
   session(dir, 28789, SEND, "ccx-ef");
   log(dir, SEND, [outgoing("2026-09-16T17:51:06.000Z",
     {to: "ccx-49", body: "same", use: "toolu_1"})]);
   log(dir, RECV, [incoming("2026-09-16T18:51:06.000Z",
     {name: "ccx-ef", body: "same", msgId: "m1"})]);
-  eq(chatLog(CWD, {root: dir}).length, 2, "the body join is bounded by PAIR_WINDOW");
+  eq((await chatLog(CWD, {root: dir})).length, 2, "the body join is bounded by PAIR_WINDOW");
 });
 
-Deno.test("chatLog: a session with no record falls back to 6 characters of its id", () => {
+Deno.test("chatLog: a session with no record falls back to 6 characters of its id", async () => {
   const dir = root();
   log(dir, GONE, [outgoing("2026-09-16T17:51:06.000Z",
     {sessionId: GONE, to: "uds:/tmp/cc-socks/99999.sock", body: "from a dead session",
       use: "toolu_1"})]);
-  const out = chatLog(CWD, {root: dir});
+  const out = await chatLog(CWD, {root: dir});
   eq(out.length, 1, "a session that exited is still a row");
   eq(out[0].from, GONE.slice(0, 6), "the id's head, not a dropped row");
   eq(out[0].to, "?", "an address with no live record behind it");
 });
 
-Deno.test("chatLog: an address resolves through the socket path a record carries", () => {
+Deno.test("chatLog: an address resolves through the socket path a record carries", async () => {
   const dir = root();
   session(dir, 28789, SEND, "ccx-ef");
   session(dir, 40613, RECV, "ccx-85");
   log(dir, SEND, [outgoing("2026-09-16T17:51:06.000Z",
     {to: "uds:/tmp/cc-socks/40613.sock", body: "addressed", use: "toolu_1"})]);
-  eq(chatLog(CWD, {root: dir})[0].to, "ccx-85", "messagingSocketPath is the whole map");
+  eq((await chatLog(CWD, {root: dir}))[0].to, "ccx-85", "messagingSocketPath is the whole map");
 });
 
-Deno.test("chatLog: a half-written last line is skipped, and the rest survives", () => {
+Deno.test("chatLog: a half-written last line is skipped, and the rest survives", async () => {
   const dir = root();
   session(dir, 28789, SEND, "ccx-ef");
   const whole = JSON.stringify(
@@ -236,11 +236,11 @@ Deno.test("chatLog: a half-written last line is skipped, and the rest survives",
     outgoing("2026-09-16T17:51:08.000Z", {to: "ccx-49", body: "second", use: "toolu_2"}));
   Deno.writeTextFileSync(`${dir}/projects/${SLUG}/${SEND}.jsonl`,
     `${whole}\n${partial.slice(0, 60)}`);
-  const out = chatLog(CWD, {root: dir});
+  const out = await chatLog(CWD, {root: dir});
   eq(out.map((m) => m.body), ["first"], "half a JSON object is not a message");
 });
 
-Deno.test("chatLog: a complete line that is not JSON costs only that line", () => {
+Deno.test("chatLog: a complete line that is not JSON costs only that line", async () => {
   const dir = root();
   session(dir, 28789, SEND, "ccx-ef");
   log(dir, SEND, [
@@ -248,11 +248,11 @@ Deno.test("chatLog: a complete line that is not JSON costs only that line", () =
     outgoing("2026-09-16T17:51:06.000Z",
       {to: "ccx-49", body: "after the garbage", use: "toolu_1"}),
   ]);
-  eq(chatLog(CWD, {root: dir}).map((m) => m.body), ["after the garbage"],
+  eq((await chatLog(CWD, {root: dir})).map((m) => m.body), ["after the garbage"],
     "one unreadable line, not the end of the log");
 });
 
-Deno.test("chatLog: oldest first, across two transcripts", () => {
+Deno.test("chatLog: oldest first, across two transcripts", async () => {
   const dir = root();
   session(dir, 28789, SEND, "ccx-ef");
   log(dir, SEND, [
@@ -261,25 +261,64 @@ Deno.test("chatLog: oldest first, across two transcripts", () => {
   ]);
   log(dir, RECV, [incoming("2026-09-16T17:52:00.000Z",
     {name: "ccx-9c", body: "second", msgId: "m2"})]);
-  eq(chatLog(CWD, {root: dir}).map((m) => m.body), ["first", "second", "third"],
+  eq((await chatLog(CWD, {root: dir})).map((m) => m.body), ["first", "second", "third"],
     "time order, not file order");
 });
 
-Deno.test("chatLog: since keeps what is at or after it", () => {
+Deno.test("chatLog: since keeps what is at or after it", async () => {
   const dir = root();
   session(dir, 28789, SEND, "ccx-ef");
   log(dir, SEND, [
     outgoing("2026-09-16T17:51:00.000Z", {to: "ccx-49", body: "before", use: "toolu_1"}),
     outgoing("2026-09-16T17:53:00.000Z", {to: "ccx-49", body: "after", use: "toolu_2"}),
   ]);
-  eq(chatLog(CWD, {root: dir, since: epoch("2026-09-16T17:52:00.000Z")}).map((m) => m.body),
+  eq((await chatLog(CWD, {root: dir, since: epoch("2026-09-16T17:52:00.000Z")})).map((m) => m.body),
     ["after"], "what is older than since is gone");
-  eq(chatLog(CWD, {root: dir, since: epoch("2026-09-16T17:53:00.000Z")}).map((m) => m.body),
+  eq((await chatLog(CWD, {root: dir, since: epoch("2026-09-16T17:53:00.000Z")})).map((m) => m.body),
     ["after"], "a message exactly at since is kept");
 });
 
-Deno.test("chatLog: a directory that does not exist is an empty log", () => {
-  eq(chatLog("/nowhere/at/all", {root: root()}), [], "no project dir is no messages");
+Deno.test("chatLog: a log of several chunks is read whole, a line across a chunk edge too",
+  async () => {
+    const dir = root();
+    session(dir, 28789, SEND, "ccx-ef");
+    // filler lines no marker matches, then a message straddling the 4MB chunk edge
+    const filler = JSON.stringify({type: "user", text: "x".repeat(1000)});
+    const first = JSON.stringify(
+      outgoing("2026-09-16T17:51:00.000Z", {to: "ccx-49", body: "first", use: "t1"}));
+    const across = JSON.stringify(
+      outgoing("2026-09-16T17:52:00.000Z", {to: "ccx-49", body: "across", use: "t2"}));
+    const lines = [first, ...Array(4000).fill(filler)];
+    // one more line, sized so the next starts 100 bytes before the edge
+    const pad = (4 << 20) - 100 - (lines.join("\n").length + 1) - 1;
+    lines.push(JSON.stringify({type: "user", text: "y".repeat(pad - 27)}));
+    const start = lines.join("\n").length + 1;
+    ok(start < 4 << 20 && start + across.length > 4 << 20, "the line crosses the edge");
+    lines.push(across);
+    lines.push(...Array(2000).fill(filler));
+    lines.push(outgoing("2026-09-16T17:53:00.000Z", {to: "ccx-49", body: "last", use: "t3"}));
+    log(dir, SEND, lines);
+    eq((await chatLog(CWD, {root: dir})).map((m) => m.body), ["first", "across", "last"],
+      "every message, none cut at a chunk edge");
+  });
+
+Deno.test("chatLog: a long first pass leaves the event loop turns", async () => {
+  const dir = root();
+  session(dir, 28789, SEND, "ccx-ef");
+  const filler = JSON.stringify({type: "user", text: "x".repeat(4000)});
+  for (const id of [SEND, RECV, GONE]) log(dir, id, Array(3000).fill(filler));
+  let ticks = 0;
+  const timer = setInterval(() => ticks++, 0);
+  try {
+    await chatLog(CWD, {root: dir});
+  } finally {
+    clearInterval(timer);
+  }
+  ok(ticks > 0, "a timer ran during a 36MB first pass");
+});
+
+Deno.test("chatLog: a directory that does not exist is an empty log", async () => {
+  eq(await chatLog("/nowhere/at/all", {root: root()}), [], "no project dir is no messages");
 });
 
 // watchChat
@@ -301,6 +340,7 @@ Deno.test("watchChat: the initial read seeds, and what lands after it is deliver
       {to: "ccx-49", body: "already there", use: "toolu_1"})]);
     const seen = [];
     const stop = watchChat(CWD, (m) => seen.push(m), {interval: 30, root: dir});
+    await stop.ready;
     try {
       await new Promise((r) => setTimeout(r, 120));
       eq(seen, [], "the seed is not delivered");
@@ -321,6 +361,7 @@ Deno.test("watchChat: a line that arrives in two writes is read whole, once", as
     {to: "ccx-49", body: "already there", use: "toolu_1"})]);
   const seen = [];
   const stop = watchChat(CWD, (m) => seen.push(m), {interval: 30, root: dir});
+  await stop.ready;
   try {
     const line = JSON.stringify(outgoing("2026-09-16T17:52:00.000Z",
       {to: "ccx-49", body: "written in halves", use: "toolu_2"}));
@@ -344,6 +385,7 @@ Deno.test("watchChat: the receiver's copy of a delivered message is not a second
       {to: "ccx-49", body: "seed", use: "toolu_0"})]);
     const seen = [];
     const stop = watchChat(CWD, (m) => seen.push(m), {interval: 30, root: dir});
+    await stop.ready;
     try {
       append(dir, SEND, `${JSON.stringify(outgoing("2026-09-16T17:52:00.000Z",
         {to: "ccx-49", body: "one message", use: "toolu_1"}))}\n`);
@@ -356,7 +398,7 @@ Deno.test("watchChat: the receiver's copy of a delivered message is not a second
         {name: "ccx-ef", body: "one message", msgId: "m1"})]);
       await new Promise((r) => setTimeout(r, 200));
       eq(seen.length, 1, "one message, delivered once");
-      eq(chatLog(CWD, {root: dir}).length, 2, "the seed and this one");
+      eq((await chatLog(CWD, {root: dir})).length, 2, "the seed and this one");
     } finally {
       stop();
     }
