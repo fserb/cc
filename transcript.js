@@ -73,8 +73,8 @@ function readRange(path, from, to) {
 // between them come along but do not count: launcher-a's last 40 events were 75 tools
 // and 3 texts, so a count of events left the page with almost no conversation. A page's
 // tool input and result text are cut to PAGE_CLIP, so a tool-heavy page stays small;
-// readFrom() keeps CLIP.
-export const WANT = 40, BUDGET = 4 * 1024 * 1024, PAGE_CLIP = 600;
+// readFrom() keeps CLIP. The budget is 16MB: 4MB of launcher-a's log held 9 chat messages.
+export const WANT = 40, BUDGET = 16 * 1024 * 1024, PAGE_CLIP = 600;
 const CHAT = new Set(["user", "text", "peer"]);
 
 export function readPage(path, before = null, size = PAGE, want = WANT, budget = BUDGET) {
