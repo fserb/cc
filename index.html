@@ -187,7 +187,7 @@ function md(text, doc) {
   // > quotes, --- rules, **bold**, *italic*, `code`, links, images. doc: hard-wrapped lines join into one paragraph (chat keeps
   // its line breaks); doc.base: the file's dir in ~/nadya, so relative links open in the files tab and images load
   const base = doc?.base;
-  const link = (m, t, u) => /^https?:/.test(u) ? linkHtml(u, t) : base != null && !/^(#|\w+:)/.test(u) ? `<a href="#files/${esc(resolve(base, u))}" data-go="files/${esc(resolve(base, u))}">${t}</a>` : doc && /^[\w.-]+\.md$/.test(u) ? `<a href="#idea/${u}" data-go="idea/${u}">${t}</a>` : t;
+  const link = (m, t, u) => /^https?:/.test(u) ? linkHtml(u, t) : /^\/nadya(\/|$)/.test(u) ? linkHtml(esc(u), t) : base != null && !/^(#|\w+:)/.test(u) ? `<a href="#files/${esc(resolve(base, u))}" data-go="files/${esc(resolve(base, u))}">${t}</a>` : doc && /^[\w.-]+\.md$/.test(u) ? `<a href="#idea/${u}" data-go="idea/${u}">${t}</a>` : t;
   const img = (m, t, u) => /^https?:/.test(u) ? `<img src="${u}" alt="${t}">` : base != null ? `<img src="${esc(NADYA + encodeURI(resolve(base, u)))}" alt="${t}">` : m;
   const inline = (s) => {
     const keep = [], hold = (h) => `\0${keep.push(h) - 1}\0`;  // code spans and links wait outside, so ** and _ inside them stay as typed
@@ -490,7 +490,7 @@ function drawView(soft) {
   let html, ph = "Message nadya";
   if (cur === "quota") html = quotaView();
   else if (!cur || cur === "nadya") html = nadyaView();
-  else if (cur === "blog") html = `<iframe src="${BLOG}" title="blog"></iframe>`;
+  else if (cur === "blog") html = `<iframe src="${BLOG}" title="blog" onload="this.contentDocument?.addEventListener('click', (e) => window.filesLink(e))"></iframe>`;
   else if (cur === "plan") html = todoView();
   else if (cur === "projects") html = projectsView();
   else if (isDoc(cur)) html = docView(...cur.split("/"));
@@ -692,7 +692,7 @@ function filesView(path) {
   const go = (p, t) => `<a href="#files/${esc(p)}" data-go="files/${esc(p)}">${esc(t)}</a>`;
   const crumbs = [go("", "nadya"), ...parts.map((x, k) => k === parts.length - 1 ? `<b>${esc(x)}</b>` : go(`${parts.slice(0, k + 1).join("/")}/`, x))].join(" / ");
   const raw = NADYA + encodeURI(path).replace(/#/g, "%23"), f = S.fs[path];
-  const head = `<p class="meta crumbs">${crumbs}${dir ? "" : ` · <a href="${esc(raw)}" target="_blank" rel="noopener">open ↗</a>`}</p>`;
+  const head = `<p class="meta crumbs">${crumbs}${dir ? "" : ` · <a href="${esc(raw)}" target="_blank" rel="noopener" data-out>open ↗</a>`}</p>`;
   if (!f) return `<article class="doc">${head}<p class="meta">loading…</p></article>`;
   if (f.error) return `<article class="doc">${head}<p class="meta err">${esc(f.error)}</p></article>`;
   if (f.list) {
@@ -700,7 +700,7 @@ function filesView(path) {
     return `<article class="doc">${head}<ul class="rows fl">${ls.map((x) => `<li class="go${x.is_dir ? " dir" : ""}" data-go="files/${esc(path + x.name)}"><span>${esc(x.name)}</span><small>${x.is_dir ? "" : `<i class="sz">${fsize(x.size)} · </i>`}${changed(x.mod_time)}</small></li>`).join("") || "<li><span class=meta>empty</span></li>"}</ul></article>`;
   }
   if (f.img) return `<article class="doc">${head}<img src="${esc(f.img)}" alt="${esc(parts.at(-1))}"></article>`;
-  if (f.text == null) return `<article class="doc">${head}<p><a href="${esc(raw)}" target="_blank" rel="noopener">open ${esc(parts.at(-1))}</a> <small class="meta">${f.size ? fsize(f.size) : ""}</small></p></article>`;
+  if (f.text == null) return `<article class="doc">${head}<p><a href="${esc(raw)}" target="_blank" rel="noopener" data-out>open ${esc(parts.at(-1))}</a> <small class="meta">${f.size ? fsize(f.size) : ""}</small></p></article>`;
   if (/\.md$/i.test(path)) return `<article class="doc">${head}${md(f.text, {base: parts.slice(0, -1).map((x) => `${x}/`).join("")})}</article>`;
   return `<article class="doc">${head}<pre class="plain">${esc(f.text)}</pre></article>`;
 }
@@ -924,6 +924,7 @@ document.addEventListener("click", async (e) => {
   if (e.target.closest("#title")) { cur = "nadya"; push(); open(); return; }
   if (e.target.closest("#back")) { if (history.state?.cc) history.back(); else document.body.classList.remove("view"); return; }
   const row = e.target.closest(".it"); if (row) { cur = row.dataset.id; push(); if (cur === "blog") localStorage.cc_blog_seen = Date.now(); if (cur === "plan" || cur === "projects") loadTodo(); open(); if ((cur === "nadya" || cur.includes(".")) && matchMedia("(hover: hover) and (pointer: fine)").matches) $("#say").q.focus(); return; }
+  if (filesLink(e)) return;
   const go = e.target.closest("[data-go]"); if (go) { e.preventDefault(); cur = go.dataset.go; push(isDoc(cur) || isFiles(cur)); if (cur === "plan" || cur === "projects") loadTodo(); open(); return; }
   const b = e.target.closest(".opts button"); if (!b) return;
   const box = b.parentElement; [...box.children].forEach((x) => x.disabled = true);
@@ -936,6 +937,19 @@ document.addEventListener("click", async (e) => {
     draw(); drawView(true);
   } catch (err) { box.insertAdjacentHTML("afterend", `<p class="err">${esc(err.message)}</p>`); [...box.children].forEach((x) => x.disabled = false); }
 });
+// a plain click on a link into ~/nadya (https://nadya.giraffe-yo.ts.net/nadya/..., http://nadya/nadya/..., /nadya/...) opens it
+// in the files tab; ctrl/cmd/shift/middle-click still open a tab, and data-out links (the files tab's "open ↗") always do
+window.filesLink = filesLink;  // for the blog iframe's onload
+function filesLink(e) {
+  const a = e.target.closest?.("a[href]");
+  if (!a || a.dataset.out != null || e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return false;
+  const u = new URL(a.href, location.href);
+  if (![location.host, "nadya", "nadya.giraffe-yo.ts.net"].includes(u.host) || !/^\/nadya(\/|$)/.test(u.pathname)) return false;
+  e.preventDefault();
+  const path = decodeURIComponent(u.pathname.replace(/^\/nadya\/?/, ""));
+  cur = path ? `files/${path}` : "files"; push(true); open();
+  return true;
+}
 // phone: opening an item is a history entry, so the browser's back (and the swipe) returns to the list
 const narrow = () => matchMedia("(max-width: 760px)").matches;
 function push(deeper) {
