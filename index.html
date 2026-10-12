@@ -62,7 +62,7 @@
   .need .free { display: flex; gap: 0.4rem; margin: 0.5rem 0 0; } .need .free input { flex: 1; min-width: 0; font: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 0.35rem 0.7rem; } .need .free button { font: inherit; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: 6px; padding: 0.35rem 0.9rem; cursor: pointer; }
   .done { color: var(--green); font-weight: 600; } .err { color: var(--red); }
   .msgs { display: flex; flex-direction: column; gap: 0.5rem; }
-  .m { align-self: flex-start; max-width: 78%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--bubble); overflow-wrap: anywhere; } .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); } .m.me small { text-align: right; }
+  .m { align-self: flex-start; max-width: 78%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--bubble); overflow-wrap: anywhere; } .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); } .m.me small { text-align: right; } .m .q { display: block; font-size: 0.75rem; opacity: 0.75; }
   .m a { color: var(--accent); } .m.me a { color: inherit; }
   .m.me.pend { opacity: 0.5; } .m.me[data-pend] { white-space: pre-wrap; } .m.me.stale { opacity: 0.5; cursor: pointer; } .m.me.fail { background: var(--red); opacity: 0.85; cursor: pointer; }
   .m small { display: block; text-align: left; font-size: 0.6rem; opacity: 0.7; margin-top: 0.15rem; }
@@ -536,6 +536,8 @@ function ackPending() {
     return k < 0;
   });
 }
+// an AskUserQuestion result reads `Your questions have been answered: "Q1"="A1", "Q2"="A2". You can now continue…`
+const answers = (t) => [...(t ?? "").matchAll(/"([^]*?)"="([^]*?)(?:"(?=, "|\. You can)|(…)$)/g)].map((m) => [m[1], m[2] + (m[3] ?? "")]);
 // a session's transcript as a chat, the same for nadya and every other session
 // chat or terminal (the pane text); each session opens in chat
 let term = false;
@@ -545,6 +547,10 @@ function chat(r) {
   const log = stream?.pid === r.pid ? S.log : [];
   const msgs = [];
   for (const e of log) {
+    if (e.type === "result" && !e.error && e.text?.startsWith("Your questions have been answered:")) {
+      const qa = answers(e.text);
+      if (qa.length) msgs.push({at: e.at, me: true, body: qa.map(([q, a]) => `<span class="q">${esc(q.length > 80 ? q.slice(0, 80) + "…" : q)}</span>${autolink(esc(a))}`).join("<br>"), small: hhmm(e.at)});
+    }
     if (e.type !== "user" && e.type !== "text") continue;
     msgs.push({at: e.at, me: e.type === "user", body: e.type === "user" ? autolink(esc(unpaste(e.text).length > 600 ? unpaste(e.text).slice(0, 600) + "…" : unpaste(e.text))) : md(e.text), small: hhmm(e.at)});
   }
