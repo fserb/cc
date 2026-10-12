@@ -159,6 +159,7 @@
 const CCX = "../ccapi/api";
 const NADYA = "../nadya/";
 const BLOG = "../blog/";
+const PACKAGES = "../tracker/";  // ~/ai/tracker/web: the package tracker, its page and packages.json
 navigator.serviceWorker?.register("sw.js");
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
@@ -286,6 +287,10 @@ async function loadBlog() {
   const posts = doc.querySelector("#posts");
   if (!posts) return;
   S.posts = [...posts.querySelectorAll("article")].map((a) => ({title: (a.querySelector("h2") ?? a.querySelector("p:not(.meta) b") ?? a.querySelector("p:not(.meta)"))?.textContent.trim(), time: a.querySelector("time")?.textContent.trim()}));
+  draw();
+}
+async function loadPackages() {
+  S.packages = await fetch(`${PACKAGES}packages.json`, {cache: "no-cache"}).then((r) => r.json()).catch(() => S.packages);
   draw();
 }
 async function loadTodo() {
@@ -419,6 +424,8 @@ function items() {
   it.push({id: "plan", d: due.length ? "blue" : "", hot: due.length, title: "plan", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : "", t: ""});
   const ps = projects(), run = ps.filter((x) => x.running).length;
   it.push({id: "projects", d: run ? "green" : "", title: "projects", sub: ps.filter((x) => x.running).map((x) => `${x.file.replace(/\.md$/, "")} running`).join(" · "), t: ""});
+  const pk = S.packages, desk = pk?.desk.count ?? 0, onWay = pk?.packages.filter((x) => x.number && !x.delivered).length ?? 0;
+  it.push({id: "packages", d: desk ? "blue" : "", title: "packages", sub: pk ? [desk && `${desk} at the front desk`, `${onWay} on the way`].filter(Boolean).join(" · ") : "", t: pk ? ago(Date.parse(pk.updated) / 1000) : ""});
   it.push({id: "files", d: "", title: "files", sub: "", t: ""});
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, dialog: !!hasDialog(r)}));
   ss.sort((a, b) => b.dialog - a.dialog);
@@ -502,6 +509,7 @@ function drawView(soft) {
   if (cur === "quota") html = quotaView();
   else if (!cur || cur === "nadya") html = nadyaView();
   else if (cur === "blog") html = `<iframe src="${BLOG}" title="blog" onload="this.contentDocument?.addEventListener('click', (e) => window.filesLink(e))"></iframe>`;
+  else if (cur === "packages") html = `<iframe src="${PACKAGES}" title="packages"></iframe>`;
   else if (cur === "plan") html = todoView();
   else if (cur === "projects") html = projectsView();
   else if (isDoc(cur)) html = docView(...cur.split("/"));
@@ -510,7 +518,7 @@ function drawView(soft) {
   else if (i?.r) { html = sessionView(i.r); ph = `Message ${i.r.name}`; }
   else html = `<article><p class="meta">gone</p></article>`;
   if (soft && html === lastView) return;
-  if (soft && cur === "blog") return;  // don't rebuild the blog under the reader
+  if (soft && (cur === "blog" || cur === "packages")) return;  // don't rebuild an iframe under the reader
   lastView = html;
   const t = same && view.querySelector(".msgs > .typing");
   if (t) dots = {cur, at: Date.now(), rect: t.getBoundingClientRect()};
@@ -848,6 +856,7 @@ function context() {
   if (!cur || cur === "nadya") return "";
   if (cur === "blog") return "about the blog";
   if (cur === "plan") return "plan";
+  if (cur === "packages") return "about packages";
   if (cur === "projects") return "projects";
   if (cur === "quota") return "about the quota";
   const r = S.rows.find((x) => x.pid === cur);
@@ -1025,10 +1034,10 @@ function open() {
 
 // ---------- start
 listen();
-loadUsage(); loadBlog(); loadTodo();
-setInterval(loadUsage, 5 * 60e3); setInterval(loadBlog, 60e3); setInterval(loadTodo, 30e3);
+loadUsage(); loadBlog(); loadTodo(); loadPackages();
+setInterval(loadUsage, 5 * 60e3); setInterval(loadBlog, 60e3); setInterval(loadTodo, 30e3); setInterval(loadPackages, 5 * 60e3);
 // back on the tab (or the phone woke up): read everything again at once
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { loadUsage(); loadBlog(); loadTodo(); if (isFiles(cur)) loadPath(cur.slice(6)); } });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { loadUsage(); loadBlog(); loadTodo(); loadPackages(); if (isFiles(cur)) loadPath(cur.slice(6)); } });
 setInterval(draw, 30e3);  // ages
 // on start the input takes the focus (desktop only: on a phone it would open the keyboard)
 const wait = setInterval(() => {
