@@ -90,7 +90,7 @@
   #say .note.err { color: var(--red); }
   @media (pointer: coarse), (max-width: 760px) { #say #focus { display: none; } }  /* a kitty window opens on marx, where the desktop is */
   article:has(> pre.term) { max-width: none; }
-  pre.term { white-space: pre; overflow-x: auto; overflow-wrap: normal; margin: 0 0 1rem; }
+  pre.term { white-space: pre; overflow-x: auto; overflow-wrap: normal; margin: 0 0 1rem; width: max-content; max-width: 100%; box-sizing: border-box; }
   #say .note { font-size: 0.78rem; color: var(--muted); align-self: center; }
   #back { display: none; }
   details summary { cursor: pointer; }
@@ -551,6 +551,7 @@ function drawView(soft) {
   if (t) dots = {cur, at: Date.now(), rect: t.getBoundingClientRect()};
   const fi = view.querySelector(".free input") === document.activeElement && document.activeElement;
   view.innerHTML = html;
+  fitTerm();
   // a redraw keeps the free-text box focused, its caret where it was
   if (fi) { const n = view.querySelector(".free input"); n?.focus(); n?.setSelectionRange(fi.selectionStart, fi.selectionEnd); }
   if (!soft) growing = 0;
@@ -586,6 +587,27 @@ function drawView(soft) {
   autoTop = view.scrollTop;
   if (chatty && same && view.querySelector(".msgs")?.lastElementChild?.outerHTML !== tail) $("#newer").hidden = false;
 }
+// the terminal view keeps the pane's columns and rows: its font shrinks until the whole screen fits the view, never grows past 12.5px
+function fitTerm() {
+  const v = $("#view"), pre = v.querySelector("pre.term");
+  if (!pre) return;
+  const art = pre.parentElement, cs = getComputedStyle(art);
+  pre.style.fontSize = "";
+  pre.style.maxWidth = "none";
+  const aw = art.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const ah = v.clientHeight - (art.offsetHeight - pre.offsetHeight);
+  const ps = getComputedStyle(pre), px = parseFloat(ps.paddingLeft) * 2, py = parseFloat(ps.paddingTop) * 2;
+  const sw = (aw - px) / (pre.offsetWidth - px), sh = (ah - py) / (pre.offsetHeight - py);
+  let s = Math.min(1, sw, sh > 0 ? sh : sw);
+  // a font size does not scale every glyph run exactly: step down until it fits
+  for (let k = 0; k < 5; k++) {
+    pre.style.fontSize = `${12.5 * s}px`;
+    if (pre.offsetWidth <= aw && pre.offsetHeight <= ah) break;
+    s *= 0.97;
+  }
+  pre.style.maxWidth = "";
+}
+new ResizeObserver(fitTerm).observe($("#view"));
 // rAF stops in a hidden tab: a timer ends each step anyway, so no reply stays hidden
 function tween(ms, f, ease = (t) => 1 - (1 - t) ** 2) {
   return new Promise((done) => {
