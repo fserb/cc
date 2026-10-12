@@ -952,10 +952,9 @@ async function cmdFocus(spec) {
 // ccx new [--focus] [host:]<dir> [name]
 // The same spawn() as the page's +: a detached tmux session. --focus puts it in a new tmux
 // window after an instance already in `dir`, else a new kitty window, and focuses it.
-// --bg, once the way to ask for the detached session, is accepted and does nothing
 async function cmdNew(...args) {
   const focus = args.includes("--focus");
-  const [dir, ...words] = args.filter((a) => a !== "--bg" && a !== "--focus");
+  const [dir, ...words] = args.filter((a) => a !== "--focus");
   if (!dir) usage();
   const name = words.join(" ");
   const colon = dir.indexOf(":");

@@ -403,7 +403,7 @@ export class Server {
     if (post && path === "/api/spawn") {
       const body = await req.json().catch(() => ({}));
       // a detached tmux session unless `focus`; then `after` a pane, or with `beside` after
-      // the last claude already in dir, else a new kitty window. `bg` is the default, ignored
+      // the last claude already in dir, else a new kitty window
       const focus = body.focus === true;
       let after = focus ? String(body.after ?? "") : "";
       if (!after && focus && body.beside === true) {
