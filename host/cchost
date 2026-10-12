@@ -1,0 +1,101 @@
+#!/bin/sh
+':' //; exec deno run -A --ext js "$(readlink -f "$0")" "$@"
+// cchost: the daemon every machine with claudes runs, what cc reads the machine through.
+// The server on every interface, tailnet and loopback only, and a stand-in record for
+// every claude on the other hosts so SendMessage reaches them. The polyglot head is
+// ccx's: sh re-execs deno on the realpath, so a symlink on PATH works.
+//
+//   cchost [serve] [--port N]
+
+import {discover, StateClock, watchSessions} from "./claudes.js";
+import {Online} from "./online.js";
+import {PORT, runServer} from "./server.js";
+import {clearStandIns, Relay} from "./relay.js";
+import * as remote from "./remote.js";
+import {Subs} from "./subs.js";
+import {sendPeer} from "./peer.js";
+import {settle} from "./burn.js";
+
+function usage() {
+  console.error("usage: cchost [serve] [--port N]");
+  Deno.exit(2);
+}
+
+async function serve(args) {
+  let port;
+  for (let n = 0; n < args.length; n++) {
+    if (args[n] !== "--port" || !/^\d+$/.test(args[n + 1] ?? "")) usage();
+    port = Number(args[++n]);
+  }
+  port ??= PORT;
+  const clock = new StateClock(remote.SELF), net = new Online();
+  // A poll runs when a session record is written, and otherwise once a minute for titles
+  // and tmux moves, which no record shows. A write during a poll runs one more after it.
+  // With no watch, or an instance with no record (its state is read off the pane), every
+  // 1.5s as before
+  let instances = [], polling = false, again = false, timer = 0, server = null;
+  const poll = async () => {
+    if (polling) {
+      again = true;
+      return;
+    }
+    polling = true;
+    try {
+      do {
+        again = false;
+        instances = clock.update(await discover());
+      } while (again);
+      server?.pushList();
+    } finally {
+      polling = false;
+      clearTimeout(timer);
+      timer = setTimeout(repoll, !watching || instances.some((i) => !i.peer) ? 1500 : 60000);
+    }
+  };
+  const repoll = () => poll().catch((e) => console.error(e));
+  const watching = watchSessions(repoll);
+  setInterval(() => net.tick(), 5000);
+  net.tick();
+  // the burn store takes each hour as it settles, so api/burn seldom scans more than the
+  // hour in progress; an empty store fills from transcripts here, ~15 days of them
+  const settleNow = () => settle().catch((e) => console.error(`burn store: ${e.message}`));
+  setInterval(settleNow, 10 * 60_000);
+  settleNow();
+  // a notice goes to a local subscriber's socket, or to its host's daemon. The listener runs
+  // inside clock.update(), so `instances` is still the poll before, which is fine: a
+  // subscriber had to exist to subscribe
+  const subs = new Subs(remote.SELF, async (who, text) => {
+    if (who.host !== remote.SELF) {
+      return (await remote.call(who.host, `/api/s/${who.pid}/send`, {text, from: "ccx"}))[1];
+    }
+    const inst = instances.find((i) => i.pid === who.pid);
+    return inst ? await sendPeer(inst, text, "ccx") : `no claude instance with pid ${who.pid}`;
+  });
+  clock.on((events) => subs.onEvents(events));
+  await poll();
+  clearStandIns(remote.SELF);
+  const relay = new Relay(remote.SELF, async (host, body) =>
+    (await remote.call(host, "/api/relay", body))[1]);
+  const r = runServer({source: () => ({instances, net}), port, hostname: "0.0.0.0", relay,
+    subs});
+  if (r.error) {
+    console.error(`cchost: ${r.error}`);
+    Deno.exit(1);
+  }
+  server = r.server;
+  const stops = remote.others().map((h) => remote.follow(h, (rows) => relay.sync(h, rows)));
+  const quit = () => {
+    for (const stop of stops) stop();
+    relay.close();
+    Deno.exit(0);
+  };
+  Deno.addSignalListener("SIGINT", quit);
+  Deno.addSignalListener("SIGTERM", quit);
+  console.log(`cchost ${remote.SELF} on :${port}, following ${remote.others().join(", ") ||
+    "no other host"}`);
+  await new Promise(() => {});
+}
+
+
+const args = Deno.args[0] === "serve" ? Deno.args.slice(1) : Deno.args;
+await serve(args);

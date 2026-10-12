@@ -5,22 +5,21 @@
 // on PATH work: deno resolves a relative import against the path it was handed, so
 // ~/bin/ccx -> here looks for claudes.js in ~/bin and dies.
 
-import {discover, fmtAge, sessionRecords, StateClock, watchSessions} from "./claudes.js";
-import {HOME, ON_EXIT, sh} from "./sh.js";
-import {fuzzy, NUMBERS, PALETTE, rank, SORTS, stateOf} from "./view.js";
-import {jump, kittyWindowTitle, raiseTarget, tmuxWindowName, typeInto} from "./jump.js";
-import {Online} from "./online.js";
-import {byDay, HISTORY, readUsage, usageLine, USAGE} from "./usage.js";
-import {close, expandDir, paneIn, spawn} from "./spawn.js";
+import {discover, fmtAge, sessionRecords, StateClock} from "../host/claudes.js";
+import {HOME, ON_EXIT, sh} from "../host/sh.js";
+import {fuzzy, NUMBERS, PALETTE, rank, SORTS, stateOf} from "../host/view.js";
+import {jump, kittyWindowTitle, raiseTarget, tmuxWindowName, typeInto} from "../host/jump.js";
+import {Online} from "../host/online.js";
+import {byDay, HISTORY, readUsage, usageLine, USAGE} from "../host/usage.js";
+import {close, expandDir, paneIn, spawn} from "../host/spawn.js";
 import {base, burnReport, call, discoverAll, HOSTS, jumpRemote, label, mergedUsage, others,
-  Remotes, SELF} from "./remote.js";
+  Remotes, SELF} from "../host/remote.js";
 
 // `peer.js` and `chat.js` load on use, not at startup: a missing one must cost `ccx send`
 // its error line and nothing else. A static import would take `list`, `doctor` and the TUI
 // down with it.
-const peerModule = () => import("./peer.js");
-const chatModule = () => import("./chat.js");
-const serverModule = () => import("./server.js");
+const peerModule = () => import("../host/peer.js");
+const chatModule = () => import("../host/chat.js");
 
 // render
 
@@ -838,7 +837,7 @@ async function cmdBurn(...args) {
   }
   let [r, err] = await call(SELF, `/api/burn${hours ? `?hours=${hours}` : ""}`, undefined, 120_000);
   if (err) {
-    const {localRows} = await import("./burn.js");
+    const {localRows} = await import("../host/burn.js");
     console.error(`${SELF}: ${err}; reading the transcripts here`);
     r = await burnReport(hours, (f, t) => localRows(f, t, {write: false}));
   }
@@ -908,14 +907,13 @@ async function cmdDoctor() {
       `usage ${HISTORY}: ${u.history.length} lines` +
       (u.history.length ? ` from ${new Date(u.history[0].at).toISOString()}` : "")
     : `usage ${USAGE} missing or unreadable; statusLine in ~/.claude/settings.json writes it`);
-  // the server is in whichever process started it, `ccx host` or `ccx serve`, so it is
-  // asked over HTTP rather than looked up
+  // the server is cchost's, a process of its own, so it is asked over HTTP
   try {
     const r = await fetch("http://127.0.0.1:7681/api/list", {signal: AbortSignal.timeout(2000)});
     const body = await r.json();
-    console.log(`serve 127.0.0.1:7681 up, HTTP ${r.status}, ${body.rows?.length ?? "?"} rows`);
+    console.log(`cchost 127.0.0.1:7681 up, HTTP ${r.status}, ${body.rows?.length ?? "?"} rows`);
   } catch (e) {
-    console.log(`serve 127.0.0.1:7681 not answering: ${e.name}: ${e.message}`);
+    console.log(`cchost 127.0.0.1:7681 not answering: ${e.name}: ${e.message}`);
   }
   console.log(`hosts ${HOSTS.join(", ")}, this one ${SELF}`);
   await Promise.all(others().map(async (h) => {
@@ -1027,127 +1025,6 @@ function splitHost(spec) {
   const host = colon > 0 ? spec.slice(0, colon) : "";
   if (!HOSTS.includes(host)) return ["", spec];
   return [host === SELF ? "" : host, spec.slice(colon + 1)];
-}
-
-// ccx serve [--port N]
-// The HTTP server alone on 127.0.0.1, with its own poll; `ccx host` is the same on the
-// tailnet, plus the relay.
-async function cmdServe(...args) {
-  let port;
-  for (let n = 0; n < args.length; n++) {
-    if (args[n] !== "--port" || !/^\d+$/.test(args[n + 1] ?? "")) usage();
-    port = Number(args[++n]);
-  }
-  let mod;
-  try {
-    mod = await serverModule();
-  } catch (e) {
-    console.error(`serve: ${e.message ?? e}`);
-    Deno.exit(1);
-  }
-  const clock = new StateClock(), net = new Online();
-  let instances = [], polling = false;
-  const poll = async () => {
-    net.tick();
-    if (polling) return;
-    polling = true;
-    try {
-      instances = clock.update(await discover());
-    } finally {
-      polling = false;
-    }
-  };
-  await poll();
-  setInterval(poll, 1500);
-  port ??= mod.PORT;
-  const r = mod.runServer({source: () => ({instances, net}), port});
-  if (r.error) {
-    console.error(`serve: ${r.error}`);
-    Deno.exit(1);
-  }
-  console.log(`ccx serve on http://127.0.0.1:${port}/`);
-  await new Promise(() => {});
-}
-
-// ccx host [--port N]
-// The daemon each machine runs: the server on every interface, tailnet and loopback only,
-// and a stand-in record for every claude on the other hosts so SendMessage reaches them
-async function cmdHost(...args) {
-  let port;
-  for (let n = 0; n < args.length; n++) {
-    if (args[n] !== "--port" || !/^\d+$/.test(args[n + 1] ?? "")) usage();
-    port = Number(args[++n]);
-  }
-  const [srv, relayMod, remote, {Subs}, {sendPeer}] = await Promise.all([serverModule(),
-    import("./relay.js"), import("./remote.js"), import("./subs.js"), peerModule()]);
-  port ??= srv.PORT;
-  const clock = new StateClock(remote.SELF), net = new Online();
-  // A poll runs when a session record is written, and otherwise once a minute for titles
-  // and tmux moves, which no record shows. A write during a poll runs one more after it.
-  // With no watch, or an instance with no record (its state is read off the pane), every
-  // 1.5s as before
-  let instances = [], polling = false, again = false, timer = 0, server = null;
-  const poll = async () => {
-    if (polling) {
-      again = true;
-      return;
-    }
-    polling = true;
-    try {
-      do {
-        again = false;
-        instances = clock.update(await discover());
-      } while (again);
-      server?.pushList();
-    } finally {
-      polling = false;
-      clearTimeout(timer);
-      timer = setTimeout(repoll, !watching || instances.some((i) => !i.peer) ? 1500 : 60000);
-    }
-  };
-  const repoll = () => poll().catch((e) => console.error(e));
-  const watching = watchSessions(repoll);
-  setInterval(() => net.tick(), 5000);
-  net.tick();
-  // the burn store takes each hour as it settles, so api/burn seldom scans more than the
-  // hour in progress; an empty store fills from transcripts here, ~15 days of them
-  const {settle} = await import("./burn.js");
-  const settleNow = () => settle().catch((e) => console.error(`burn store: ${e.message}`));
-  setInterval(settleNow, 10 * 60_000);
-  settleNow();
-  // a notice goes to a local subscriber's socket, or to its host's daemon. The listener runs
-  // inside clock.update(), so `instances` is still the poll before, which is fine: a
-  // subscriber had to exist to subscribe
-  const subs = new Subs(remote.SELF, async (who, text) => {
-    if (who.host !== remote.SELF) {
-      return (await remote.call(who.host, `/api/s/${who.pid}/send`, {text, from: "ccx"}))[1];
-    }
-    const inst = instances.find((i) => i.pid === who.pid);
-    return inst ? await sendPeer(inst, text, "ccx") : `no claude instance with pid ${who.pid}`;
-  });
-  clock.on((events) => subs.onEvents(events));
-  await poll();
-  relayMod.clearStandIns(remote.SELF);
-  const relay = new relayMod.Relay(remote.SELF, async (host, body) =>
-    (await remote.call(host, "/api/relay", body))[1]);
-  const r = srv.runServer({source: () => ({instances, net}), port, hostname: "0.0.0.0", relay,
-    subs});
-  if (r.error) {
-    console.error(`host: ${r.error}`);
-    Deno.exit(1);
-  }
-  server = r.server;
-  const stops = remote.others().map((h) => remote.follow(h, (rows) => relay.sync(h, rows)));
-  const quit = () => {
-    for (const stop of stops) stop();
-    relay.close();
-    Deno.exit(0);
-  };
-  Deno.addSignalListener("SIGINT", quit);
-  Deno.addSignalListener("SIGTERM", quit);
-  console.log(`ccx host ${remote.SELF} on :${port}, following ${remote.others().join(", ") ||
-    "no other host"}`);
-  await new Promise(() => {});
 }
 
 // targets
@@ -1317,7 +1194,7 @@ const where = (i) => `${i.host || SELF}:${i.name || i.pid}`;
 // ccx notify <who> when <agent> [is <state>] [for <duration>]
 // Registered with the daemon of the host <agent> runs on, which messages <who> from `ccx`
 async function cmdNotify(...words) {
-  const {parseNotify} = await import("./subs.js");
+  const {parseNotify} = await import("../host/subs.js");
   const n = parseNotify(words);
   if (n.error) {
     console.error(`notify: ${n.error}`);
@@ -1418,8 +1295,6 @@ const COMMANDS = {
   notify: [cmdNotify, -1],
   subs: [cmdSubs, 0],
   unsub: [cmdUnsub, 1],
-  serve: [cmdServe, -1],
-  host: [cmdHost, -1],
   help: [cmdHelp, 0],
   "-h": [cmdHelp, 0],
   "--help": [cmdHelp, 0],
@@ -1454,8 +1329,6 @@ const HELP = [
   ["  [for <time>]", "`host:any`): host:pid, name, dir, tmux pane, state, title"],
   ["  subs", "every host's subscriptions"],
   ["  unsub <host:id>", "drop one"],
-  ["  serve [--port N]", "the HTTP API on 127.0.0.1, port 7681"],
-  ["  host [--port N]", "the daemon: serve on the tailnet, and relay SendMessage between hosts"],
   ["  help", "this, which is also what `ccx` alone prints"],
   "",
   ["  <target>", "a pid, a session name, `all`, or part of either; `host:` before it"],

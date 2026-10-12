@@ -4,28 +4,28 @@ IFS=$'\n\t'
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-# deno test needs --ext js: `ccx` has no
-# extension, so anything that reads it types it as TypeScript.
+# deno test needs --ext js: `ccx` and `cchost` have no extension, so anything that
+# reads them types them as TypeScript.
 test() {
-  deno test -A --ext js "$ROOT/ccx_test.js" "$ROOT/chat_test.js" "$ROOT/peer_test.js" \
-    "$ROOT/transcript_test.js" "$ROOT/dialog_test.js" \
-    "$ROOT/spawn_test.js" "$ROOT/server_test.js" "$ROOT/usage_test.js" \
-    "$ROOT/relay_test.js" "$ROOT/subs_test.js" "$ROOT/burn_test.js" "$@"
+  deno test -A --ext js "$ROOT"/ccx/*_test.js "$ROOT"/host/*_test.js "$@"
 }
 
 check() {
-  deno check "$ROOT"/*.js
+  deno check "$ROOT"/host/*.js
 }
 
-# `ccx host`, the daemon every machine with claudes runs: launchd on macOS, a
+# cchost, the daemon every machine with claudes runs: launchd on macOS, a
 # systemd user unit on Linux. PATH has to reach deno, tmux and ps, which neither
 # gives a job by default.
-HOST_LABEL=net.fserb.ccx-host
+HOST_LABEL=net.fserb.cchost
+OLD_LABEL=net.fserb.ccx-host
 HOST_PLIST="$HOME/Library/LaunchAgents/$HOST_LABEL.plist"
-HOST_UNIT="$HOME/.config/systemd/user/ccx-host.service"
+HOST_UNIT="$HOME/.config/systemd/user/cchost.service"
+OLD_UNIT="$HOME/.config/systemd/user/cchost.service"
 HOST_PATH="$(dirname "$(command -v deno)"):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 install() {
+  _drop_old
   if [[ $(uname) == Darwin ]]; then
     mkdir -p "$(dirname "$HOST_PLIST")"
     cat > "$HOST_PLIST" <<PLISTEOF
@@ -38,8 +38,7 @@ install() {
 	<string>$HOST_LABEL</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>$ROOT/ccx</string>
-		<string>host</string>
+		<string>$ROOT/host/cchost</string>
 	</array>
 	<key>EnvironmentVariables</key>
 	<dict>
@@ -53,9 +52,9 @@ install() {
 	<key>KeepAlive</key>
 	<true/>
 	<key>StandardOutPath</key>
-	<string>$HOME/Library/Logs/ccx-host.log</string>
+	<string>$HOME/Library/Logs/cchost.log</string>
 	<key>StandardErrorPath</key>
-	<string>$HOME/Library/Logs/ccx-host.log</string>
+	<string>$HOME/Library/Logs/cchost.log</string>
 </dict>
 </plist>
 PLISTEOF
@@ -67,10 +66,10 @@ PLISTEOF
     cat > "$HOST_UNIT" <<UNITEOF
 # Written by \`./task install\`. Edit ./task and reinstall, not this file.
 [Unit]
-Description=ccx host
+Description=cchost
 
 [Service]
-ExecStart=$ROOT/ccx host
+ExecStart=$ROOT/host/cchost
 Environment=PATH=$HOST_PATH
 Restart=always
 RestartSec=2
@@ -79,26 +78,39 @@ RestartSec=2
 WantedBy=default.target
 UNITEOF
     systemctl --user daemon-reload
-    systemctl --user enable --now ccx-host.service
-    systemctl --user restart ccx-host.service
-    echo "ccx-host.service running from $HOST_UNIT"
+    systemctl --user enable --now cchost.service
+    systemctl --user restart cchost.service
+    echo "cchost.service running from $HOST_UNIT"
   fi
 }
 
 uninstall() {
+  _drop_old
   if [[ $(uname) == Darwin ]]; then
     launchctl bootout "gui/$(id -u)/$HOST_LABEL" 2>/dev/null || true
     rm -f "$HOST_PLIST"
   else
-    systemctl --user disable --now ccx-host.service 2>/dev/null || true
+    systemctl --user disable --now cchost.service 2>/dev/null || true
     rm -f "$HOST_UNIT"
     systemctl --user daemon-reload
   fi
-  echo "ccx host removed"
+  echo "cchost removed"
+}
+
+# the daemon was `ccx host` under net.fserb.ccx-host / ccx-host.service until 2026-10-12
+_drop_old() {
+  if [[ $(uname) == Darwin ]]; then
+    launchctl bootout "gui/$(id -u)/$OLD_LABEL" 2>/dev/null || true
+    rm -f "$HOME/Library/LaunchAgents/$OLD_LABEL.plist"
+  elif [[ -f "$OLD_UNIT" ]]; then
+    systemctl --user disable --now ccx-host.service 2>/dev/null || true
+    rm -f "$OLD_UNIT"
+    systemctl --user daemon-reload
+  fi
 }
 
 function help {
-  echo "$0 <task>   # everything else is ./ccx"
+  echo "$0 <task>   # everything else is ccx/ccx or host/cchost"
   compgen -A function | grep -v "^_" | cat -n
 }
 
