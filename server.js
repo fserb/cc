@@ -1,10 +1,10 @@
-// ccx over HTTP, for a phone on the tailnet: the listing, one instance's conversation and
+// ccx's API over HTTP, for cc (nadya:~/web/cc) through www/lemon.js: the listing, one instance's conversation and
 // screen, typing into it, answering its dialogs, and starting new ones. No auth: `ccx
 // serve` binds 127.0.0.1, `ccx host` every interface with tailnetOrLocal() as the boundary.
 // See server.md.
 //
-// - every URL the page uses is relative, since caddy's `handle_path /ccx*` strips the
-//   prefix: the server sees `/api/list` for `https://<host>/ccx/api/list`
+// - caddy's `handle_path /ccx*` strips the prefix: the server sees `/api/list` for
+//   `https://<host>/ccx/api/list`. There is no page; everything is under /api
 // - one 1.5s tick drives every SSE stream. It reads `source()`, the instances the caller
 //   already polled, so there is one discover() per tick and not two
 // - `type` runs whatever it is given, so two checks come before any route. The Host has to
@@ -17,32 +17,17 @@
 import {byCodePoint, HOME} from "./sh.js";
 import {logPath, readFrom, readPage} from "./transcript.js";
 import {parseDialog, pick, screen} from "./dialog.js";
-import {select, sendKeys, tmuxBackground, typeInto} from "./jump.js";
+import {select, sendKeys, tmuxBackground, typeInto, unqueue} from "./jump.js";
 import {close, expandDir, paneIn, spawn} from "./spawn.js";
 import {sendPeer} from "./peer.js";
 import {byDay, pace, readUsage} from "./usage.js";
 import {localRows} from "./burn.js";
 import {burnReport, mergedUsage} from "./remote.js";
 import {STATES} from "./subs.js";
-import PAGE from "./page.html" with {type: "text"};
 
 export const PORT = 7681;
 const TICK = 1500;
 const KEEPALIVE = 15000;     // an SSE comment this often, so no proxy calls it idle
-
-// kitty's font, which a phone does not have. OFL, so it can be served; on a box without it
-// the page falls back to the phone's own monospace.
-const FONT = `${HOME}/Library/Fonts/Inconsolata[wdth,wght].ttf`;
-
-const MANIFEST = JSON.stringify({name: "ccx", short_name: "ccx", start_url: "./",
-  scope: "./", display: "standalone", background_color: "#0e0b12", theme_color: "#181020",
-  icons: [192, 512].map((n) => ({src: `icon-${n}.png`, sizes: `${n}x${n}`,
-    type: "image/png", purpose: "any maskable"}))});
-
-// the page's home-screen icons, read once
-const ICONS = new Map([192, 512].map((px) =>
-  [px, Deno.readFileSync(new URL(`./icon-${px}.png`, import.meta.url))]));
-const iconOf = (px) => ICONS.get(px);
 
 const HOSTNAME = Deno.hostname().split(".")[0];
 
@@ -333,33 +318,11 @@ export class Server {
     const get = req.method === "GET", post = req.method === "POST";
     if (info && !tailnetOrLocal(info.remoteAddr.hostname)) return json({error: "not tailnet"}, 403);
     if (!ownHost(req.headers.get("host") ?? "", this.port)) return json({error: "bad host"}, 403);
-    // the home-screen shortcut opens the page as a cross-site navigation, which reads nothing
-    const open = get && path === "/" && req.headers.get("sec-fetch-mode") === "navigate";
-    if (!open && req.headers.get("sec-fetch-site") === "cross-site") {
+    if (req.headers.get("sec-fetch-site") === "cross-site") {
       return json({error: "cross-site"}, 403);
     }
     if (post && !(req.headers.get("content-type") ?? "").startsWith("application/json")) {
       return json({error: "a POST is application/json"}, 415);
-    }
-    if (get && path === "/") {
-      return new Response(PAGE, {headers: {"content-type": "text/html; charset=utf-8",
-        "cache-control": "no-cache"}});
-    }
-    if (get && path === "/manifest.json") {
-      return new Response(MANIFEST, {headers: {"content-type": "application/manifest+json"}});
-    }
-    const icon = get && path.match(/^\/icon-(192|512)\.png$/);
-    if (icon) {
-      return new Response(await iconOf(Number(icon[1])), {headers: {"content-type": "image/png",
-        "cache-control": "max-age=604800"}});
-    }
-    if (get && path === "/inconsolata.ttf") {
-      try {
-        return new Response(await Deno.readFile(FONT), {headers: {"content-type": "font/ttf",
-          "cache-control": "max-age=604800"}});
-      } catch {
-        return json({error: "no font here"}, 404);
-      }
     }
     if (get && path === "/api/list") return json(this.listBody());
     if (get && path === "/api/events") return this.listEvents();
@@ -456,8 +419,7 @@ export class Server {
     if (verb === "esc") return answer(await sendKeys(inst, ["Escape"]));
     // Claude Code's chat:sendNow: with an empty input it stops the turn and sends the queued messages
     if (verb === "now") return answer(await sendKeys(inst, ["C-x", "C-s"]));
-    // Up moves every queued message into the input, and ctrl+u deletes a line, then the newline before it
-    if (verb === "unqueue") return answer(await sendKeys(inst, ["Up", ...Array(200).fill("C-u")]));
+    if (verb === "unqueue") return answer(await unqueue(inst));
     if (verb === "select") {
       return answer(await select(inst), {ok: true, background: await tmuxBackground()});
     }
