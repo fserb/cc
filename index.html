@@ -227,7 +227,13 @@ async function json(url, opts) {
   return r.json();
 }
 const post = (url, body) => json(url, {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body)});
-const nadyaRow = () => S.rows.find((r) => r.name === "nadya" && r.pid.startsWith("nadya."));
+// while nadya's host is out of the list (its daemon restarting, the list stream reconnecting), the last row it had
+let lastNadya = null;
+function nadyaRow() {
+  const n = S.rows.find((r) => r.name === "nadya" && r.pid.startsWith("nadya."));
+  if (n) return lastNadya = n;
+  return S.up?.includes("nadya") ? null : lastNadya;
+}
 
 // ---------- data
 async function loadUsage() { S.usage = (await json(`${CCX}/usage`).catch(() => null))?.usage ?? S.usage; draw(); if (cur === "quota") loadBurn(); }
@@ -270,7 +276,7 @@ function listen() {
     const d = JSON.parse(e.data), had = isPid(cur) && S.rows.some((r) => r.pid === cur);
     S.rows = d.rows ?? []; S.offline = d.offline;
     // the open session ended (its host still answers): go to nadya, replacing the hash
-    const up = (d.host ?? "").split(" (")[0].split(" · ");
+    const up = S.up = (d.host ?? "").split(" (")[0].split(" · ");
     if (had && !S.rows.some((r) => r.pid === cur) && up.includes(cur.split(".")[0])) { cur = "nadya"; if (history.state?.cc) history.replaceState({cc: cur}, ""); open(); return; }
     draw(); drawView(true);
   });
@@ -457,7 +463,7 @@ function chat(r) {
 }
 function nadyaView() {
   const n = nadyaRow();
-  if (!n) return `<article><h1>nadya</h1><p class="meta">nadya isn't running.</p></article>`;
+  if (!n) return S.up?.includes("nadya") ? `<article><h1>nadya</h1><p class="meta">nadya isn't running.</p></article>` : "<article></article>";
   const nAsks = S.asks.filter((a) => !S.rows.some((r) => r.name === a.from && r.name !== "nadya"));
   return `<article>${metaLine(n)}${chat(n)}${dialogBox(n)}${nAsks.map(askBox).join("")}</article>`;
 }
