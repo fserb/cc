@@ -206,3 +206,26 @@ Deno.test("new: first sight of any pid, and what the notice says", async () => {
   await subs.onEvents([ev(9, "", "free"), ev(10, "", "free")]);
   eq(sent.length, 3, "a one shot fires once in a batch");
 });
+
+Deno.test("Subs: kept in a file, read back less what can no longer fire", () => {
+  const file = Deno.makeTempFileSync({suffix: ".json"});
+  let t = 1000;
+  const a = new Subs("h", () => null, () => t, file);
+  const keep = a.add({who: {host: "h", pid: 1}, target: {pid: 2}, state: "wait"});
+  const any = a.add({who: {host: "o", pid: 9}, target: {any: true}, state: "new", secs: 60});
+  a.add({who: {host: "h", pid: 1}, target: {pid: 3}});                 // its target goes
+  a.add({who: {host: "h", pid: 4}, target: {pid: 2}});                 // its subscriber goes
+  a.add({who: {host: "o", pid: 9}, target: {pid: 2}, secs: 10});       // expires
+  const gone = a.add({who: {host: "o", pid: 9}, target: {pid: 2}});
+  a.remove(gone);
+  t = 1030;
+  const b = new Subs("h", () => null, () => t, file);
+  b.load([1, 2]);
+  eq(b.list().map((s) => s.id), [keep, any], "what survives a restart");
+  eq(b.add({who: {host: "h", pid: 1}, target: {pid: 2}}), gone + 1, "ids go on, not reused");
+  const c = new Subs("h", () => null, () => t, file);
+  c.load([1, 2]);
+  eq(c.list().length, 3, "and the add was written too");
+  new Subs("h", () => null, () => t, `${file}.none`).load([1]);       // no file: nothing, no throw
+  Deno.removeSync(file);
+});

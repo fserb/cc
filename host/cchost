@@ -13,6 +13,7 @@ import {PORT, runServer} from "./server.js";
 import {clearStandIns, Relay} from "./relay.js";
 import * as remote from "./remote.js";
 import {Subs} from "./subs.js";
+import {HOME} from "./sh.js";
 import {sendPeer} from "./peer.js";
 import {settle} from "./burn.js";
 
@@ -70,9 +71,10 @@ async function serve(args) {
     }
     const inst = instances.find((i) => i.pid === who.pid);
     return inst ? await sendPeer(inst, text, "ccx") : `no claude instance with pid ${who.pid}`;
-  });
+  }, undefined, `${HOME}/.claude/ccx-subs.json`);
   clock.on((events) => subs.onEvents(events));
   await poll();
+  subs.load(instances.map((i) => i.pid));
   clearStandIns(remote.SELF);
   const relay = new Relay(remote.SELF, async (host, body) =>
     (await remote.call(host, "/api/relay", body))[1]);

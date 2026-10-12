@@ -2,7 +2,8 @@
 // or "... when any session is new" (`any is new`), which each host's daemon holds a copy of.
 // They live in the daemon of the host the watched agent runs on, matched against the
 // state-change events of that host's StateClock, and are answered with a chat message to
-// the subscriber, on any host. Memory only: a `cchost` restart drops them.
+// the subscriber, on any host. Kept in a file (`~/.claude/ccx-subs.json`, each host its
+// own) and read back after a restart's first poll, so a restart no longer drops them.
 
 export const STATES = ["wait", "busy", "hold", "free", "gone"];
 const UNITS = { s: 1, m: 60, h: 3600, d: 86400 };
@@ -68,12 +69,49 @@ export function noticeText(host, sub, ev) {
 
 export class Subs {
   // host: this host's name. deliver(subscriber, text): an error message, or null
-  constructor(host, deliver, now = () => Date.now() / 1000) {
+  // file: where they are kept, or null for memory only
+  constructor(host, deliver, now = () => Date.now() / 1000, file = null) {
     this.host = host;
     this.deliver = deliver;
     this.now = now;
+    this.file = file;
     this.subs = new Map();
     this.next = 1;
+  }
+
+  // What the file held, less what can no longer fire: expired, or a local subscriber or
+  // target that is not among `alive` (this host's pids now), since a pid that went while
+  // the daemon was down sends no `gone`. Called after the first poll, so the sessions that
+  // were already running are not first sight for an `any is new`
+  load(alive) {
+    if (!this.file) return;
+    let saved;
+    try {
+      saved = JSON.parse(Deno.readTextFileSync(this.file));
+    } catch {
+      return;
+    }
+    const now = this.now(), live = new Set(alive);
+    for (const sub of saved.subs ?? []) {
+      if (sub.until && sub.until <= now) continue;
+      if (sub.who.host === this.host && !live.has(sub.who.pid)) continue;
+      if (!sub.target.any && !live.has(sub.target.pid)) continue;
+      this.subs.set(sub.id, sub);
+    }
+    this.next = Math.max(this.next, saved.next ?? 1, ...[...this.subs.keys()].map((id) => id + 1));
+    this.save();
+  }
+
+  // through a temp file and a rename, so a crash mid-write leaves the old file
+  save() {
+    if (!this.file) return;
+    try {
+      const tmp = `${this.file}.tmp`;
+      Deno.writeTextFileSync(tmp, JSON.stringify({next: this.next, subs: [...this.subs.values()]}));
+      Deno.renameSync(tmp, this.file);
+    } catch (e) {
+      console.error(`subs: ${this.file}: ${e.message}`);
+    }
   }
 
   // who: {host, pid, name}; target: {pid, name}, or {any: true} for `new`; secs 0 is one shot, else repeat until then
@@ -88,11 +126,14 @@ export class Subs {
       at,
       until: secs ? at + secs : 0,
     });
+    this.save();
     return id;
   }
 
   remove(id) {
-    return this.subs.delete(id);
+    const had = this.subs.delete(id);
+    if (had) this.save();
+    return had;
   }
 
   list() {
@@ -101,10 +142,11 @@ export class Subs {
   }
 
   expire() {
-    const now = this.now();
+    const now = this.now(), size = this.subs.size;
     for (const [id, s] of this.subs) {
       if (s.until && s.until <= now) this.subs.delete(id);
     }
+    if (this.subs.size !== size) this.save();
   }
 
   // A batch of events from the clock. Deliveries run together and are not awaited by the
@@ -112,7 +154,7 @@ export class Subs {
   // that did not answer keeps it
   onEvents(events) {
     this.expire();
-    const sends = [];
+    const sends = [], size = this.subs.size;
     for (const ev of events) {
       for (const s of [...this.subs.values()]) {
         // a local subscriber that exited takes its subscriptions with it
@@ -128,12 +170,13 @@ export class Subs {
           Promise.resolve(this.deliver(s.who, noticeText(this.host, s, ev)))
             .then((err) => {
               if (!err) return;
-              this.subs.delete(s.id);
+              if (this.subs.delete(s.id)) this.save();
               console.error(`notify ${s.id}: ${err}`);
             }),
         );
       }
     }
+    if (this.subs.size !== size) this.save();
     return Promise.all(sends);
   }
 }
