@@ -63,6 +63,7 @@
   .done { color: var(--green); font-weight: 600; } .err { color: var(--red); }
   .msgs { display: flex; flex-direction: column; gap: 0.5rem; }
   .m { align-self: flex-start; max-width: 78%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--bubble); overflow-wrap: anywhere; } .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); } .m.me small { text-align: right; }
+  .m a { color: var(--accent); } .m.me a { color: inherit; }
   .m.me.pend { opacity: 0.5; } .m.me[data-pend] { white-space: pre-wrap; } .m.me.stale { opacity: 0.5; cursor: pointer; } .m.me.fail { background: var(--red); opacity: 0.85; cursor: pointer; }
   .m small { display: block; text-align: left; font-size: 0.6rem; opacity: 0.7; margin-top: 0.15rem; }
   .m p { margin: 0 0 0.4rem; } .m p:last-of-type { margin: 0; } .m ul { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; } .m code { font: 0.88em var(--mono); }
@@ -169,17 +170,19 @@ function ago(t) {
   return `${Math.floor(s / 86400)}d`;
 }
 const hhmm = (t) => new Date(t * 1000).toLocaleTimeString("en-CA", {hour: "2-digit", minute: "2-digit", hour12: false});
-// bare http(s) URLs in escaped text become links; skips ones already in an href or link text, and trailing punctuation
-const autolink = (s) => s.replace(/(^|[^"=>\w])(https?:\/\/[^\s<"]+?)(?=[.,;:!?)\]]*(?:\s|<|&quot;|&gt;|&#39;|$))/g, (m, pre, u) => `${pre}<a href="${u}">${u}</a>`);
+// bare http(s) URLs in escaped text become links, opened in a new tab; skips ones already in an href or link text, and
+// trailing punctuation or markdown (**url**); a code span that is just a URL is a link too. wrap: what to do with each link's html
+const linkHtml = (u, t) => `<a href="${u}" target="_blank" rel="noopener">${t}</a>`;
+const autolink = (s, wrap = (h) => h) => s.replace(/(^|[^"=>a-zA-Z0-9])(https?:\/\/[^\s<"]+?)(?=[.,;:!?)\]*_]*(?:\s|<|\0|&quot;|&gt;|&#39;|$))/g, (m, pre, u) => pre + wrap(linkHtml(u, u)));
 function md(text, doc) {
   // a small markdown subset: # headings, paragraphs, - and 1. lists (nested by indent), ``` code, | tables,
   // **bold**, *italic*, `code`, links. doc: hard-wrapped lines join into one paragraph (chat keeps its line breaks)
-  const link = (m, t, u) => /^https?:/.test(u) ? `<a href="${u}">${t}</a>` : doc && /^[\w.-]+\.md$/.test(u) ? `<a href="#idea/${u}" data-go="idea/${u}">${t}</a>` : t;
+  const link = (m, t, u) => /^https?:/.test(u) ? linkHtml(u, t) : doc && /^[\w.-]+\.md$/.test(u) ? `<a href="#idea/${u}" data-go="idea/${u}">${t}</a>` : t;
   const inline = (s) => {
-    const code = [];  // code spans wait outside, so ** and _ inside them stay as typed
-    return esc(s).replace(/`([^`]+)`/g, (m, c) => `\0${code.push(c) - 1}\0`)
+    const keep = [], hold = (h) => `\0${keep.push(h) - 1}\0`;  // code spans and links wait outside, so ** and _ inside them stay as typed
+    return autolink(esc(s).replace(/`([^`]+)`/g, (m, c) => hold(`<code>${/^https?:\/\/\S+$/.test(c) ? linkHtml(c, c) : c}</code>`)).replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (...x) => hold(link(...x))), hold)
       .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/(^|[^\w*])\*(?=\S)(.+?)\*(?!\w)/g, "$1<i>$2</i>").replace(/(^|\W)_(?=\S)(.+?)_(?!\w)/g, "$1<i>$2</i>")
-      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, link).replace(/^.*$/s, autolink).replace(/\0(\d+)\0/g, (m, k) => `<code>${code[k]}</code>`);
+      .replace(/\0(\d+)\0/g, (m, k) => keep[k]);
   };
   const cells = (row) => row.trim().replace(/^\||\|$/g, "").split("|").map((c) => inline(c.trim()));
   const out = [], lists = [];
@@ -403,7 +406,14 @@ $("#mode").onclick = () => { term = !term; drawView(); };
 // the typing bubble as last drawn: a reply up to 5 s later still grows out of it (the state can turn idle before the log has the reply)
 let dots = null, linger = null, growing = 0, later = 0, shown;
 const replyAts = (v) => [...v.querySelectorAll(".m:not(.me)[data-at]")].map((m) => +m.dataset.at);
+// a redraw while a finger or button is down on the view would take the link or the selection from under it: wait for the release
+let held = false, missed = false;
+$("#view").addEventListener("pointerdown", () => { held = true; });
+function release() { held = false; if (missed) { missed = false; setTimeout(() => drawView(true)); } }
+addEventListener("pointerup", release);
+addEventListener("pointercancel", release);
 function drawView(soft) {
+  if (soft && held) { missed = true; return; }
   // a redraw replaces the view and would cut a reply's grow short: wait for it to end
   if (soft && Date.now() < growing) { later ||= setTimeout(() => { later = 0; drawView(true); }, growing - Date.now() + 20); return; }
   const i = items().find((x) => x.id === cur);
