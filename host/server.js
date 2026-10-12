@@ -658,7 +658,7 @@ export class Server {
       tag = host;
       path = `/api/s/${pid}/${verb}`;
     }
-    const m = path.match(/^\/api\/s\/(\d+)\/(log|events|type|pick|esc|now|unqueue|screen|send|select|close)$/);
+    const m = path.match(/^\/api\/s\/(\d+)\/(log|events|type|pick|now|unqueue|screen|send|select|close)$/);
     if (!m) return json({error: "not found"}, 404);
     const [, pidText, verb] = m, pid = Number(pidText);
     // the pid has to be a claude in the current poll: a pane whose claude exited types
@@ -694,7 +694,6 @@ export class Server {
       if (!Array.isArray(body.labels)) return json({error: "no labels"}, 400);
       return answer(await pick(inst, Number(body.i), body.labels, body.text ?? undefined));
     }
-    if (verb === "esc") return answer(await sendKeys(inst, ["Escape"]));
     // Claude Code's chat:sendNow: with an empty input it stops the turn and sends the queued messages
     if (verb === "now") return answer(await sendKeys(inst, ["C-x", "C-s"]));
     if (verb === "unqueue") return answer(await unqueue(inst));

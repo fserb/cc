@@ -49,7 +49,6 @@ Deno.test("Server: the list, and a pid not in the poll is 404 before any action"
     "rows, tmux first, path in ~ form");
   eq((await call(s, "/api/s/7/log")).status, 404, "log on an unknown pid");
   eq((await post(s, "/api/s/7/type", '{"text":"rm -rf"}')).status, 404, "type on one");
-  eq((await post(s, "/api/s/7/esc")).status, 404, "esc on one");
   eq((await post(s, "/api/s/7/now")).status, 404, "now on one");
   eq((await call(s, "/api/nope")).status, 404, "an unknown route");
   eq((await call(s, "/")).status, 404, "no page at /");
@@ -60,7 +59,6 @@ Deno.test("Server: an instance outside tmux is read-only", async () => {
   const r = await post(s, "/api/s/6/type", '{"text":"hi"}');
   eq([r.status, (await r.json()).error], [409, "pid 6 is not inside tmux; nothing to type into"],
     "type");
-  eq((await post(s, "/api/s/6/esc")).status, 409, "esc");
   eq((await post(s, "/api/s/6/now")).status, 409, "now");
   eq((await post(s, "/api/s/6/unqueue")).status, 409, "unqueue");
   eq((await post(s, "/api/s/6/type")).status, 400, "no text");
@@ -74,7 +72,7 @@ Deno.test("Server: a foreign Host, a cross-site request and a form POST are refu
   eq(await status("/api/list", {headers: {host: "evil.example:7681"}}), 403, "rebound name");
   eq(await status("/api/list", {}), 403, "no Host at all");
   eq(await status("/api/list", {headers: {host: "localhost:7681"}}), 200, "localhost");
-  eq(await status("/api/s/5/esc", {method: "POST", body: "{}", headers: {...HOST,
+  eq(await status("/api/s/5/now", {method: "POST", body: "{}", headers: {...HOST,
     "content-type": "application/json", "sec-fetch-site": "cross-site"}}), 403, "cross-site");
   const xs = {...HOST, "sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate"};
   eq(await status("/api/list", {headers: xs}), 403, "a cross-site navigation to the API");

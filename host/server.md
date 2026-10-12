@@ -21,7 +21,6 @@ better"). `page.html`, its manifest, icons and font went; every route is under `
   commands work. Needs tmux
 - **dialogs**: when one is up, its options are buttons; tapping one picks it. No raw
   arrow or digit keys
-- **esc**: interrupt a turn, or dismiss a dialog
 - **spawn beside**: a new claude in a new tmux window, in the same kitty window as an
   instance or a group
 - **spawn new**: a new kitty window, so a new tmux session, and a new claude in a
@@ -110,9 +109,10 @@ All JSON, all under `api/`.
     POST api/s/<pid>/pick   {i, labels, text?}  option i of the dialog, refused unless its
                                            labels are still `labels`; `text` answers the
                                            question tool's free-text option (`free` on it)
-    POST api/s/<pid>/esc                   Escape
     POST api/s/<pid>/now                   ctrl+x ctrl+s, Claude Code's "send now": with an
                                            empty input, stops the turn and sends the queue
+                                           (`esc`, a bare Escape, went 2026-10-12: nothing
+                                           called it; `screen` stays, nadya reads it)
     POST api/s/<pid>/unqueue               drops every queued message (Up moves them into the
                                            input, 200 ctrl+u empty it); the turn goes on
     POST api/spawn  {dir, after?, mkdir?}
@@ -175,7 +175,7 @@ in tmux, no dialog, the dialog changed), 400 for a malformed body.
 Built: `server.js` and `ccx serve [--port N]` (`ccx serve` went 2026-10-12; `host/cchost
 --port N` with `CCX_SELF`/`CCX_HOSTS` set to a scratch host does the same). Run against a scratch session through every
 route: spawn into a new directory, `pick` refusing stale labels with 409 and then
-answering folder trust, `type` starting a turn, `esc` interrupting it (busy to wait), the
+answering folder trust, `type` starting a turn, `esc` (since removed) interrupting it, the
 log showing the prompt and the partial reply. The session stream follows a /clear, which
 starts a new log under a new sessionId, by checking the path every tick.
 
@@ -216,7 +216,7 @@ findings are at the top of `dialog.js`; the ones that changed the design:
 Free text (2.1.296, 2026-10-12): the option above `Chat about this` is a field; its digit
 focuses it, after which a digit is text (cc sent `3` again and again into one). `pick` with
 `text` sends the digit unless the cursor is on it, then ctrl+u, a bracketed paste, Enter.
-Not tried yet: dialogs other than these six. One that does not parse shows the screen view, where `esc` and the textarea work.
+Not tried yet: dialogs other than these six. One that does not parse shows the screen view, where the textarea works.
 
 ## Transcript
 
