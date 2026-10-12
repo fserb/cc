@@ -301,13 +301,13 @@ function follow(pid) {
   // the stream starts with the log's tail as a reset: that's history, drawn at once at the bottom; later events are live
   es.addEventListener("log", (e) => {
     const d = JSON.parse(e.data);
-    if (d.reset || !stream.loaded) { S.log = d.events; Object.assign(stream, {loaded: true, start: d.start}); ackPending(); drawView(); return older(30); }
+    if (d.reset || !stream.loaded) { S.log = d.events; Object.assign(stream, {loaded: true, start: d.start}); ackPending(); drawView(); return; }
     S.log = S.log.concat(d.events); ackPending(); drawView(true);
   });
   es.addEventListener("screen", (e) => { (S.screens[pid] ??= {}).text = JSON.parse(e.data).text; drawView(true); });
   es.addEventListener("dialog", (e) => { (S.screens[pid] ??= {}).dialog = JSON.parse(e.data); drawView(true); draw(); });
 }
-// ccx's log page holds the last 40 events, tool calls and results included: page back (?before=) until the chat has `want` messages or the log's top
+// a ccx log page holds the last 40 chat messages: scrolling up pages back (?before=) until the chat has `want` messages or the log's top
 const chatCount = () => S.log.filter((e) => e.type === "user" || e.type === "text").length;
 async function older(want) {
   const s = stream;
