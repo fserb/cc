@@ -1,6 +1,7 @@
-// ccx's API over HTTP, for cc (nadya:~/web/cc) through www/lemon.js: the listing, one instance's conversation and
-// screen, typing into it, answering its dialogs, and starting new ones. No auth: `ccx
-// serve` binds 127.0.0.1, `ccx host` every interface with tailnetOrLocal() as the boundary.
+// ccx's API over HTTP, for cc (nadya:~/web/cc) through www/lemon.js: the listing, one
+// instance's conversation and screen, typing into it, answering its dialogs, and starting
+// new ones. No auth: `ccx serve` binds 127.0.0.1, `ccx host` every interface with
+// tailnetOrLocal() as the boundary.
 // See server.md.
 //
 // - caddy's `handle_path /ccx*` strips the prefix: the server sees `/api/list` for

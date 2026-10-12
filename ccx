@@ -1454,7 +1454,7 @@ const HELP = [
   ["  [for <time>]", "`host:any`): host:pid, name, dir, tmux pane, state, title"],
   ["  subs", "every host's subscriptions"],
   ["  unsub <host:id>", "drop one"],
-  ["  serve [--port N]", "the web page and its API on 127.0.0.1, port 7681"],
+  ["  serve [--port N]", "the HTTP API on 127.0.0.1, port 7681"],
   ["  host [--port N]", "the daemon: serve on the tailnet, and relay SendMessage between hosts"],
   ["  help", "this, which is also what `ccx` alone prints"],
   "",

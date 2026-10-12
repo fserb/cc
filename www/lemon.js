@@ -1,16 +1,16 @@
-// ccx for the phone, every host at once: a lemon app (boxer, `FROM boxer:lemon`) that
-// serves the page from a `ccx host` daemon and merges the hosts' api behind it. It sees
-// nothing local, being a container, so everything is an HTTP call to a daemon.
+// ccx's api, every host at once, for cc (nadya:~/web/cc calls ../ccx/api/...): a lemon app
+// (boxer, `FROM boxer:lemon`) that merges the `ccx host` daemons' api. It serves no page. It
+// sees nothing local, being a container, so everything is an HTTP call to a daemon.
 //
 // - an instance is `<host>.<pid>` here, a pane `<host>/<pane>`, a session and a path
-//   `<host>:...`, so the page needs no idea of hosts: `api/s/nadya.123/type` is nadya's
+//   `<host>:...`, so the caller needs no idea of hosts: `api/s/nadya.123/type` is nadya's
 //   `api/s/123/type`, and a new claude goes where its `after` pane or its `nadya:` dir says
 // - the daemons are reached by tailnet address, from boxer's /global/tailscale.json: a
 //   container resolves no tailnet name. The daemon on this host sees the container's
 //   docker bridge address, which `ccx host` accepts for that reason
-// - the page's cross-site checks are the daemons', so the headers they read are passed on
-// - box.idle off: the list stream is open whenever the page is, and the upstream streams
-//   only while a page listens
+// - the cross-site checks are the daemons', so the headers they read are passed on
+// - box.idle off: the list stream is open whenever cc is, and the upstream streams
+//   only while a client listens
 
 import Lemon from "lemon";
 
@@ -18,7 +18,7 @@ const PORT = 7681;
 const HOSTS = (Deno.env.get("CCX_HOSTS") ?? "marx,nadya").split(",").map((h) => h.trim());
 const TABLE = "/global/tailscale.json";
 const TIMEOUT = 4000;
-const PASS = ["content-type", "sec-fetch-site", "sec-fetch-mode", "last-event-id"];
+const PASS = ["content-type", "sec-fetch-site", "last-event-id"];
 
 // host -> its tailnet v4 address, reread when boxer rewrites the table
 let table = {mtime: -1, addr: new Map()};
@@ -51,7 +51,7 @@ async function pass(req, host, path, signal = AbortSignal.timeout(TIMEOUT)) {
   const headers = new Headers();
   for (const h of PASS) if (req.headers.has(h)) headers.set(h, req.headers.get(h));
   const body = req.method === "POST" ? await req.text() : undefined;
-  // HEAD as GET: the daemon serves its pages to GET only, and lemon drops the body
+  // HEAD as GET: the daemon answers GET only, and lemon drops the body
   const method = req.method === "HEAD" ? "GET" : req.method;
   return await fetch(upstream(host, path), {method, headers, body, signal});
 }
@@ -84,7 +84,7 @@ function merged() {
   return {rows, offline, host: up.join(" · ") + (down.length ? ` (${down.join(", ")} down)` : "")};
 }
 
-// One SSE reader per host while any page listens; a dropped one retries every 5s
+// One SSE reader per host while any client listens; a dropped one retries every 5s
 const clients = new Set();
 const readers = new Map();    // host -> AbortController
 function follow(host) {
@@ -205,7 +205,7 @@ function sessionEvents(req, host, pid, query) {
         c.send(event, data, id);
       });
     } catch {
-      // the host went away or the page did
+      // the host went away or the client did
     }
     c.end();
   })();
@@ -255,7 +255,7 @@ async function spawn(req) {
   }
 }
 
-// Anything else: the first host that answers, as it answered
+// Any other api call: the first host that answers, as it answered
 async function first(req, path) {
   for (const h of HOSTS) {
     try {
@@ -271,6 +271,7 @@ async function first(req, path) {
 async function handle(req) {
   const url = new URL(req.url);
   const path = (req.subpath ?? url.pathname).replace(/\/+$/, "") || "/";
+  if (!path.startsWith("/api/")) return json({error: "not found"}, 404);
   if (path === "/api/list") return json(clients.size ? merged() : await fanList());
   if (path === "/api/events") return listEvents();
   if (path === "/api/dirs") return await dirs(req, url.searchParams.get("prefix") ?? "");

@@ -1,14 +1,13 @@
 # ccx serve: remote control over HTTP
 
-A web server inside ccx that lists every running Claude Code instance, shows each one's
+An HTTP API inside ccx that lists every running Claude Code instance, shows each one's
 conversation, lets you type into it, answer its dialogs, interrupt it, and start new
-ones. Built for a phone on the tailnet. Runs inside `ccx systray`, in the same process, or
-alone as `ccx serve`.
+ones. Runs inside `ccx host`, or alone as `ccx serve`. Its client is cc
+(`nadya:~/web/cc`), through the lemon app in `www/lemon.js`.
 
-Status: design, nothing built. Open questions are at the end. Checked against the code on
-2026-10-04; the bundle question is settled (see Shape).
-Mocks, fake data, clickable: https://marx.giraffe-yo.ts.net/tmp/ccx/
-(`~/web/tmp/ccx/index.html`).
+**There is no page any more** (user, 2026-10-12: "I'm not using it at all since cc is much
+better"). `page.html`, its manifest, icons and font went; every route is under `/api`, and
+`/` is 404. What this file says about the page below is history.
 
 ## What it does
 
@@ -29,13 +28,11 @@ Mocks, fake data, clickable: https://marx.giraffe-yo.ts.net/tmp/ccx/
   directory you name
 
 An instance outside tmux is read-only: history yes, everything else no. Out of scope for
-the first version: attaching files or images, the bell (the systray owns it).
+the first version: attaching files or images.
 
 ## Shape
 
     server.js        Deno.serve, the routes, the poll
-    page.html        the page, imported as text (`with {type: "text"}`), which works
-                     under `deno run` with no flag and inside the bundle, both measured
     transcript.js    reads one session log into display events, tail first, paged back
     dialog.js        parses the dialog out of a pane capture, and picks an option
     spawn.js         starts a claude in a new tmux window or session
@@ -44,29 +41,13 @@ the first version: attaching files or images, the bell (the systray owns it).
 `pane_current_path`, which follows a `cd` in the shell, so it cannot name the log. Both are
 empty with no record, and then there is no history.
 
-`server.js` exports `runServer({port, poll})`. `poll` is a function returning the current
-instance list; inside the systray it is the systray's own poll result, so there is one
-`discover()` per 1.5s and not two. Alone, `ccx serve` runs its own `discover()` +
-`StateClock` loop, the same thing the TUI does.
+`server.js` exports `runServer({port, source})`. `source` is a function returning the
+current instance list; under `ccx host` it is the daemon's own poll result, so there is one
+`discover()` per poll and not two. Alone, `ccx serve` runs its own `discover()` +
+`StateClock` loop, the same thing the TUI does. `doctor` asks the port over HTTP, since the
+server lives in whichever process started it.
 
-Built: `ccx systray` starts it from `serve()` after its own panel server, and `doctor`
-asks the port over HTTP, since the server lives in whichever process started it. Measured
-in the rebuilt bundle: 7681 bound, a foreign Host refused, the screen, log and dirs routes
-answering from under launchd.
-
-`ccx serve [--port N]` in `ccx`, routed like `list` and `doctor`, never through the bundle.
-`ccx systray` always starts the server, in the systray's own process: one poll, one
-process. A port already bound (a second copy, or `ccx serve` beside the systray) is
-reported in `doctor` and the systray carries on without it.
-
-**Inside the bundle, the first `Deno.serve` loses its port.** Measured on deno 2.9.7 with
-two throwaway bundles: the first `Deno.serve({port: 7698})` listened on a random port
-(50372, 50718), because the runtime points its startup window at that server. A second
-`Deno.serve({port: 7699})` in the same bundle bound 7699 and answered. `systray.js` already
-makes the first call, for its panel, so `runServer()` has to start after it. Started
-first, it would bind a random port with no error, and caddy would proxy to nothing.
-
-## Reaching it from the phone
+## Reaching it through caddy
 
 The server binds **127.0.0.1 only**, default port 7681. Caddy already terminates TLS for
 `marx.giraffe-yo.ts.net:443` and proxies `/boxerz` the same way, so one more block:
@@ -79,14 +60,9 @@ The server binds **127.0.0.1 only**, default port 7681. Caddy already terminates
     }
 
 Added to `/opt/homebrew/etc/Caddyfile` after `/boxerz` and reloaded, 2026-10-04. Through
-it: `/ccx` redirects to `/ccx/`, the page, the font and the API answer, both SSE streams
-arrive unbuffered, a `text/plain` POST is refused, and `/boxerz` still answers.
-
-Then `https://marx.giraffe-yo.ts.net/ccx/` from the phone. `handle_path` strips the prefix,
-so every URL in the page is relative (`api/list`, never `/api/list`).
-
-HTTPS matters beyond privacy: service workers and Web Push only exist on a secure origin,
-and the tailnet cert gives that for free.
+it: the API answered, both SSE streams arrived unbuffered, a `text/plain` POST was
+refused, and `/boxerz` still answered. `handle_path` strips the prefix. On nadya,
+`/ccx/` is the lemon app instead, merging both hosts' daemons.
 
 ## Who may use it
 
@@ -99,16 +75,14 @@ web page you visit could otherwise reach it two ways, and both are refused befor
 - **DNS rebinding**: a page points a name of its own at 127.0.0.1 and calls the port, as
   same-origin. It arrives with that name as Host, so only `127.0.0.1:<port>` and
   `localhost:<port>` are accepted, and caddy sends the upstream's own with `header_up Host
-  {upstream_hostport}`. The systray's panel server makes the same check for the same reason
+  {upstream_hostport}`
 - **cross-site POST**: a form or a no-cors fetch to the tailnet URL. `Sec-Fetch-Site:
   cross-site` is refused, and a POST must be `application/json`, which another origin
-  cannot send without a CORS preflight the server never answers. One exception: a GET
-  navigation to the page itself, because Android Chrome opens the home-screen shortcut
-  with `Sec-Fetch-Site: cross-site`. Opening the page reads nothing back to the other site
+  cannot send without a CORS preflight the server never answers
 
 ## API
 
-All JSON, all under the page's own path.
+All JSON, all under `api/`.
 
     GET  api/list                  {rows, offline}: rows are pid, name, path, cwd, state,
                                    asking, waitsOn, summary, since, hasPane, pane,
@@ -157,7 +131,7 @@ it over, which runs the text.
 **SSE, not WebSocket.** Updates go one way and actions are plain POSTs. SSE reconnects by
 itself and resends `Last-Event-ID`, which here is the transcript byte offset, so a phone
 that slept resumes where it left off. iOS Safari drops the connection when the tab goes to
-the background; the page reconnects on `visibilitychange`.
+the background; the client reconnects on `visibilitychange`.
 
 Screen capture runs only while some client holds that instance's `events` stream open,
 every 1.5s, and only sends when the text changed.
@@ -182,7 +156,7 @@ findings are at the top of `dialog.js`; the ones that changed the design:
   and the question tool's `│` stripped; first line the title
 - a wrapped label continues at the column a description uses, so both land in `detail`
 - `pick` re-captures and refuses with "the dialog changed" unless the labels are the ones
-  the page drew. Live: a stale list was refused, then `No` declined a Bash command
+  the client drew. Live: a stale list was refused, then `No` declined a Bash command
 
 Not tried yet: picking "Type something." and then typing, and dialogs other than these
 six. One that does not parse shows the screen view, where `esc` and the textarea work.
@@ -213,7 +187,7 @@ The session log is `~/.claude/projects/<slug>/<sessionId>.jsonl`. One measured h
   attachment with `commandMode: "prompt"` (411 over 60 logs, none also written as a
   `user` record). A peer message landing mid-turn is one too, and 315 of 2415 of those
   are also written as a `user` record, so peer events carry `msg_id` and repeats drop
-- a tool's result is its own event, `result`, joined to its `tool` on `id` by the page.
+- a tool's result is its own event, `result`, joined to its `tool` on `id` by the client.
   They can sit on different pages, and while following, the result arrives later
 
 Built: `transcript.js`, `readPage(path, before)` and `readFrom(path, offset)`, events
@@ -221,68 +195,14 @@ Built: `transcript.js`, `readPage(path, before)` and `readFrom(path, offset)`, e
 (its stdout), `note` (interrupted, compacted). Paging all of 60 logs, 545MB, takes 1s.
 
 Markdown rendering is a small hand-written subset (paragraphs, code fences, inline code,
-lists, bold, links) in the page. No dependency. Undocumented format, same caveat as
+lists, bold, links) in the client (cc now). No dependency. Undocumented format, same caveat as
 the rest of ccx: a missing field falls back, a changed meaning is not caught.
 
-## The page
+## The page (removed 2026-10-12)
 
-Built: `page.html`, served at `/`, inline CSS and a module script, the mock's look on live
-data. Checked at 390x844 in headless Chrome against a scratch session: the list, history
-with markdown and collapsed tools, the pane view, the folder-trust card answered by
-tapping, a prompt sent from the textarea and its reply arriving over the stream, `+`
-beside opening the new instance, and the new-claude suggestions.
-
-On the phone (Android Chrome, through caddy, 2026-10-04): the list, typing into a session,
-`+` beside, the new-claude form starting a claude in a new folder in a new kitty
-window, and `/clear` typed into a session from the page. Starting opens a page at once, which becomes the session's when it settles:
-555ms beside, measured; a new kitty window takes longer.
-
-- the first history page reads back until it has 40 events or 4MB: a 256KB tail of a log
-  whose last lines are a file write and its read was two events on screen
-- a session's row may arrive after the page draws, so the bottom bar waits for it rather
-  than saying "not in tmux"
-Three views, switched by the URL hash so the back button works: the list, a session, and
-the new-claude form.
-
-- **the title bar is one line**, ~40px: back `‹` on the left where there is somewhere to
-  go back to, the title, then the buttons on the right
-
-- **states are glyphs only**, `● ◆ ◐ ○ ◌` in the state colours, no `wait`/`busy` words:
-  rows, group tallies and the session header all use the glyph alone
-- **list** (`#`): one group per kitty window, which is one tmux session (`kitty-<pid>`,
-  from `ktmux`), since that is how the work is laid out on the desk. The title is the
-  group's main directory: the `path` most of its rows share, ties to the first. A row in
-  another directory shows its own path before the summary. Two windows in the same
-  directory are two groups with the same title. Instances outside tmux go last, one group
-  each. Groups and the rows in them are in tmux order (session, window, pane), so nothing
-  moves on the phone when a state changes; the TUI sorts by state, this does not. A
-  group header is the title, a tally per state (`●1 ◐2 ○1 ◌1` in the state colours) and a
-  `+` that spawns in the main directory, `after` the group's last pane, or a new kitty
-  window when the group has no pane. Tap a row to open it. The title bar is `ccx marx`,
-  the counter and `offline` from `Online`, then a `+` at the top right that opens the
-  new-claude form
-- **session** (`#<pid>`): title bar is `‹`, the state glyph, name, path (no summary),
-  then two buttons. The first switches between the transcript and the screen capture in
-  a monospace `<pre>`: `>_` on history, `≡` (highlighted) on the screen. The second, `+`,
-  spawns `after` this pane in its directory and opens the new one. The view always opens
-  on history. When a dialog is up a card sits above the input: its title, the command or
-  file it is about, the question, and one button per option. Bottom: `esc`, a textarea
-  and a Send button. With no pane, neither button, nor the card, nor the bottom show
-- **new claude** (`#new`): one text field completed from `api/dirs`, with the cwds of
-  running instances listed first, a "create it" checkbox that shows when the path does
-  not exist, and a start button. Starts it in a new kitty window and opens the session
-
-**One font, Inconsolata, the one kitty uses** (`font_family` in kitty.conf, 17pt there).
-A phone does not have it, so the server serves the variable TTF (347KB, OFL, from
-`~/Library/Fonts/Inconsolata[wdth,wght].ttf`) and the page loads it with `@font-face`.
-Text is 17px, nothing under 14px; the textarea stays at 17px since iOS zooms into any
-field under 16px. The screen view is the exception that cannot fit: the capture is as
-wide as the pane, 100+ columns, against ~44 at 14px on a 390px phone, so it scrolls
-sideways and does not wrap, since wrapping breaks the dialog boxes.
-
-Dark, large tap targets, `viewport-fit=cover` and safe-area padding for the iPhone notch.
-A web app manifest so it can be added to the home screen, which is also what iOS requires
-before it allows Web Push.
+`page.html` was served at `/`: a list grouped by kitty window, a session view with history,
+the screen and a dialog card, and a new-claude form, checked on Android Chrome through
+caddy on 2026-10-04. cc replaced it; it is in git history before the removal commit.
 
 ## Starting a claude
 
@@ -332,7 +252,7 @@ like any other.
 **Finding the new pid.** Once the pane is known, both kinds go the same way. Not by the
 record: a new directory opens on folder trust, which writes none until it is answered. So
 `discover()` is polled until an instance sits in the new pane, which walks claude's
-process up to it, up to 10s. The page then opens `#<pid>`. A timeout answers with the pane
+process up to it, up to 10s. The client then opens `#<pid>`. A timeout answers with the pane
 id and an error; the screen view still works off the pane.
 
 Built: `spawn.js`, `spawn({dir, after, mkdir})`. Measured live: beside, 457ms from the call
@@ -341,51 +261,13 @@ arrives.
 
 **Folder trust.** A directory claude has not seen opens on its trust dialog, with no
 record yet, so the new pid cannot come from one until it is answered. Its options parse
-(bare, `❯ No, exit` first), and the page shows it like any other dialog. Tapping the first
+(bare, `❯ No, exit` first), and a client shows it like any other dialog. Tapping the first
 option exits claude, so the button order on the card has to read clearly.
 
-## Phase 2: notifications
+## Notifications
 
-The point of a phone is hearing when an instance wants you. Web Push, the browser
-standard, works on iOS 16.4+ from a home-screen app and on Android Chrome, with no
-third-party account.
-
-- the server keeps a VAPID key pair in `~/.config/ccx/vapid.json` and the subscriptions
-  the page registers
-- it pushes on the same transition the bell rings on, `busy` -> `idle`, and on a new
-  `waitingFor`
-- sending needs an ES256 JWT and aes128gcm payload encryption (ECDH P-256 + HKDF). Deno's
-  WebCrypto has all of it, so no dependency; roughly 120 lines
-- the push goes to Apple's or Google's push service, so the payload is the instance name
-  and state only, never transcript text
-
-Simpler alternative if Web Push is too much: ntfy.sh or Pushover, one `fetch`, but that is
-an account and a third party seeing which sessions you run.
-
-## Build order
-
-The backend first, every piece tested and reachable with curl, then the page on top of
-an API that no longer moves.
-
-Backend:
-
-1. `Instance.sessionId` and `Instance.cwd` from the record, in `discover()`
-2. `transcript.js` + tests against fixture logs, like `chat_test.js`
-3. `dialog.js`: first save `capture-pane -p` output of real dialogs as fixtures
-   (permission prompt, folder trust, a multi-select, a `/command` menu), then the parser
-   and its tests, then `pick`, settling digit against arrows on a live dialog
-4. `spawn.js`, both kinds, checking the `ktmux` cwd and `sendKitty("launch")` on the way
-5. `server.js`: every route, both SSE streams, `ccx serve`; exercised with curl
-6. `ccx systray` starts it after its own `Deno.serve`; `doctor` shows the port and
-   whether it bound
-
-Frontend:
-
-7. the page, list and history; check it on the phone through caddy (the caddy block is a
-   change to the live proxy, so ask before adding it)
-8. the session view: type, esc, the screen, the dialog card
-9. the new-claude form and the `+` buttons
-10. Web Push
+Web Push from the page was planned and never built; the page is gone. Notices to agents
+are `ccx notify` (subs.js).
 
 ## To verify
 
@@ -397,6 +279,5 @@ Each is a guess the build has to check before relying on it:
 ## Open questions
 
 - **screen colours**: `capture-pane -p` is plain text. `-e` keeps the colours as escape
-  codes, and a ~40 line converter in the page turns them into spans. Colour is how Claude
-  Code marks the selected option, diff lines and errors; not decided
-- **Linux**: the server itself is portable; only the systray host is macOS-first
+  codes, which a client would turn into spans. Colour is how Claude Code marks the
+  selected option, diff lines and errors; not decided
