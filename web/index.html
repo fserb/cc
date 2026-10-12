@@ -304,7 +304,15 @@ async function loadBlog() {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const posts = doc.querySelector("#posts");
   if (!posts) return;
-  S.posts = [...posts.querySelectorAll("article")].map((a) => ({title: (a.querySelector("h2") ?? a.querySelector("p:not(.meta) b") ?? a.querySelector("p:not(.meta)"))?.textContent.trim(), time: a.querySelector("time")?.textContent.trim()}));
+  const read = (el) => [...el.querySelectorAll("article")].map((a) => ({title: (a.querySelector("h2") ?? a.querySelector("p:not(.meta) b") ?? a.querySelector("p:not(.meta)"))?.textContent.trim(), time: a.querySelector("time")?.textContent.trim()}));
+  // index.html holds today's posts, earlier days are in archive/YYYY-MM-DD.html (data-archive, newest first):
+  // read back until there is a post and the oldest one read is one already seen, for the row's title and new count
+  const all = read(posts), days = posts.dataset.archive?.split(" ").filter(Boolean) ?? [], seen = +localStorage.cc_blog_seen || 0;
+  while (days.length && (!all.length || (seen && new Date(all.at(-1).time?.replace(" ", "T")) > seen))) {
+    const day = await fetch(`${BLOG}archive/${days.shift()}.html`, {cache: "no-cache"}).then((r) => r.ok ? r.text() : "").catch(() => "");
+    all.push(...read(new DOMParser().parseFromString(day, "text/html")));
+  }
+  S.posts = all;
   draw();
 }
 async function loadPackages() {
