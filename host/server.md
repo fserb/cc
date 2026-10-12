@@ -90,9 +90,7 @@ web page you visit could otherwise reach it two ways, and both are refused befor
 
 All JSON, all under `api/`.
 
-    GET  api/list                  {rows, offline}: rows are pid, name, path, cwd, state,
-                                   asking, waitsOn, summary, since, hasPane, pane,
-                                   session, window, paneIndex; no age, which would make
+    GET  api/list                  {rows, offline}: rows as in "Rows" below; no age, which would make
                                    every row change every second; in tmux order, with
                                    `window` and `paneIndex` compared as numbers,
                                    since tmux gives them as strings
@@ -121,6 +119,23 @@ All JSON, all under `api/`.
                                    window. Answers {pid, pane}
     GET  api/dirs?prefix=~/ai/c    {dirs, exists}: subdirectories under prefix, for the
                                    dir field, and whether prefix itself is one
+
+### Rows
+
+Every row has these fields and no others (`ROW` in server.js, pinned by a test; until
+2026-10-12 the record's fields were spread in, and absent with no record):
+
+- `pid`, `name`, `path` (`~`-relative), `cwd`, `sessionId`, `sock` (the messaging socket)
+- `state` wait | busy | hold | free, `since` (epoch s), `summary`, `asking` (the dialog a
+  wait is on), `waitsOn` (the peer a hold is on)
+- `hasPane`, `pane`, `session`, `window`, `paneIndex`, `tab`: where it is in tmux
+- the session record's own, `""`/`0`/`[]` when there is none (a session read off the
+  pane): `status` busy | waiting | idle | shell, `statusUpdatedAt` (epoch ms),
+  `startedAt`, `version`, `peerFeatures`. The relay's stand-ins are built from these;
+  `status` tells a background shell from a peer hold, which `state` draws as `hold` for
+  both (nadya's co.js reads it)
+
+The merged list (`all=1`) rewrites `pid`, `pane`, `session` and `path` with the host.
 
 ### Every host through one daemon (2026-10-12)
 

@@ -2,8 +2,8 @@
 // no tmux: the routing, the pid check, the ordering and the list stream. The actions that
 // do reach tmux were run by hand against a scratch session (see server.md).
 
-import {clientAddr, dirsUnder, ownHost, runServer, Server, tagRow, tailnetOrLocal,
-  tmuxOrder} from "./server.js";
+import {clientAddr, dirsUnder, ownHost, ROW, rowOf, runServer, Server, tagRow,
+  tailnetOrLocal, tmuxOrder} from "./server.js";
 import {Instance} from "./claudes.js";
 import {HOME} from "./sh.js";
 
@@ -266,4 +266,17 @@ Deno.test("Server: api/chat is what chat.js reads for a cwd, and its stream", as
   await reader.cancel();
   eq(s.chats.size, 0, "a closed stream stops its watch");
   s.stop();
+});
+
+Deno.test("rowOf: the named fields and no others, with or without a record", () => {
+  const bare = Object.assign(new Instance(), {pid: 1, path: "/tmp", cwd: "/tmp"});
+  const rec = Object.assign(new Instance(), {pid: 2, path: "/tmp", cwd: "/tmp",
+    peer: {status: "shell", startedAt: 5, version: "2.1.296", peerFeatures: ["x"],
+      statusUpdatedAt: 7, extra: "not passed on"}});
+  eq(Object.keys(rowOf(bare)), ROW, "a row read off the pane");
+  eq(Object.keys(rowOf(rec)), ROW, "a row with a record");
+  const r = rowOf(rec);
+  eq([r.status, r.startedAt, r.version, r.peerFeatures, r.statusUpdatedAt],
+    ["shell", 5, "2.1.296", ["x"], 7], "the record's fields");
+  eq([rowOf(bare).status, rowOf(bare).statusUpdatedAt], ["", 0], "empty without one");
 });

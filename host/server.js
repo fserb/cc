@@ -47,11 +47,22 @@ export function tmuxOrder(instances) {
     num(a.window) - num(b.window) || num(a.paneIndex) - num(b.paneIndex) || a.pid - b.pid);
 }
 
+// A row: every field named here, every row has them all (server.md, "Rows"). The last five
+// are the session record's, as Claude Code wrote it: the relay builds its stand-ins from
+// them, and `status` tells `shell` from a peer hold where `state` says `hold` for both.
+// Empty or 0 when there is no record (a session read off the pane)
+export const ROW = ["pid", "name", "path", "cwd", "state", "asking", "waitsOn", "summary",
+  "since", "hasPane", "pane", "session", "window", "paneIndex", "tab", "sessionId", "sock",
+  "status", "startedAt", "version", "peerFeatures", "statusUpdatedAt"];
+
 export function rowOf(i) {
+  const p = i.peer ?? {};
   return {pid: i.pid, name: i.name, path: tilde(i.path), cwd: i.cwd, state: i.state,
     asking: i.asking, waitsOn: i.waitsOn, summary: i.summary, since: i.since,
     hasPane: Boolean(i.pane), pane: i.pane, session: i.session, window: i.window,
-    paneIndex: i.paneIndex, tab: i.tab, sessionId: i.sessionId, sock: i.sock, ...i.peer};
+    paneIndex: i.paneIndex, tab: i.tab, sessionId: i.sessionId, sock: i.sock,
+    status: p.status ?? "", startedAt: p.startedAt ?? 0, version: p.version ?? "",
+    peerFeatures: p.peerFeatures ?? [], statusUpdatedAt: p.statusUpdatedAt ?? 0};
 }
 
 // A row of `host` as the merged list has it: `<host>.<pid>`, `<host>/<pane>`,
