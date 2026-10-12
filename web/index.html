@@ -147,11 +147,11 @@
 </section>
 <script type="module">
 // A static page (no box): everything it shows comes from these, all same origin:
-//   ../ccx/api/...        sessions on every host: list + events (SSE), log, screen, pick, type
+//   ../ccapi/api/...      cchost on nadya (caddy forwards it), sessions on every host: list + events (SSE, ?all=1), log, screen, pick, type
 //   ../blog/              the blog (its #posts are inserted here)
 //   files/                todo.md, reminders.md, ideas/, projects/, research/: links to ~/nadya (caddy lists the dirs)
 //   ../nadya/             all of ~/nadya, for the files tab: a dir asked with Accept: application/json is caddy's listing as JSON
-const CCX = "../ccx/api";
+const CCX = "../ccapi/api";
 const NADYA = "../nadya/";
 const BLOG = "../blog/";
 navigator.serviceWorker?.register("sw.js");
@@ -332,12 +332,12 @@ async function loadPath(path) {
   if (cur === `files/${path}` || (cur === "files" && path === "")) drawView(true);
 }
 function listen() {
-  const es = new EventSource(`${CCX}/events`);
+  const es = new EventSource(`${CCX}/events?all=1`);
   es.addEventListener("list", (e) => {
     const d = JSON.parse(e.data), had = isPid(cur) && S.rows.some((r) => r.pid === cur);
     S.rows = d.rows ?? []; S.offline = d.offline;
     // the open session ended (its host still answers): go to nadya, replacing the hash
-    const up = S.up = (d.host ?? "").split(" (")[0].split(" · ");
+    const up = S.up = d.up ?? [];
     if (had && !S.rows.some((r) => r.pid === cur) && up.includes(cur.split(".")[0])) { cur = "nadya"; if (history.state?.cc) history.replaceState({cc: cur}, ""); open(); return; }
     draw(); drawView(true);
   });

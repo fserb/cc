@@ -2,7 +2,8 @@
 
 An HTTP API, served by cchost, that lists every running Claude Code instance, shows each one's
 conversation, lets you type into it, answer its dialogs, interrupt it, and start new
-ones. Its client is cc (`web/`), through the lemon app in `host/www/lemon.js`.
+ones. Its client is cc (`web/`), which calls `https://nadya.giraffe-yo.ts.net/ccapi/api/...`:
+nadya's caddy forwards `/ccapi/*` to nadya's cchost, which answers for every host.
 
 **There is no page any more** (user, 2026-10-12: "I'm not using it at all since cc is much
 better"). `page.html`, its manifest, icons and font went; every route is under `/api`, and
@@ -58,13 +59,15 @@ The server binds **127.0.0.1 only**, default port 7681. Caddy already terminates
 
 Added to `/opt/homebrew/etc/Caddyfile` after `/boxerz` and reloaded, 2026-10-04. Through
 it: the API answered, both SSE streams arrived unbuffered, a `text/plain` POST was
-refused, and `/boxerz` still answered. `handle_path` strips the prefix. On nadya,
-`/ccx/` is the lemon app instead, merging both hosts' daemons.
+refused, and `/boxerz` still answered. `handle_path` strips the prefix. That marx block
+served the page, which is gone; nothing calls it now. On nadya, `/ccapi/` (below) is cc's
+route; it replaced the `/ccx/` lemon app (`host/www/lemon.js`, deleted 2026-10-12).
 
 ## Who may use it
 
 Anyone who can reach it. The tailnet is the boundary: cchost answers only a tailnet
-address, loopback or a docker bridge (`tailnetOrLocal`). No auth.
+address or loopback (`tailnetOrLocal`). No auth. The docker bridge rule went with lemon
+(2026-10-12): every container on nadya could type.
 
 Behind caddy (`handle_path /ccapi/* { reverse_proxy localhost:7681 }`) the connection
 comes from loopback with the client in `X-Forwarded-For`, which caddy with no
@@ -120,7 +123,7 @@ All JSON, all under `api/`.
 
 ### Every host through one daemon (2026-10-12)
 
-Any cchost answers for every host, which is what `www/lemon.js` did and will stop doing.
+Any cchost answers for every host, which is what `www/lemon.js` did until it was deleted.
 Without `all=1` and with a bare pid every route is this host's alone, as above: the other
 daemons' relay streams and ccx call them that way, and marx may run older code.
 

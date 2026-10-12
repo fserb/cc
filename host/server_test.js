@@ -179,7 +179,7 @@ Deno.test("access: X-Forwarded-For from loopback, a tailnet name with no port", 
   eq(clientAddr("100.64.0.9", "8.8.8.8"), "100.64.0.9", "only from loopback");
   eq(clientAddr("::1", "1.1.1.1, 100.64.0.1"), "100.64.0.1", "the last entry");
   eq(clientAddr("127.0.0.1", null), "127.0.0.1", "no header");
-  eq(tailnetOrLocal(clientAddr("127.0.0.1", "8.8.8.8"), []), false, "outside, through caddy");
+  eq(tailnetOrLocal(clientAddr("127.0.0.1", "8.8.8.8")), false, "outside, through caddy");
   eq(ownHost("nadya.giraffe-yo.ts.net", 7681, "nadya"), true, "tailnet name, no port");
   eq(ownHost("nadya.giraffe-yo.ts.net:7681", 7681, "nadya"), true, "tailnet name, our port");
   eq(ownHost("nadya.giraffe-yo.ts.net:8080", 7681, "nadya"), false, "another port");

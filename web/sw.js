@@ -1,5 +1,5 @@
 // Network-first for the app shell only, so the installed app still opens offline.
-// Everything else (ccx API, SSE, asks.json, blog, files) goes straight to the network.
+// Everything else (cchost's API, SSE, blog, files) goes straight to the network.
 const CACHE = "cc-v1";
 const SHELL = ["", "index.html", "manifest.json", "icon.svg", "icon-192.png", "icon-512.png", "icon-maskable.png"].map((p) => new URL(p, registration.scope).pathname);
 
