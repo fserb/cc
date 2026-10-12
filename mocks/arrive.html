@@ -34,7 +34,7 @@
   <span style="width: 0.6rem"></span>
   <button data-pin="bottom" aria-pressed="false">follow bottom</button><button data-pin="top" aria-pressed="true">stop at reply top</button>
   <span style="width: 0.6rem"></span>
-  <button data-ms="20" aria-pressed="false">20 ms/line</button><button data-ms="35" aria-pressed="true">35 ms/line</button><button data-ms="50" aria-pressed="false">50 ms/line</button>
+  <button data-ms="20" aria-pressed="false">20 ms/line</button><button data-ms="40" aria-pressed="true">40 ms/line</button><button data-ms="50" aria-pressed="false">50 ms/line</button>
   <span style="width: 0.6rem"></span>
   <button id="all">replay all</button>
 </header>
@@ -66,7 +66,7 @@ const LONG = `<p>Found it. When a reply arrives, cc swaps the chat's HTML and sc
 <p>Mocks are in <code>mocks/arrive.html</code>, with a replay button per variant.</p><small>14:07</small>`;
 const DOTS = `<div class="typing"><i></i><i></i><i></i></div>`;
 const BATCHES = {short: [[SHORT]], long: [[LONG]], two: [[SHORT, LONG]], apart: [[SHORT], [LONG]]};
-let len = "short", pin = "top", ms = 35;
+let len = "short", pin = "top", ms = 40;
 
 const easeOut = (t) => 1 - (1 - t) ** 2;
 function tween(dur, f, ease = easeOut) {
