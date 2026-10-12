@@ -57,7 +57,7 @@
   .need { border-left: 4px solid var(--accent); background: var(--need); border-radius: 0 6px 6px 0; padding: 0.7rem 0.9rem; margin: 1rem 0; } .need.red { border-color: var(--red); background: var(--need-red); } .need p { margin: 0.2rem 0 0; white-space: pre-line; overflow-wrap: anywhere; } .opts button small { display: block; opacity: 0.75; white-space: pre-line; } .need p.suggest { color: var(--muted); }
   .opts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0 0; }
   .opts button { font: inherit; text-align: left; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: 6px; padding: 0.35rem 0.9rem; cursor: pointer; }
-  .opts button:first-child { background: var(--accent); color: var(--on-accent); }
+  .opts:not(.multi) button:first-child, .opts button[aria-pressed=true] { background: var(--accent); color: var(--on-accent); }
   .opts button:disabled { opacity: 0.5; cursor: default; }
   .need .free { display: flex; gap: 0.4rem; margin: 0.5rem 0 0; } .need .free input { flex: 1; min-width: 0; font: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 0.35rem 0.7rem; } .need .free button { font: inherit; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: 6px; padding: 0.35rem 0.9rem; cursor: pointer; }
   .done { color: var(--green); font-weight: 600; } .err { color: var(--red); }
@@ -582,7 +582,9 @@ function dialogBox(r) {
   const dg = r.state === "wait" && stream?.pid === r.pid ? S.screens[r.pid]?.dialog : null;
   if (!dg?.options?.length) return r.state === "wait" && r.asking ? `<div class="need red"><b>Waiting: ${esc(r.asking)}</b><p>Reading the dialog from the pane…</p></div>` : "";
   const labels = dg.options.map((o) => o.label);
-  return `<div class="need red"><b>${esc(dg.title ?? dg.question ?? "Dialog")}</b>${dg.body ? `<p>${esc(dg.body)}</p>` : ""}<div class="opts" data-pick="${esc(r.pid)}" data-labels="${esc(JSON.stringify(labels))}">${dg.options.map((o, k) => `<button data-i="${k}">${esc(o.label)}${o.detail ? `<small>${esc(o.detail)}</small>` : ""}</button>`).join("")}</div></div>`;
+  // a multi-select: its checked options are filled with a ✓, not the first one
+  const multi = dg.options.some((o) => o.checked !== null);
+  return `<div class="need red"><b>${esc(dg.title ?? dg.question ?? "Dialog")}</b>${dg.body ? `<p>${esc(dg.body)}</p>` : ""}<div class="opts${multi ? " multi" : ""}" data-pick="${esc(r.pid)}" data-labels="${esc(JSON.stringify(labels))}">${dg.options.map((o, k) => `<button data-i="${k}"${o.checked !== null ? ` aria-pressed="${o.checked}"` : ""}>${o.checked ? "✓ " : ""}${esc(o.label)}${o.detail ? `<small>${esc(o.detail)}</small>` : ""}</button>`).join("")}</div></div>`;
 }
 function sessionView(r) {
   return `<article><h1>${esc(r.name)}</h1>${metaLine(r)}${chat(r)}${asksFor(r.name).map(askBox).join("")}${S.asks.filter((a) => a.from === r.name && sent.has(a.id)).map(askBox).join("")}${dialogBox(r)}</article>`;
@@ -843,7 +845,8 @@ document.addEventListener("click", async (e) => {
     if (box.dataset.pick) await post(`${CCX}/s/${box.dataset.pick}/pick`, {i: +b.dataset.i, labels: JSON.parse(box.dataset.labels)});
     else if (box.dataset.ask) { await post(`${BLOG}answer`, {id: box.dataset.ask, answer: b.textContent}); sent.set(box.dataset.ask, `answered: ${b.textContent}`); }
     else if (box.dataset.todo) { setTimeout(loadTodo, 60e3); await toNadya(`[cc, ${box.dataset.file}] ${b.textContent === "done" ? "mark done" : "snooze 1 h"}: ${box.dataset.todo.slice(0, 200)}`); sent.set("todo:" + box.dataset.todo, b.textContent === "done" ? "sent to nadya: done" : "sent to nadya: snooze 1 h"); }
-    box.outerHTML = box.dataset.pick ? `<p class="done">✓ ${esc(JSON.parse(box.dataset.labels)[b.dataset.i])}</p>` : "";
+    // a multi-select toggle stays in the dialog: the next screen read shows the box checked
+    if (!box.classList.contains("multi")) box.outerHTML = box.dataset.pick ? `<p class="done">✓ ${esc(JSON.parse(box.dataset.labels)[b.dataset.i])}</p>` : "";
     draw(); drawView(true);
   } catch (err) { box.insertAdjacentHTML("afterend", `<p class="err">${esc(err.message)}</p>`); [...box.children].forEach((x) => x.disabled = false); }
 });
