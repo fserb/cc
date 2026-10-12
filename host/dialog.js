@@ -31,6 +31,15 @@
 //   cursor onto it and focuses it; with the cursor there every key is text, so a second
 //   `3` types `3` (2.1.296). It is answered with its digit unless already focused, ctrl+u
 //   to clear it, a bracketed paste, Enter. Only single-select: a multi-select's is a box
+// - **several questions draw a tab row** (2.1.296), `←  ☐ Design  ☐ Storage  ✔ Submit  →`, ✔
+//   ☒ once answered (Submit's ✔ is its icon). Which tab is current is only a background colour, which `capture-pane -p`
+//   drops, so `tabs` says only which are answered; a pick moves to the next question
+// - **options with a preview draw it to their right**, a ┌─┐ box at a fixed column whose
+//   rows end the option lines, with `Notes: press n to add notes` under it at that column;
+//   that dialog has no free-text option and a bare `Chat about this` under a rule. The box
+//   is cut off the lines and its text, `✂ N lines hidden` and all, is the current option's
+//   `preview`. **There a digit only moves the cursor**, and Enter picks (the dialog says
+//   `digitMoves`)
 
 import {run} from "./sh.js";
 import {sendKeys} from "./jump.js";
@@ -42,6 +51,7 @@ const DASHED = /^\s*╌{3,}\s*$/;
 const FOOTER = /Esc to cancel/;
 const CHECK = /^\[([^\]])\]\s+/;
 const BELOW = 3;
+const TABS = /^←\s.*→$/;
 
 const indentOf = (line) => line.length - line.trimStart().length;
 
@@ -64,21 +74,73 @@ export function parseDialog(text) {
     }
   }
   if (cursor < 0) return null;
+  // the cursor on the preview layout's bare `Chat about this`: the option whose preview shows
+  // keeps its ❯, so the block is read from there
+  let onChat = false;
+  if (/^\s*❯\s+Chat about this$/.test(lines[cursor])) {
+    const opt = lines.findLastIndex((l, i) => i < cursor && CURSOR.test(l) && NUMBERED.test(l));
+    if (opt >= 0 && lines.slice(opt + 1, cursor).some((l) => RULE.test(l))) [cursor, onChat] = [opt, true];
+  }
+  const preview = cutPreview(lines, cursor);
   const head = lines[cursor].match(NUMBERED);
-  const [from, to, options] = head
+  let [from, to, options] = head
     ? numbered(lines, cursor, head[1].length + head[0].slice(head[1].length).search(/\d/))
     : bare(lines, cursor);
+  // the preview layout's bare `Chat about this`, under a rule below the options
+  let end = to;
+  while (end < lines.length && !lines[end].trim()) end++;
+  if (options.length && RULE.test(lines[end] ?? "") && /^\s*(?:❯)?\s+Chat about this$/.test(lines[end + 1] ?? "")) {
+    if (onChat) options.forEach((o) => o.current = false);
+    options.push({n: null, label: "Chat about this", detail: "", current: onChat, checked: null, bare: true});
+    to = end + 2;
+  }
   if (options.length < 2) return null;
-  if (lines.slice(to).filter((l) => l.trim()).length > BELOW) return null;
+  const below = lines.slice(to).filter((l) => l.trim());
+  if (RULE.test(below.at(-1) ?? "")) below.pop();  // the bottom rule with the session's name
+  if (below.length > BELOW) return null;
+  if (preview) options[onChat ? options.length - 2 : options.findIndex((o) => o.current)].preview = preview;
   const chat = options.findIndex((o) => o.label === "Chat about this");
   const free = options[chat - 1];
-  if (chat > 1 && free.n !== null && options.every((o) => o.checked === null)) free.free = true;
+  const bareChat = options[chat]?.bare;
+  if (bareChat) delete options[chat].bare;
+  else if (chat > 1 && free.n !== null && options.every((o) => o.checked === null)) free.free = true;
   let top = from - 1;
   while (top >= 0 && !RULE.test(lines[top])) top--;
   const card = cardLines(lines.slice(top < 0 ? Math.max(0, from - 12) : top + 1, from));
   while (card.length && !card[0]) card.shift();
-  const body = card.slice(1).join("\n").replace(/\n{3,}/g, "\n\n").trim();
-  return {title: card[0] ?? "", body, options};
+  const tabs = TABS.test(card[0] ?? "") ? [...card.shift().matchAll(/([☐✔☒])\s+(.+?)(?=\s{2,}|\s*→)/g)].map(([, box, label]) => ({label, done: box === "☒"})) : null;
+  while (card.length && !card[0]) card.shift();
+  // a tab's question can wrap: it is the title up to the first blank line
+  const qEnd = tabs ? Math.max(1, card.indexOf("") < 0 ? card.length : card.indexOf("")) : 1;
+  const title = card.slice(0, qEnd).join(" ");
+  const body = card.slice(qEnd).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return {title, body, options, ...tabs && {tabs}, ...bareChat && {digitMoves: true}};
+}
+
+// The preview box right of the options: found on the lines from the dialog's top rule down, cut
+// off them in place (a line all at its column goes blank), and its text returned, or null
+function cutPreview(lines, cursor) {
+  let top = cursor;
+  while (top > 0 && !RULE.test(lines[top - 1])) top--;
+  let col = -1;
+  for (let i = top; i < lines.length && col < 0; i++) {
+    const m = lines[i].match(/^(.*\S)?\s{2,}┌─+┐$/);
+    if (m && i <= cursor + 1) col = lines[i].lastIndexOf("┌");
+  }
+  if (col < 0) return null;
+  const out = [];
+  for (let i = top; i < lines.length; i++) {
+    const l = lines[i];
+    if (l.length <= col || l.slice(0, col).trim() && !/\s{2}$/.test(l.slice(0, col))) continue;
+    if (!/^[┌│├└]/.test(l.slice(col)) && !(indentOf(l) >= col && /^Notes:/.test(l.trim()))) continue;
+    const box = l.slice(col);
+    lines[i] = l.slice(0, col).trimEnd();
+    const cut = box.match(/✂\s*─*\s*(.*?)\s*─*┤$/);
+    if (cut) out.push(`✂ ${cut[1]}`);
+    else if (box.startsWith("│")) out.push(box.replace(/^│ ?/, "").replace(/\s*│$/, ""));
+  }
+  while (out.length && !out.at(-1).trim()) out.pop();
+  return out.join("\n") || null;
 }
 
 // The card's lines trimmed, except what sits between two `╌` rules (a command, a diff, a
@@ -136,7 +198,8 @@ function numbered(lines, cursor, col) {
       continue;
     }
     const last = options.at(-1);
-    if (indentOf(line) >= labelCol) {
+    // short of the label too, outside a multi-select: a label wrapped beside a preview
+    if (indentOf(line) >= labelCol || last.checked === null) {
       last.detail = last.detail ? `${last.detail}\n${line.trim()}` : line.trim();
       continue;
     }
@@ -176,7 +239,7 @@ export function dialogRefusal(text) {
 export function pickKeys(dialog, i) {
   const opt = dialog.options[i];
   if (opt.free) return [...opt.current ? [] : [String(opt.n)], "C-u"];
-  if (opt.n !== null && opt.n >= 1 && opt.n <= 9) return [String(opt.n)];
+  if (opt.n !== null && opt.n >= 1 && opt.n <= 9) return dialog.digitMoves ? [String(opt.n), "Enter"] : [String(opt.n)];
   const d = i - dialog.options.findIndex((o) => o.current);
   return [...Array(Math.abs(d)).fill(d < 0 ? "Up" : "Down"), "Enter"];
 }

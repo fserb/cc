@@ -1,0 +1,24 @@
+  "List" (description "one per row", preview a 15-line ASCII mockup of a
+  list), "Map" (preview a 15-line ASCII mockup). Question 2, header "Storage",
+  question "Where do picks go?", options "JSON file" (preview a 5-line code
+  snippet), "SQLite" (preview a 5-line code snippet). Do nothing else; after
+  the answer, just say ok.
+
+────────────────────────────────────────────────────────────────────────────────
+←  ☐ Design  ☐ Storage  ✔ Submit  →
+
+Which layout should I build?
+
+❯ 1. Grid                         ┌────────────────────────────────────────────┐
+  2. List                         │ +--------------------------------------+   │
+  3. Map                          ├─── ✂ ─── 14 lines hidden ──────────────────┤
+                                  └────────────────────────────────────────────┘
+
+                                  Notes: press n to add notes
+
+────────────────────────────────────────────────────────────────────────────────
+  Chat about this
+
+Enter to select · ↑/↓ to navigate · n to add notes · Tab to switch questions ·
+Esc to cancel
+────────────────────────────────────────────────────────────────────── dlgtest ─

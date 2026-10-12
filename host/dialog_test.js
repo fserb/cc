@@ -156,3 +156,29 @@ Deno.test("parseDialog: a long command keeps the title, and comes as a ``` block
     "    tab-indented line", "X"], "indentation and characters kept, no │");
   eq(d.body.endsWith("Do you want to proceed?"), true, "the question after it");
 });
+
+// question-preview is photo-a's pane on marx (2.1.296); question-tabs* a scratch session on
+// nadya walked through it: first question, cursor on Chat about this, second, review
+Deno.test("parseDialog: several questions with previews, tabs and a bare Chat about this", () => {
+  const d = parseDialog(fixture("question-preview"));
+  eq(d.title, "Which picking interface should I build? (All judge each look at full strength, through the real shader, on the reference photos or your own.)", "the wrapped question is the title");
+  eq(d.tabs, [{label: "Design", done: false}, {label: "Storage", done: false}, {label: "Submit", done: false}], "tabs");
+  eq(d.options.map((o, i) => [o.label, o.detail, !!o.free, pickKeys(d, i).join(" ")]), [
+    ["Triage + dial strip", "(Recommended)", false, "1 Enter"],
+    ["A/B duels", "", false, "2 Enter"],
+    ["One per cluster", "", false, "3 Enter"],
+    ["Triage + duels + clusters", "", false, "4 Enter"],
+    ["Chat about this", "", false, "Down Down Down Down Enter"],
+  ], "options, the box cut off them; a digit only moves, so Enter after it");
+  eq(d.options[0].preview, "[ref: 1 2 3 4 5 own ]  show: undecided ▾\n✂ 13 lines hidden", "the current option's preview");
+  eq(parseDialog(fixture("question-tabs")).options[0].preview, "+--------------------------------------+\n✂ 14 lines hidden", "80 columns");
+  eq(parseDialog(fixture("question-tabs-2")).options[0].preview.split("\n")[0], 'const path = "picks.json"', "160 columns: all of it");
+  const chat = parseDialog(fixture("question-tabs-chat"));
+  eq(chat.options.map((o) => [o.current, !!o.preview]), [[false, false], [false, false], [false, true], [true, false]],
+    "the cursor on Chat about this, the last option keeping its ❯ and preview");
+  const two = parseDialog(fixture("question-tabs-2"));
+  eq([two.title, two.tabs.map((t) => t.done)], ["Where do picks go?", [true, false, false]], "the first answered: ☒");
+  const review = parseDialog(fixture("question-tabs-review"));
+  eq([review.title, review.options.map((o) => o.label), pickKeys(review, 0)], ["Review your answers", ["Submit answers", "Cancel"], ["1"]], "review");
+  eq(review.body.includes("→ SQLite"), true, "the answers in the body");
+});

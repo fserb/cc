@@ -1,0 +1,24 @@
+  selection, weighing strengths (real renders, map-based nearest-looks) against
+  weaknesses (tiny tiles, no persistent keep/maybe/reject state, no
+  side-by-side comparison) — and I need to account for the fact that dial.json
+  gets overwritten on each one-way sync from marx to pravda.
+
+────────────────────────────────────────────────────────────────────────────────
+←  ☐ Design  ☐ Storage  ✔ Submit  →
+
+│ Which picking interface should I build? (All judge each look at full strength,
+│ through the real shader, on the reference photos or your own.)
+
+❯ 1. Triage + dial strip          ┌────────────────────────────────────────────┐
+    (Recommended)                 │ [ref: 1 2 3 4 5 own ]  show: undecided ▾   │
+  2. A/B duels                    ├─── ✂ ─── 13 lines hidden ──────────────────┤
+  3. One per cluster              └────────────────────────────────────────────┘
+  4. Triage + duels + clusters
+                                  Notes: press n to add notes
+
+────────────────────────────────────────────────────────────────────────────────
+  Chat about this
+
+Enter to select · ↑/↓ to navigate · n to add notes · Tab to switch questions ·
+Esc to cancel
+────────────────────────────────────────────────────────────────────── photo-a ─
