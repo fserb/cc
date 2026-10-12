@@ -426,7 +426,9 @@ function items() {
   const ps = projects(), run = ps.filter((x) => x.running).length;
   it.push({id: "projects", d: run ? "green" : "", title: "projects", sub: ps.filter((x) => x.running).map((x) => `${x.file.replace(/\.md$/, "")} running`).join(" · "), t: ""});
   const pk = S.packages, desk = pk?.desk.count ?? 0, onWay = pk?.packages.filter((x) => x.number && !x.delivered).length ?? 0;
-  it.push({id: "packages", d: desk ? "blue" : "", title: "packages", sub: pk ? [desk && `${desk} at the front desk`, `${onWay} on the way`].filter(Boolean).join(" · ") : "", t: pk ? ago(Date.parse(pk.updated) / 1000) : ""});
+  // shown only while something is active: a package event in the last 24 h or a package at the desk (user, 2026-10-12)
+  const pkActive = desk || pk?.packages.some((x) => Date.now() - Date.parse(x.last) < 86400e3);
+  if (pkActive || cur === "packages") it.push({id: "packages", d: desk ? "blue" : "", title: "packages", sub: pk ? [desk && `${desk} at the front desk`, `${onWay} on the way`].filter(Boolean).join(" · ") : "", t: pk ? ago(Date.parse(pk.updated) / 1000) : ""});
   it.push({id: "files", d: "", title: "files", sub: "", t: ""});
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, dialog: !!hasDialog(r)}));
   ss.sort((a, b) => b.dialog - a.dialog);
