@@ -19,7 +19,8 @@
 import {byCodePoint, HOME} from "./sh.js";
 import {logPath, readFrom, readPage} from "./transcript.js";
 import {parseDialog, pick, screen} from "./dialog.js";
-import {attachSession, select, sendKeys, show, tmuxBackground, typeInto, unqueue} from "./jump.js";
+import {attachSession, select, sendKeys, show, tmuxBackground, typeInto} from "./jump.js";
+import {unqueue} from "./queue.js";
 import {close, expandDir, paneIn, spawn} from "./spawn.js";
 import {sendPeer} from "./peer.js";
 import {byDay, pace, readUsage} from "./usage.js";
@@ -708,7 +709,15 @@ export class Server {
     }
     // Claude Code's chat:sendNow: with an empty input it stops the turn and sends the queued messages
     if (verb === "now") return answer(await sendKeys(inst, ["C-x", "C-s"]));
-    if (verb === "unqueue") return answer(await unqueue(inst));
+    // with `text`, that queued message alone comes out (queue.js); without, every one
+    if (verb === "unqueue") {
+      const {text} = body;
+      if (text !== undefined && (typeof text !== "string" || !text.trim())) {
+        return json({error: "no text"}, 400);
+      }
+      const r = await unqueue(inst, text);
+      return answer(r.error ?? null, text === undefined ? {ok: true} : {ok: true, kept: r.kept});
+    }
     if (verb === "select") {
       return answer(await select(inst), {ok: true, background: await tmuxBackground(),
         session: inst.session});

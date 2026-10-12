@@ -1,0 +1,24 @@
+[48;5;237m  [38;5;231ma deliberate test wait: python3 -c 'import time; time.sleep(150)'. Then [39m
+  [38;5;231mreply done.[39m
+
+[38;5;246m[49m [39m Running a deliberate 150-second test wait[38;5;246m · 6s[39m
+[38;5;246m  ⎿  $ python3 -c 'import time; time.sleep(150)' (7s)[39m
+     [38;5;246m(ctrl+b ctrl+b (twice) to run in background)[39m
+
+[38;5;246m[48;5;237m❯ first queued A[39m
+
+[38;5;246m❯ second queued B[39m
+  [38;5;246mwith a second line[39m
+
+[38;5;246m❯ third queued C[39m
+[49m  [38;5;246mctrl+x ctrl+s to send now[39m
+
+[38;5;174m✢[39m [38;5;174mBunning… [38;5;246m(9s · ↓[39m [38;5;246m123 tokens)[39m
+[38;5;246m  ⎿  Tip: Double-tap esc to rewind the code and/or conversation to a previous [39m
+     [38;5;246mpoint in time[39m
+
+[38;5;244m──────────────────────────────────────────────────────────────── unq-scratch-z ─
+[38;5;246m❯ [2m[39mPress up to edit queued messages[0m
+[38;5;244m────────────────────────────────────────────────────────────────────────────────
+
+[39m  [38;5;220m⏵⏵ auto mode on[38;5;246m (shift+tab to cycle) · ← for agents[39m

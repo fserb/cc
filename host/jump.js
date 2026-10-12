@@ -219,20 +219,6 @@ export async function sendKeys(inst, keys) {
   return r.code === 0 ? null : `tmux: ${r.err.trim() || `exit ${r.code}`}`;
 }
 
-// Drop every message queued in the instance's input: Up moves them into the input, and
-// ctrl+u deletes a line, then the newline before it. 200 ctrl+u in one tmux call arrive as
-// one chunk, which Claude Code takes as a paste ("Removed 200 invisible characters"), so
-// they go 4 at a time. The turn goes on.
-export async function unqueue(inst) {
-  const err = await sendKeys(inst, ["Up"]);
-  if (err) return err;
-  for (let i = 0; i < 50; i++) {
-    const e = await sendKeys(inst, ["C-u", "C-u", "C-u", "C-u"]);
-    if (e) return e;
-  }
-  return null;
-}
-
 // The tmux client showing `inst`'s session and the kitty window it is in, read now, for a
 // focus from this machine: {...inst, clientTty, kittyPid, kittyProc, match}
 export async function withClient(inst) {

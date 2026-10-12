@@ -111,8 +111,15 @@ All JSON, all under `api/`.
                                            empty input, stops the turn and sends the queue
                                            (`esc`, a bare Escape, went 2026-10-12: nothing
                                            called it; `screen` stays, nadya reads it)
-    POST api/s/<pid>/unqueue               drops every queued message (Up moves them into the
-                                           input, 200 ctrl+u empty it); the turn goes on
+    POST api/s/<pid>/unqueue {text}        takes the first queued message equal to text (runs
+                                           of whitespace aside) out of the queue and leaves the
+                                           rest queued, in order: {ok, kept}, kept the number
+                                           typed back (queue.js). 409 when the box holds
+                                           unsent text, a dialog is up, nothing is queued or
+                                           text is not in it, every popped message typed back
+                                           in the last two cases. Without text: drops every
+                                           queued message and answers {ok} (cchost before
+                                           2026-10-12 does this with text too); the turn goes on
     POST api/spawn  {dir, after?, mkdir?}
                                    with `after`, a pane id: a new tmux window right after
                                    that pane's, in its session. Without: a new kitty
@@ -227,6 +234,38 @@ findings are at the top of `dialog.js`; the ones that changed the design:
 - a wrapped label continues at the column a description uses, so both land in `detail`
 - `pick` re-captures and refuses with "the dialog changed" unless the labels are the ones
   the client drew. Live: a stale list was refused, then `No` declined a Bash command
+
+## Taking a queued message back (queue.js, 2026-10-12)
+
+Measured on 2.1.296 on a scratch session kept busy by a foreground sleep:
+
+- typed messages queued during a turn are drawn above the input box, each as `❯ <text>`,
+  and the empty box reads `Press up to edit queued messages`, dim (SGR 2, so the capture
+  is `capture-pane -e`). A peer message waits in the same queue, drawn `› Message from
+  @<name>`
+- **Up pops every typed message into the box, oldest first, joined by "\n"**; peer messages
+  stay queued. A draft already in the box goes after them. A large paste shows as
+  `[Pasted text #1 +11 lines]`. With nothing queued, Up recalls the last prompt instead
+- the transcript logs `queue-operation` records: `enqueue` with the content, one `popAll`
+  per popped message (same timestamp, in order), `dequeue` with no content as one is sent,
+  `remove` with the content as a peer message is. A large paste's content is wrapped in
+  `<pasted_content id="...">`. One session logged an `enqueue` with no content and none at
+  all for another, so the queue is not rebuilt from the log: only the `popAll` records
+  written after our Up are trusted, polled up to 2s (about 200ms in practice)
+- **two paste+Enter pairs in one tmux call, or keys sent in quick separate calls, reach
+  Claude Code as one chunk**: "A" and "C" queued as one message "AC", and 16 ctrl+u
+  followed by pastes read as a paste with "Removed 12 invisible characters", not sent. So
+  each message goes back in its own call and waits for its `enqueue` record (up to 1s), and
+  the box is emptied 4 ctrl+u at a time, re-reading the screen in between
+- unqueue: refuse unless the box is empty but for the dim hint, Up, read the popped
+  messages, empty the box, type back all but the first equal to `text` (unwrapped from the
+  paste tags), each a bracketed paste and Enter. They queue again behind the peer messages
+  still queued, which they may have been ahead of. A dialog that comes up meanwhile gets the
+  rest pasted into the box with no Enter. 0.2-0.7s for three or four messages. One at a
+  time per pane
+- tried live through `POST /api/s/<pid>/unqueue` on nadya: three queued, the middle one
+  taken, the other two ran in order after the turn; text not in the queue and a draft in
+  the box answered 409 and left the queue as it was
 
 Free text (2.1.296, 2026-10-12): the option above `Chat about this` is a field; its digit
 focuses it, after which a digit is text (cc sent `3` again and again into one). `pick` with

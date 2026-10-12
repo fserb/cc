@@ -1,0 +1,24 @@
+
+
+[38;5;246m✻[39m [38;5;246mWorked for 2m 7s · done 1:37 PM[39m
+
+[38;5;246m[48;5;237m❯ [38;5;231mRun this exact bash command in the foreground with a 200000 ms timeout, it is[39m
+  [38;5;231ma deliberate test wait: python3 -c 'import time; time.sleep(150)'. Then [39m
+  [38;5;231mreply done.[39m
+
+[38;5;246m[49m [39m Running a deliberate 150-second test wait[38;5;246m · 8s[39m
+[38;5;246m  ⎿  $ python3 -c 'import time; time.sleep(150)' (8s)[39m
+     [38;5;246m(ctrl+b ctrl+b (twice) to run in background)[39m
+
+[38;5;174m✽[39m [38;5;180mBunning…[38;5;174m [38;5;246m(10s · ↓[39m [38;5;246m123 tokens)[39m
+[38;5;246m  ⎿  Tip: Double-tap esc to rewind the code and/or conversation to a previous [39m
+     [38;5;246mpoint in time[39m
+                                                        [38;5;246mctrl+g to edit in Nvim[39m
+[38;5;244m──────────────────────────────────────────────────────────────── unq-scratch-z ─
+[38;5;246m❯ [39mfirst queued A
+  second queued B
+  with a second line
+  third queued C
+[38;5;244m────────────────────────────────────────────────────────────────────────────────
+
+[39m  [38;5;220m⏵⏵ auto mode on[38;5;246m (shift+tab to cycle)[39m
