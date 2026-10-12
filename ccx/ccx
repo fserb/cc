@@ -3,23 +3,22 @@
 // Two lines, two languages. sh runs line 2 and never reaches line 3; deno strips the
 // hashbang and reads line 2 as a string then a comment. The re-exec is what makes a symlink
 // on PATH work: deno resolves a relative import against the path it was handed, so
-// ~/bin/ccx -> here looks for claudes.js in ~/bin and dies.
+// ~/bin/ccx -> here looks for view.js in ~/bin and dies.
+//
+// ccx reads nothing of the machine: every row, message and action is a call to this
+// host's cchost, which answers for every host (api/list?all=1, api/s/<host>.<pid>/...).
+// Focusing a window is the exception, since it acts on the terminal you sit at: jump.js
+// here for this host's sessions, a kitty window running `ssh <host> tmux attach` for
+// another's. What is imported from host/ besides is pure: the order, the colours, the
+// usage line, the notify parser.
 
-import {discover, fmtAge, sessionRecords, StateClock} from "../host/claudes.js";
+import {fmtAge} from "../host/claudes.js";
 import {HOME, ON_EXIT, sh} from "../host/sh.js";
 import {fuzzy, NUMBERS, PALETTE, rank, SORTS, stateOf} from "../host/view.js";
-import {jump, kittyWindowTitle, raiseTarget, tmuxWindowName, typeInto} from "../host/jump.js";
-import {Online} from "../host/online.js";
-import {byDay, HISTORY, readUsage, usageLine, USAGE} from "../host/usage.js";
-import {close, expandDir, paneIn, spawn} from "../host/spawn.js";
-import {base, burnReport, call, discoverAll, HOSTS, jumpRemote, label, mergedUsage, others,
-  Remotes, SELF} from "../host/remote.js";
-
-// `peer.js` and `chat.js` load on use, not at startup: a missing one must cost `ccx send`
-// its error line and nothing else. A static import would take `list`, `doctor` and the TUI
-// down with it.
-const peerModule = () => import("../host/peer.js");
-const chatModule = () => import("../host/chat.js");
+import {attachSession, jump, kittyWindowTitle, raiseTarget, tmuxWindowName,
+  withClient} from "../host/jump.js";
+import {byDay, HISTORY, usageLine, USAGE} from "../host/usage.js";
+import {parseNotify} from "../host/subs.js";
 
 // render
 
@@ -248,8 +247,8 @@ function render(view) {
   const room = capacity(height, view.ranked.length);
   const shown = view.ranked.slice(view.offset, view.offset + room);
   if (!view.ranked.length) {
-    lines.push(noteLine(view.total ? "nothing matches that filter" : "no claude instances",
-      lay, cols));
+    lines.push(noteLine(view.note || (view.total ? "nothing matches that filter"
+      : "no claude instances"), lay, cols));
   }
   shown.forEach((inst, n) => lines.push(rowLine(inst, view.offset + n,
     view.offset + n === view.cursor, lay, cols, view.needle)));
@@ -348,17 +347,171 @@ function chatRender(view) {
   return lines;
 }
 
+// cchost
+
+const API = (Deno.env.get("CCX_API") ?? "http://127.0.0.1:7681").replace(/\/+$/, "");
+const API_NAME = API.replace(/^https?:\/\//, "");
+const DOWN = (why) => `cchost not answering on ${API_NAME}: ${why}`;
+// "Connection refused (os error 111)" out of fetch's "fetch failed" and its cause
+const why = (e) => (e.cause?.message ?? e.message).split(": ").at(-1);
+
+// GET, or POST `body` as JSON: [body, null, status], or [null, error, status]. Status 0 is
+// no answer at all, a refused connection or a timeout
+async function request(path, body = undefined, timeout = 5000) {
+  const init = {signal: AbortSignal.timeout(timeout)};
+  if (body !== undefined) {
+    Object.assign(init, {method: "POST", body: JSON.stringify(body),
+      headers: {"content-type": "application/json"}});
+  }
+  let r;
+  try {
+    r = await fetch(`${API}${path}`, init);
+  } catch (e) {
+    return [null, e.name === "TimeoutError" ? `no answer in ${timeout / 1000}s` : why(e), 0];
+  }
+  const j = await r.json().catch(() => ({}));
+  if (r.ok) return [j, null, r.status];
+  // a route this cchost does not have is older code, not a missing instance
+  const old = r.status === 404 && j.error === "not found";
+  return [null, old ? `cchost on ${API_NAME} has no ${path.split("?")[0]}; restart it on ` +
+    "newer code" : j.error ?? `HTTP ${r.status}`, r.status];
+}
+
+// request(), where cchost not answering at all ends the command with one line, exit 1. A
+// timeout on a call that answers slowly (spawn, close, burn) is that call's error instead
+async function api(path, body = undefined, timeout = 5000) {
+  const got = await request(path, body, timeout);
+  if (got[2] === 0 && !got[1].startsWith("no answer")) {
+    console.error(`ccx: ${DOWN(got[1])}`);
+    Deno.exit(1);
+  }
+  return got;
+}
+
+// Every SSE frame of a response body as onFrame(event, data). With no byte in `idle` ms
+// the stream counts as dead and `ctl` is aborted: cchost writes a keepalive every 15s
+async function frames(r, ctl, onFrame, idle = 40_000) {
+  let buf = "", timer = 0;
+  const arm = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => ctl.abort(), idle);
+  };
+  arm();
+  try {
+    for await (const chunk of r.body.pipeThrough(new TextDecoderStream())) {
+      arm();
+      buf += chunk;
+      let cut;
+      while ((cut = buf.indexOf("\n\n")) >= 0) {
+        const frame = buf.slice(0, cut);
+        buf = buf.slice(cut + 2);
+        const event = frame.match(/^event: (.*)$/m)?.[1];
+        const data = frame.match(/^data: (.*)$/m)?.[1];
+        if (event && data) onFrame(event, JSON.parse(data));
+      }
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// GET an SSE route: the response, or throws with why
+async function openStream(path, ctl) {
+  let r;
+  try {
+    r = await fetch(`${API}${path}`, {signal: ctl.signal});
+  } catch (e) {
+    throw new Error(DOWN(why(e)));
+  }
+  if (r.ok) return r;
+  const j = await r.json().catch(() => ({}));
+  throw new Error(r.status === 404 && j.error === "not found"
+    ? `cchost on ${API_NAME} has no ${path.split("?")[0]}; restart it on newer code`
+    : j.error ?? `HTTP ${r.status}`);
+}
+
+// the listing
+
+// this host, which the list writes without a `host:`; cchost's own answer replaces it
+let SELF = Deno.env.get("CCX_SELF") ?? Deno.hostname().split(".")[0];
+let HOSTS = [SELF];
+
+// A row of api/list?all=1, its pid `<host>.<pid>`, pane `<host>/<pane>`, session and path
+// `<host>:...`, untagged: `host` is "" for this host's and the name of any other
+class Inst {
+  constructor(r, self) {
+    const id = String(r.pid), dot = id.lastIndexOf(".");
+    const host = dot > 0 ? id.slice(0, dot) : self;
+    const strip = (s, sep) => s?.startsWith(`${host}${sep}`) ? s.slice(host.length + 1) : s ?? "";
+    Object.assign(this, {name: "", summary: "", asking: "", tab: "", since: 0}, r, {
+      host: host === self ? "" : host, origin: host, pid: Number(id.slice(dot + 1)),
+      path: strip(r.path, ":"), pane: strip(r.pane, "/"), session: strip(r.session, ":")});
+  }
+
+  get key() {
+    return `${this.origin}:${this.pid}`;
+  }
+
+  // what api/s/<id>/... takes: a bare pid is this host's, as an older cchost has it
+  get id() {
+    return this.host ? `${this.host}.${this.pid}` : `${this.pid}`;
+  }
+
+  get shortPath() {
+    const path = this.path || "?";
+    const tabbed = this.tab ? `${path}:${this.name || this.tab}` : path;
+    return this.host ? `${this.host}:${tabbed}` : tabbed;
+  }
+
+  get age() {
+    return this.since ? fmtAge(Date.now() / 1000 - this.since) : "?";
+  }
+}
+
+// An api/list?all=1 body as instances, this host's first, and SELF and HOSTS from it
+function adopt(body) {
+  SELF = body.self ?? SELF;
+  HOSTS = body.hosts ?? [...new Set([SELF, ...(body.up ?? []),
+    ...(body.down ?? []).map(([h]) => h)])];
+  const all = (body.rows ?? []).map((r) => new Inst(r, SELF));
+  return [...all.filter((i) => !i.host), ...all.filter((i) => i.host)];
+}
+
+// Every instance on every host, with the hosts that are down on stderr
+async function listing() {
+  const [body, err] = await api("/api/list?all=1");
+  if (err) {
+    console.error(`ccx: ${err}`);
+    Deno.exit(1);
+  }
+  reportDown(body.down ?? []);
+  return adopt(body);
+}
+
+// `host:name` for another host's instance, the name alone for this one's
+const label = (i) => `${i.host ? `${i.host}:` : ""}${i.name || i.pid}`;
+
+// Focus an instance: this host's by jump(), against its tmux client as it is now, another
+// host's by selecting its pane there and raising a kitty window attached to its session.
+// An error message, or null
+async function focus(i) {
+  if (!i.host) return await jump(await withClient(i));
+  if (!i.pane) return `${label(i)} is not inside tmux; nothing to focus`;
+  const [r, err] = await request(`/api/s/${i.id}/select`, {});
+  if (err) return err;
+  return await attachSession(i.host, i.session, r?.background);
+}
+
 // the tui
 
 const CWD = Deno.cwd();
 const SHORT_CWD = CWD.replace(HOME, "~");
 
 const app = {
-  clock: new StateClock(),
-  remotes: {instances: () => []},   // a Remotes once the UI runs; never in a snapshot
-  net: new Online(),
   usage: null,
   instances: [],
+  down: "",              // why cchost's stream is not there, "" while it is
+  offline: "",           // the API, and the hosts cchost cannot reach
   ranked: [],
   filter: "",
   sort: SORTS[0],
@@ -395,8 +548,9 @@ function view() {
     filter: app.filter,
     needle: needle(),
     sort: app.sort,
-    offline: app.net.offline ? app.net.label : "",
-    usage: app.usage,
+    offline: app.down ? "cchost down" : app.offline,
+    note: app.down,
+    usage: usageLine(app.usage),
     cursor: app.cursor,
     offset: app.offset,
     toast: app.toast,
@@ -405,20 +559,39 @@ function view() {
   };
 }
 
-// the 1.5s interval no longer waits for the poll it started, so without the guard a slow
-// discover would stack up and race a stale listing onto the screen; skipping drops the tick
-let polling = false;
-async function reload() {
-  app.net.tick();              // returns at once; the probe is its own 30s clock, or 5s
-  app.usage = usageLine(readUsage());
-  if (polling) return;         // once one has failed, and never blocks the listing
-  polling = true;
-  try {
-    app.instances = [...app.clock.update(await discover()), ...app.remotes.instances()];
-  } finally {
-    polling = false;
+// api/events?all=1, for as long as the app runs: a list on every change, and on a drop
+// no rows and why, then again in 2s
+async function followList() {
+  while (true) {
+    const ctl = new AbortController();
+    let why = "stream ended";
+    try {
+      const r = await openStream("/api/events?all=1", ctl);
+      await frames(r, ctl, (event, body) => {
+        if (event !== "list") return;
+        app.down = "";
+        app.instances = adopt(body);
+        app.offline = [body.offline, ...(body.down ?? []).map(([h]) => `${h} down`)]
+          .filter(Boolean).join("  ·  ");
+        refresh();
+        draw();
+      });
+    } catch (e) {
+      why = e.name === "AbortError" ? "no keepalive in 40s" : e.message;
+    }
+    app.down = why.startsWith("cchost") ? why : DOWN(why);
+    app.instances = [];
+    refresh();
+    draw();
+    await new Promise((ok) => setTimeout(ok, 2000));
   }
-  refresh();
+}
+
+// cchost keeps the merged reading a minute, so asking more often gains nothing
+async function followUsage() {
+  const [body] = await request("/api/usage", undefined, 30_000);
+  if (body) app.usage = body.usage;
+  draw();
 }
 
 function refresh() {
@@ -437,13 +610,15 @@ function chatView() {
     cols, height, now: Date.now() / 1000};
 }
 
+let drawing = false;      // set once the screen is ours; a frame before that is noise
 function draw() {
+  if (!drawing) return;
   const frame = app.chat.on ? chatRender(chatView()) : render(view());
   write(`${ESC}[H${frame.join("\r\n")}`);
 }
 
 const tableRoom = () =>
-  capacity(size().height - (app.usage ? 1 : 0), app.ranked.length);
+  capacity(size().height - (usageLine(app.usage) ? 1 : 0), app.ranked.length);
 const chatRoom = () => Math.max(1, size().height - 2);
 
 // the offset is a line and not a message: a 2KB body is taller than the screen, so a
@@ -463,25 +638,36 @@ function scrollChat(delta) {
  * escape, ctrl+c and ctrl+q still leave the app from in here rather than backing out to the
  * list: they are the way out of ccx, and a key that means quit in one view and back in
  * another is worse than the one keystroke it saves.
+ *
+ * The conversation is cchost's api/chat/events for this directory: `log` once, then `msg`.
  */
 async function toggleChat() {
   if (app.chat.on) return closeChat();
-  const c = app.chat;
+  const c = app.chat, ctl = new AbortController();
+  let r;
   try {
-    const mod = await chatModule();
-    c.msgs = mod.chatLog(CWD);
-    c.stop = mod.watchChat(CWD, (m) => {
-      c.msgs.push(m);
-      if (c.pinned) c.offset = Number.MAX_SAFE_INTEGER;
-      scrollChat(0);
-      draw();
-    });
+    r = await openStream(`/api/chat/events?cwd=${encodeURIComponent(CWD)}`, ctl);
   } catch (e) {
-    toast(`no chat here: ${e.message ?? e}`);
+    toast(`no chat here: ${e.message}`);
     return draw();
   }
-  c.on = true;
-  c.offset = Number.MAX_SAFE_INTEGER;          // newest first sight, which scrollChat clamps
+  const stop = () => ctl.abort();
+  Object.assign(c, {on: true, msgs: [], stop, offset: Number.MAX_SAFE_INTEGER});
+  const pin = () => {
+    if (c.pinned) c.offset = Number.MAX_SAFE_INTEGER;   // newest, which scrollChat clamps
+    scrollChat(0);
+    draw();
+  };
+  frames(r, ctl, (event, body) => {
+    if (event === "log") c.msgs = body.msgs;
+    else if (event === "msg") c.msgs = [...c.msgs, body];
+    else return;
+    pin();
+  }).catch(() => {}).finally(() => {
+    if (c.stop !== stop || !c.on) return;
+    toast("chat: cchost's stream ended");
+    draw();
+  });
   scrollChat(0);
   draw();
 }
@@ -505,7 +691,7 @@ async function jumpRow(n) {
   if (n < 0 || n >= app.ranked.length) return;
   app.cursor = n;
   app.cursorKey = app.ranked[n].key;
-  const err = await (app.ranked[n].host ? jumpRemote(app.ranked[n]) : jump(app.ranked[n]));
+  const err = await focus(app.ranked[n]);
   if (err) {
     toast(err);
     draw();                                    // the draw for this keystroke already ran
@@ -654,19 +840,18 @@ async function cmdUi() {
   }
   restores = [tmuxWindowName("ccx"), await kittyWindowTitle("ccx")];
   enter();
+  drawing = true;
   for (const sig of ["SIGTERM", "SIGHUP"]) Deno.addSignalListener(sig, quit);
   Deno.addSignalListener("SIGWINCH", () => {
     write(`${ESC}[2J`);              // a shrink leaves the old frame's tail on the screen
     refresh();
     draw();
   });
-  app.remotes = new Remotes();
-  await reload();
+  followList();
+  followUsage();
+  setInterval(followUsage, 60_000);
+  setInterval(draw, 1000);           // the ages; the rows come with the stream
   draw();
-  setInterval(async () => {
-    await reload();
-    draw();
-  }, 1500);
   const buf = new Uint8Array(4096);
   try {
     while (true) {
@@ -788,6 +973,7 @@ function cmdResolve(...args) {
   for (const i of found) console.log(`${i.pid} ${i.name} ${i.shortPath}`);
 }
 
+
 // cli
 
 // a host that did not answer, on stderr so a pipe still carries only rows
@@ -795,19 +981,25 @@ function reportDown(down) {
   for (const [h, err] of down) console.error(`${h}: down, ${err}`);
 }
 
+// an error from cchost, on stderr, and exit 1
+function fail(cmd, err) {
+  console.error(`${cmd}: ${err}`);
+  Deno.exit(1);
+}
+
 async function cmdList() {
-  const {instances, down} = await discoverAll(new StateClock());
-  reportDown(down);
-  for (const i of instances) {
+  for (const i of await listing()) {
     console.log(`${stateOf(i).label.padEnd(6)} ${i.age.padStart(4)}  ` +
       `${i.shortPath.padEnd(30)} ${i.summary}`);
   }
 }
 
 // ccx usage
-// The seven-day line, then the week so far a local day per row
+// The seven-day line, then the week so far a local day per row, every host's log merged
 async function cmdUsage() {
-  const u = await mergedUsage(), line = usageLine(u);
+  const [body, err] = await api("/api/usage", undefined, 30_000);
+  if (err) fail("usage", err);
+  const u = body.usage, line = usageLine(u);
   if (!line) {
     console.log(u ? "the week in ccx-usage.json is over" : `${USAGE} missing or unreadable; ` +
       "statusLine in ~/.claude/settings.json writes it");
@@ -825,8 +1017,7 @@ async function cmdUsage() {
 // ccx burn [hours] [--top N] [--json]
 // Who used the limit, every host's transcripts: with no hours, last week, this week and
 // this week's days per project, as % of the limit; with hours, the last N per project and
-// session with their tokens. Asks this host's daemon, which keeps the hourly store, and
-// reads the transcripts here itself when it does not answer
+// session with their tokens. cchost keeps the hourly store and merges the hosts
 async function cmdBurn(...args) {
   let hours = 0, top = 12, raw = false;
   for (let n = 0; n < args.length; n++) {
@@ -835,17 +1026,10 @@ async function cmdBurn(...args) {
     else if (Number(args[n]) > 0) hours = Number(args[n]);
     else usage();
   }
-  let [r, err] = await call(SELF, `/api/burn${hours ? `?hours=${hours}` : ""}`, undefined, 120_000);
-  if (err) {
-    const {localRows} = await import("../host/burn.js");
-    console.error(`${SELF}: ${err}; reading the transcripts here`);
-    r = await burnReport(hours, (f, t) => localRows(f, t, {write: false}));
-  }
+  const [r, err] = await api(`/api/burn${hours ? `?hours=${hours}` : ""}`, undefined, 120_000);
+  if (err) fail("burn", err);
   if (raw) return console.log(JSON.stringify(r));
-  if (r.error) {
-    console.error(r.error);
-    return Deno.exit(1);
-  }
+  if (r.error) fail("burn", r.error);
   reportDown(r.down ?? []);
   const pct = (q) => q == null ? "" : `${q < 10 ? q.toFixed(1) : Math.round(q)}%`;
   const tok = (n) => n >= 1e9 ? `${(n / 1e9).toFixed(1)}G` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M`
@@ -886,20 +1070,27 @@ async function cmdBurn(...args) {
   }
 }
 
+// What the terminal here has for focusing, then what cchost answers for: the API, the
+// usage files, every host, and each of this host's instances with the kitty match a
+// focus would use, which is read here since the focus runs here
 async function cmdDoctor() {
   console.log(`TMUX=${Deno.env.get("TMUX") ?? "(none)"}  ` +
     `KITTY_WINDOW_ID=${Deno.env.get("KITTY_WINDOW_ID") ?? "(none)"}`);
   const pass = (await sh("tmux", "show", "-gv", "allow-passthrough")).trim();
   console.log(`tmux allow-passthrough: ${pass}`);
   console.log(`platform ${Deno.build.os}`);
-  // one probe, awaited: doctor is the place to see the endpoint and what it answered, and
-  // `from` is the only way to tell which file or var set it
-  const net = new Online();
-  const probe = await net.probe();
-  console.log(`api ${net.url} (${net.from}) ${probe.ok ? "up" : "DOWN"} ` +
-    `${probe.note} in ${Math.round(probe.ms)}ms`);
-  // what the status line last copied out, and how old that copy is
-  const u = readUsage();
+  const at = performance.now();
+  const [list, listErr, status] = await api("/api/list?all=1");
+  if (listErr) fail("doctor", `cchost ${API_NAME}: ${listErr}`);
+  const instances = adopt(list);
+  console.log(`cchost ${API_NAME} up, HTTP ${status} in ${Math.round(performance.now() - at)}ms`);
+  // one probe, from cchost: the endpoint it sees, and `from`, which file or var set it
+  const [d, dErr] = await api("/api/doctor", undefined, 15_000);
+  console.log(dErr ? `api (${dErr})` : `api ${d.api.url} (${d.api.from}) ` +
+    `${d.api.ok ? "up" : "DOWN"} ${d.api.note} in ${Math.round(d.api.ms)}ms`);
+  // what the status line last copied out on this host, and how old that copy is
+  const [ub] = await api("/api/usage?local=1", undefined, 15_000);
+  const u = ub?.usage;
   console.log(u
     ? `usage ${USAGE} written ${fmtAge((Date.now() - u.at) / 1000)} ago: 7d ` +
       `${u.used}% resets ${new Date(u.resetsAt).toISOString()}  ` +
@@ -907,25 +1098,16 @@ async function cmdDoctor() {
       `usage ${HISTORY}: ${u.history.length} lines` +
       (u.history.length ? ` from ${new Date(u.history[0].at).toISOString()}` : "")
     : `usage ${USAGE} missing or unreadable; statusLine in ~/.claude/settings.json writes it`);
-  // the server is cchost's, a process of its own, so it is asked over HTTP
-  try {
-    const r = await fetch("http://127.0.0.1:7681/api/list", {signal: AbortSignal.timeout(2000)});
-    const body = await r.json();
-    console.log(`cchost 127.0.0.1:7681 up, HTTP ${r.status}, ${body.rows?.length ?? "?"} rows`);
-  } catch (e) {
-    console.log(`cchost 127.0.0.1:7681 not answering: ${e.name}: ${e.message}`);
-  }
   console.log(`hosts ${HOSTS.join(", ")}, this one ${SELF}`);
-  await Promise.all(others().map(async (h) => {
-    const [body, err] = await call(h, "/api/list");
-    console.log(err ? `  ${h} ${base(h)} DOWN: ${err}`
-      : `  ${h} ${base(h)} up, ${body.rows.length} rows`);
-  }));
-  const records = sessionRecords();
-  for (const i of await discover()) {
-    const rec = records[i.pid] ?? {};
+  const down = new Map(list.down ?? []);
+  for (const h of HOSTS) {
+    console.log(down.has(h) ? `  ${h} DOWN: ${down.get(h)}`
+      : `  ${h} up, ${instances.filter((i) => i.origin === h).length} rows`);
+  }
+  for (const row of instances.filter((i) => !i.host)) {
+    const i = await withClient(row);
     console.log(`  pid ${i.pid} pane ${i.pane || "-"} session ${i.session || "-"} ` +
-      `state ${i.state || "?"} record ${rec.status ?? "(none)"}` +
+      `state ${i.state || "?"} record ${i.status ?? "(none)"}` +
       `${i.asking ? "/" + i.asking : ""} ` +
       `match ${i.match ?? "(unresolved)"} raise ${await raiseTarget(i)}`);
   }
@@ -933,67 +1115,62 @@ async function cmdDoctor() {
 
 // ccx focus <target>, one instance on any host
 async function cmdFocus(spec) {
-  const {instances, down} = await discoverAll(new StateClock());
-  reportDown(down);
-  const hits = resolveTarget(instances, spec, 0);
+  const hits = resolveTarget(await listing(), spec, 0);
   if (hits.length !== 1) {
     console.error(hits.length ? `focus: ${JSON.stringify(spec)} names ${hits.length}: ` +
       hits.map(label).join(", ") : `focus: no instance matches ${JSON.stringify(spec)}`);
     Deno.exit(1);
   }
-  const err = await (hits[0].host ? jumpRemote(hits[0]) : jump(hits[0]));
-  if (!err) return;
-  console.error(err);
-  Deno.exit(1);
+  const err = await focus(hits[0]);
+  if (err) fail("focus", err);
 }
 
+// `host:pid` out of a tagged `host.pid`, and a bare pid as it is
+const named = (pid) => String(pid).replace(/^([^.]+)\.(\d+)$/, "$1:$2");
+
 // ccx new [--focus] [host:]<dir> [name]
-// The same spawn() as the page's +: a detached tmux session. --focus puts it in a new tmux
-// window after an instance already in `dir`, else a new kitty window, and focuses it.
+// cchost's api/spawn, which cc's + calls too: a detached tmux session. --focus puts it in a
+// new tmux window after an instance already in `dir`, else a new kitty window, and focuses
+// it, on the host it runs on.
 async function cmdNew(...args) {
-  const focus = args.includes("--focus");
+  const focusIt = args.includes("--focus");
   const [dir, ...words] = args.filter((a) => a !== "--focus");
   if (!dir) usage();
   const name = words.join(" ");
-  const colon = dir.indexOf(":");
-  const host = colon > 0 ? dir.slice(0, colon) : "";
-  if (host && HOSTS.includes(host) && host !== SELF) {
+  await listing();                   // for HOSTS and SELF
+  const [host, rest] = splitHost(dir);
+  if (host) {
     // the remote's own ~ and realpath; a relative dir would mean ours
-    const rest = dir.slice(colon + 1);
     if (!rest.startsWith("/") && !rest.startsWith("~")) {
-      console.error(`new: ${host}: give an absolute or ~ path, not ${JSON.stringify(rest)}`);
-      Deno.exit(1);
+      fail("new", `${host}: give an absolute or ~ path, not ${JSON.stringify(rest)}`);
     }
     // spawn() waits up to 5s for a window, 10s for claude and 10s for its trust dialog
-    const [r, err] = await call(host, "/api/spawn", {dir: rest, name, beside: true, focus}, 30000);
-    if (err) {
-      console.error(`new: ${host}: ${err}`);
-      Deno.exit(1);
-    }
+    const [r, err] = await api("/api/spawn", {dir: `${host}:${rest}`, name, beside: true,
+      focus: focusIt}, 45_000);
+    if (err) fail("new", `${host}: ${err}`);
     if (r.warning) console.error(`new: ${host}: ${r.warning}`);
-    console.log(r.existing ? `${host}:${r.pid} already running in ${host}:${rest}`
-      : `started ${host}:${r.pid} in ${host}:${rest}, ` +
-        (r.after ? `tmux window after ${r.after}` : focus ? `tmux pane ${r.pane}`
-          : `detached tmux pane ${r.pane}`));
+    const pane = String(r.pane ?? "").replace(`${host}/`, "");
+    console.log(r.existing ? `${named(r.pid)} already running in ${host}:${rest}`
+      : `started ${named(r.pid)} in ${host}:${rest}, ` +
+        (r.after ? `tmux window after ${r.after}` : focusIt ? `tmux pane ${pane}`
+          : `detached tmux pane ${pane}`));
     return;
   }
-  let path = expandDir(dir);
+  // relative to where ccx runs, which cchost does not know
+  let path = rest === "~" || rest.startsWith("~/") ? `${HOME}${rest.slice(1)}` : rest;
   if (!path.startsWith("/")) path = `${CWD}/${path}`;
   try {
     path = Deno.realPathSync(path);
   } catch {
     // spawn() names the missing directory
   }
-  const after = focus ? await paneIn(path) : "";
-  const r = await spawn({dir: path, after, name, focus});
-  if (r.error) {
-    console.error(`new: ${r.error}`);
-    Deno.exit(1);
-  }
+  const [r, err] = await api("/api/spawn", {dir: path, name, beside: true, focus: focusIt},
+    45_000);
+  if (err) fail("new", err);
   if (r.warning) console.error(`new: ${r.warning}`);
   console.log(r.existing ? `${r.pid} already running in ${path.replace(HOME, "~")}`
     : `started ${r.pid} in ${path.replace(HOME, "~")}, ` +
-      (after ? `tmux window after ${after}` : focus ? "new kitty window"
+      (r.after ? `tmux window after ${r.after}` : focusIt ? "new kitty window"
         : `detached tmux pane ${r.pane}`));
 }
 
@@ -1001,10 +1178,8 @@ async function cmdNew(...args) {
 // An exact name or pid, never the fuzzy match `send` takes, and one instance only: a typo
 // that happens to match some other session would kill that one
 async function cmdDelete(spec) {
+  const instances = await listing();
   const [host, want] = splitHost(spec);
-  const {instances, down} = host ? await discoverAll(new StateClock())
-    : {instances: await discover(), down: []};
-  reportDown(down);
   const needle = want.toLowerCase();
   const hits = instances.filter((i) => i.host === host &&
     (String(i.pid) === want || i.name.toLowerCase() === needle));
@@ -1015,8 +1190,7 @@ async function cmdDelete(spec) {
     Deno.exit(1);
   }
   const i = hits[0];
-  report("closed", hits, [], [i.host
-    ? (await call(i.host, `/api/s/${i.pid}/close`, {}, 10000))[1] : await close(i)]);
+  report("closed", hits, [], [(await api(`/api/s/${i.id}/close`, {}, 20_000))[1]]);
 }
 
 // `host:rest` naming another host, as ["host", "rest"]; anything else is ours, ["", spec]
@@ -1051,8 +1225,8 @@ function resolveTarget(instances, target, self = 0) {
     const host = target.slice(0, colon) === SELF ? "" : target.slice(0, colon);
     // a bare pid below means a local one, and a pid here is that host's
     const pid = target.slice(colon + 1);
-    if (/^\d+$/.test(pid)) return instances.filter((i) => i.host === host && i.pid === Number(pid));
-    return resolveTarget(instances.filter((i) => i.host === host), target.slice(colon + 1),
+    if (/^\d+$/.test(pid)) return instances.filter((i) => (i.host ?? "") === host && i.pid === Number(pid));
+    return resolveTarget(instances.filter((i) => (i.host ?? "") === host), target.slice(colon + 1),
       self);
   }
   if (target === "all") return instances.filter((i) => i.host || i.pid !== self);
@@ -1094,9 +1268,7 @@ const sendLine = (verb, who, where, what) =>
 // Exits on usage; returns what `spec` named and what it did not
 async function targets(cmd, spec, text) {
   if (!spec || !text.trim()) usage();
-  const {instances, down} = await discoverAll(new StateClock());
-  reportDown(down);
-  const {found, missed} = resolveTargets(instances, spec, selfPid());
+  const {found, missed} = resolveTargets(await listing(), spec, selfPid());
   if (!found.length) {
     for (const t of missed) console.error(`${cmd}: no instance matches ${JSON.stringify(t)}`);
     usage();
@@ -1115,24 +1287,13 @@ function report(verb, found, missed, errs) {
   if (missed.length || errs.some((e) => e)) Deno.exit(1);
 }
 
-// a send or type on the host the instance runs on, by its api. An error, or null
-async function onHost(i, verb, text, extra = {}) {
-  return (await call(i.host, `/api/s/${i.pid}/${verb}`, {text, ...extra}))[1];
-}
-
 // ccx send <target>[,<target>...] <message...>
+// cchost's api/s/<id>/send, from-name `user`
 async function cmdSend(spec, ...words) {
   const text = words.join(" ");
   const {found, missed} = await targets("send", spec, text);
-  let sendPeer;
-  try {
-    ({sendPeer} = await peerModule());
-  } catch (e) {
-    console.error(`send: ${e.message ?? e}`);
-    Deno.exit(1);
-  }
-  report("sent", found, missed, await Promise.all(found.map((i) =>
-    i.host ? onHost(i, "send", text) : sendPeer(i, text))));
+  report("sent", found, missed, await Promise.all(found.map(async (i) =>
+    (await api(`/api/s/${i.id}/send`, {text}))[1])));
 }
 
 // ccx user [--force] <target>[,<target>...] <text...>
@@ -1144,23 +1305,18 @@ async function cmdUser(...args) {
   const [spec, ...words] = force ? args.slice(1) : args;
   const text = words.join(" ");
   const {found, missed} = await targets("user", spec, text);
-  report("typed", found, missed, await Promise.all(found.map((i) =>
-    i.host ? onHost(i, "type", text, {force}) : typeInto(i, text, {force}))));
+  report("typed", found, missed, await Promise.all(found.map(async (i) =>
+    (await api(`/api/s/${i.id}/type`, {text, force}, 10_000))[1])));
 }
 
 // ccx chat [--no-follow]
+// What the agents in this directory said to each other, out of this host's transcripts:
+// cchost's api/chat, or api/chat/events to follow
 async function cmdChat(...args) {
   let follow = true;
   for (const a of args) {
     if (a !== "--no-follow") usage();
     follow = false;
-  }
-  let mod;
-  try {
-    mod = await chatModule();
-  } catch (e) {
-    console.error(`chat: ${e.message ?? e}`);
-    Deno.exit(1);
   }
   // colour only into a terminal, so a pipe carries the words and nothing else
   const colour = Deno.stdout.isTerminal();
@@ -1171,10 +1327,30 @@ async function cmdChat(...args) {
     }
     console.log("");
   };
-  for (const m of mod.chatLog(CWD)) show(m);
-  if (!follow) return;
-  mod.watchChat(CWD, show);
-  await new Promise(() => {});       // ctrl+c is the way out, the same as `tail -f`
+  const q = `cwd=${encodeURIComponent(CWD)}`;
+  if (!follow) {
+    const [body, err] = await api(`/api/chat?${q}`, undefined, 30_000);
+    if (err) fail("chat", err);
+    for (const m of body.msgs) show(m);
+    return;
+  }
+  const ctl = new AbortController();
+  let r;
+  try {
+    r = await openStream(`/api/chat/events?${q}`, ctl);
+  } catch (e) {
+    fail("chat", e.message);
+  }
+  // ctrl+c is the way out, the same as `tail -f`
+  try {
+    await frames(r, ctl, (event, body) => {
+      if (event === "log") for (const m of body.msgs) show(m);
+      else if (event === "msg") show(body);
+    });
+  } catch (e) {
+    fail("chat", e.name === "AbortError" ? DOWN("no keepalive in 40s") : DOWN(e.message));
+  }
+  fail("chat", DOWN("the stream ended"));
 }
 
 // Exactly one instance for `spec`, `me` being the one we run inside; exits otherwise
@@ -1192,26 +1368,22 @@ function onlyOne(cmd, instances, spec) {
 const where = (i) => `${i.host || SELF}:${i.name || i.pid}`;
 
 // ccx notify <who> when <agent> [is <state>] [for <duration>]
-// Registered with the daemon of the host <agent> runs on, which messages <who> from `ccx`
+// Held by the daemon of the host <agent> runs on, which messages <who> from `ccx`; this
+// host's cchost passes it there (api/subs with `host`)
 async function cmdNotify(...words) {
-  const {parseNotify} = await import("../host/subs.js");
   const n = parseNotify(words);
   if (n.error) {
     console.error(`notify: ${n.error}`);
     Deno.exit(2);
   }
-  const {instances, down} = await discoverAll(new StateClock());
-  reportDown(down);
+  const instances = await listing();
   const who = onlyOne("notify", instances, n.who);
   if (n.state === "new") return notifyNew(n, who, words);
   const target = onlyOne("notify", instances, n.target);
   const host = target.host || SELF;
-  const [r, err] = await call(host, "/api/subs", {pid: target.pid, state: n.state,
-    secs: n.secs, who: {host: who.host || SELF, pid: who.pid, name: who.name}});
-  if (err) {
-    console.error(`notify: ${err}`);
-    Deno.exit(1);
-  }
+  const [r, err] = await api("/api/subs", {host, pid: target.pid, state: n.state,
+    secs: n.secs, who: {host: who.host || SELF, pid: who.pid, name: who.name}}, 15_000);
+  if (err) fail("notify", err);
   const what = n.state ? `is ${n.state}` : "changes state";
   const until = n.secs ? `, every time for ${words.at(-1)}` : ", once";
   const now = n.state && r.state === n.state ? `; it is ${r.state} already, so the next time`
@@ -1223,15 +1395,13 @@ async function cmdNotify(...words) {
 // its own sessions start
 async function notifyNew(n, who, words) {
   const prefix = n.target.includes(":") ? n.target.split(":")[0] : "";
-  if (prefix && !HOSTS.includes(prefix)) {
-    console.error(`notify: no host ${JSON.stringify(prefix)}`);
-    Deno.exit(1);
-  }
+  if (prefix && !HOSTS.includes(prefix)) fail("notify", `no host ${JSON.stringify(prefix)}`);
   const hosts = prefix ? [prefix] : HOSTS;
   const until = n.secs ? `, every time for ${words.at(-1)}` : ", once per host";
   const body = {any: true, state: "new", secs: n.secs,
     who: {host: who.host || SELF, pid: who.pid, name: who.name}};
-  const answers = await Promise.all(hosts.map((h) => call(h, "/api/subs", body)));
+  const answers = await Promise.all(hosts.map((h) =>
+    api("/api/subs", {...body, host: h}, 15_000)));
   let ok = 0;
   for (const [i, [r, err]] of answers.entries()) {
     const host = hosts[i];
@@ -1255,7 +1425,9 @@ function untilText(epoch) {
 
 // ccx subs: every host's subscriptions
 async function cmdSubs() {
-  const all = await Promise.all(HOSTS.map((h) => call(h, "/api/subs")));
+  await listing();                   // for HOSTS
+  const all = await Promise.all(HOSTS.map((h) =>
+    api(`/api/subs?host=${encodeURIComponent(h)}`, undefined, 15_000)));
   HOSTS.forEach((h, n) => {
     const [body, err] = all[n];
     if (err) return console.error(`${h}: down, ${err}`);
@@ -1272,12 +1444,11 @@ async function cmdSubs() {
 // ccx unsub [host:]<id>, this host's id without one
 async function cmdUnsub(spec) {
   const m = /^(?:([^:]+):)?(\d+)$/.exec(spec);
-  if (!m || (m[1] && !HOSTS.includes(m[1]))) usage();
-  const [, err] = await call(m[1] ?? SELF, "/api/unsub", {id: Number(m[2])});
-  if (err) {
-    console.error(`unsub: ${err}`);
-    Deno.exit(1);
-  }
+  if (!m) usage();
+  await listing();                   // for HOSTS
+  if (m[1] && !HOSTS.includes(m[1])) usage();
+  const [, err] = await api("/api/unsub", {host: m[1] ?? SELF, id: Number(m[2])}, 15_000);
+  if (err) fail("unsub", err);
 }
 
 const COMMANDS = {

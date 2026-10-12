@@ -223,3 +223,67 @@ export async function unqueue(inst) {
   }
   return null;
 }
+
+// The tmux client showing `inst`'s session and the kitty window it is in, read now, for a
+// focus from this machine: {...inst, clientTty, kittyPid, kittyProc, match}
+export async function withClient(inst) {
+  if (!inst.session) return inst;
+  const client = (await sh("tmux", "list-clients", "-F",
+    "#{client_tty}\t#{client_pid}\t#{client_session}")).split("\n").map((l) => l.split("\t"))
+    .find(([, , s]) => s === inst.session);
+  if (!client) return {...inst, clientTty: "", kittyPid: "", kittyProc: "", match: null};
+  const [child, kitty] = kittyOwner(Number(client[1]), await processes());
+  return {...inst, clientTty: client[0], kittyPid: String(child),
+    kittyProc: kitty ? String(kitty) : "", match: `pid:${child}`};
+}
+
+// The command a kitty window runs to show a remote tmux session: a plain attach of the
+// whole session, since a kitty window is a session and its tabs one piece of work. Closing
+// the window hangs the client up, and tmux keeps a session whose client got SIGHUP.
+// -u: an ssh session on nadya has no LANG, so tmux fell back to line-drawing and dropped
+// every non-ASCII glyph, the powerline ones included
+const attachArgs = (host, session) => ["ssh", "-t", host, "tmux", "-u", "attach", "-t", session];
+
+// The kitty window already attached to a remote tmux session comes to the front, or a new
+// one opens attached.
+//
+// The window takes the remote tmux's pane background, so the padding around it and the
+// title bar (`macos_titlebar_color background`) match what tmux paints: `color` when it is
+// made, `set-colors` on every focus after, so a theme changed since still lands
+const PAINTED = ["background", "active_border_color", "inactive_border_color"];
+
+export async function attachSession(host, session, background = "") {
+  const tty = await kittyTty();
+  if (tty === "") return "no terminal of our own and no kitty window in tmux to reach kitty by";
+  const bg = /^#[0-9a-f]{6}$/.test(background ?? "") ? background : "";
+  const want = attachArgs(host, session).join(" "), procs = await processes();
+  for (const [pid, [, cmd]] of procs) {
+    if (cmd !== want) continue;
+    const [child, kitty] = kittyOwner(pid, procs);
+    if (!kitty) continue;
+    if (bg) {
+      const rgb = parseInt(bg.slice(1), 16);
+      sendKitty("set-colors", {match_window: `pid:${child}`,
+        colors: Object.fromEntries(PAINTED.map((c) => [c, rgb]))}, tty);
+    }
+    if (!sendKitty("focus-window", {match: `pid:${child}`}, tty)) return "cannot reach kitty";
+    if (MAC) await sh("open", "-a", "kitty");
+    return null;
+  }
+  // launch's `color` reaches the window's profile and not the title bar, which kitty worked
+  // out when it made the window, still black; set-colors recomputes it (kitty 0.49.2,
+  // launch.py apply_colors against colors.py patch_colors). The user var is how the
+  // set-colors finds a window that has no process to look up yet
+  const tag = `${host}.${session}`;
+  if (!sendKitty("launch", {args: attachArgs(host, session), type: "os-window",
+    var: [`ccx_remote=${tag}`], ...(bg ? {color: PAINTED.map((c) => `${c}=${bg}`)} : {})}, tty)) {
+    return "cannot reach kitty";
+  }
+  if (bg) {
+    const rgb = parseInt(bg.slice(1), 16);
+    sendKitty("set-colors", {match_window: `var:ccx_remote=^${tag.replace(/[.\\^$*+?()[\]{}|]/g, "\\$&")}$`,
+      colors: Object.fromEntries(PAINTED.map((c) => [c, rgb]))}, tty);
+  }
+  if (MAC) await sh("open", "-a", "kitty");
+  return null;
+}

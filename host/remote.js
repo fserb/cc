@@ -1,10 +1,6 @@
-// The other machines' claudes, through the `cchost` daemon each one runs. Names read
-// `host:name` and paths `host:~/path`; the local host is discover() as it always was, so
-// the CLI works with no daemon here.
+// The other machines' daemons, as cchost reaches them: the host list, a call, the merged
+// usage and burn, and the list stream it follows for the relay and api/list?all=1.
 
-import {discover, Instance, kittyOwner, processes} from "./claudes.js";
-import {kittyTty, sendKitty} from "./jump.js";
-import {MAC, sh} from "./sh.js";
 import {readUsage, usedAt, weekSamples} from "./usage.js";
 import {breakdown, group} from "./burn.js";
 
@@ -40,32 +36,6 @@ export async function call(host, path, body = undefined, timeout = TIMEOUT) {
     return [null, e.name === "TimeoutError" ? `${host}: no answer in ${timeout}ms`
       : `${host}: ${e.message}`];
   }
-}
-
-// An api/list row as an Instance on `host`. The row's path is in `~` form already, and that
-// `~` is the remote's home, not ours
-export function fromRow(host, r) {
-  return new Instance({pid: r.pid, host, name: r.name, path: r.path ?? "", cwd: r.cwd,
-    state: r.state,
-    asking: r.asking, waitsOn: r.waitsOn, summary: r.summary, since: r.since,
-    statusSince: r.since, pane: r.pane, session: r.session, window: r.window,
-    paneIndex: r.paneIndex, tab: r.tab ?? "", sessionId: r.sessionId, sock: r.sock});
-}
-
-// Every claude on every host, local first, then the others in HOSTS order. A host that
-// does not answer is in `down` with why, and its claudes are left out. `clock`, a
-// StateClock, runs over the local ones only: a remote row has its state and since already
-export async function discoverAll(clock) {
-  const [local, ...rest] = await Promise.all([discover().then((l) => clock.update(l)),
-    ...others().map((h) => call(h, "/api/list"))]);
-  const down = [];
-  const all = [...local];
-  others().forEach((h, n) => {
-    const [body, err] = rest[n];
-    if (err) return down.push([h, err]);
-    all.push(...body.rows.map((r) => fromRow(h, r)));
-  });
-  return {instances: all, down};
 }
 
 // The seven-day reading, from whichever host saw the latest: the limit is the account's, so
@@ -117,9 +87,6 @@ export async function burnReport(hours, local, now = Date.now()) {
   return {at: now, from, to: now, hours, ...group(rows, used), down};
 }
 
-// `host:name` for a remote instance, the name alone for a local one
-export const label = (i) => `${i.host ? `${i.host}:` : ""}${i.name || i.pid}`;
-
 // Follow `host`'s api/events: onList(rows, body) on each list, onList(null, null, why)
 // when the stream drops, then retry every `retry` ms until stop()
 export function follow(host, onList, retry = 5000) {
@@ -157,83 +124,4 @@ export function follow(host, onList, retry = 5000) {
     alive = false;
     ctl?.abort();
   };
-}
-
-
-// The other hosts' rows as their event streams last had them, for a UI that polls: reading
-// it never waits on the network, and a host that is down is simply absent
-export class Remotes {
-  constructor(hosts = others()) {
-    this.rows = new Map();
-    this.stops = hosts.map((h) => follow(h, (rows) => rows ? this.rows.set(h, rows)
-      : this.rows.delete(h)));
-  }
-
-  instances() {
-    return [...this.rows].flatMap(([h, rows]) => rows.map((r) => fromRow(h, r)));
-  }
-
-  stop() {
-    for (const s of this.stops) s();
-  }
-}
-
-// The command a kitty window runs to show a remote tmux session: a plain attach of the
-// whole session, since a kitty window is a session and its tabs one piece of work. Closing
-// the window hangs the client up, and tmux keeps a session whose client got SIGHUP.
-// -u: an ssh session on nadya has no LANG, so tmux fell back to line-drawing and dropped
-// every non-ASCII glyph, the powerline ones included
-const attachArgs = (host, session) => ["ssh", "-t", host, "tmux", "-u", "attach", "-t", session];
-
-// Focus a remote instance: its host selects the window and pane, then its session's window
-// comes up. An error message, or null
-export async function jumpRemote(i) {
-  if (!i.pane) return `${label(i)} is not inside tmux; nothing to focus`;
-  const [r, err] = await call(i.host, `/api/s/${i.pid}/select`, {});
-  if (err) return err;
-  return await attachSession(i.host, i.session, r?.background);
-}
-
-// The kitty window already attached to a remote tmux session comes to the front, or a new
-// one opens attached.
-//
-// The window takes the remote tmux's pane background, so the padding around it and the
-// title bar (`macos_titlebar_color background`) match what tmux paints: `color` when it is
-// made, `set-colors` on every focus after, so a theme changed since still lands
-const PAINTED = ["background", "active_border_color", "inactive_border_color"];
-
-async function attachSession(host, session, background = "") {
-  const tty = await kittyTty();
-  if (tty === "") return "no terminal of our own and no kitty window in tmux to reach kitty by";
-  const bg = /^#[0-9a-f]{6}$/.test(background ?? "") ? background : "";
-  const want = attachArgs(host, session).join(" "), procs = await processes();
-  for (const [pid, [, cmd]] of procs) {
-    if (cmd !== want) continue;
-    const [child, kitty] = kittyOwner(pid, procs);
-    if (!kitty) continue;
-    if (bg) {
-      const rgb = parseInt(bg.slice(1), 16);
-      sendKitty("set-colors", {match_window: `pid:${child}`,
-        colors: Object.fromEntries(PAINTED.map((c) => [c, rgb]))}, tty);
-    }
-    if (!sendKitty("focus-window", {match: `pid:${child}`}, tty)) return "cannot reach kitty";
-    if (MAC) await sh("open", "-a", "kitty");
-    return null;
-  }
-  // launch's `color` reaches the window's profile and not the title bar, which kitty worked
-  // out when it made the window, still black; set-colors recomputes it (kitty 0.49.2,
-  // launch.py apply_colors against colors.py patch_colors). The user var is how the
-  // set-colors finds a window that has no process to look up yet
-  const tag = `${host}.${session}`;
-  if (!sendKitty("launch", {args: attachArgs(host, session), type: "os-window",
-    var: [`ccx_remote=${tag}`], ...(bg ? {color: PAINTED.map((c) => `${c}=${bg}`)} : {})}, tty)) {
-    return "cannot reach kitty";
-  }
-  if (bg) {
-    const rgb = parseInt(bg.slice(1), 16);
-    sendKitty("set-colors", {match_window: `var:ccx_remote=^${tag.replace(/[.\\^$*+?()[\]{}|]/g, "\\$&")}$`,
-      colors: Object.fromEntries(PAINTED.map((c) => [c, rgb]))}, tty);
-  }
-  if (MAC) await sh("open", "-a", "kitty");
-  return null;
 }

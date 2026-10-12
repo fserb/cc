@@ -26,6 +26,8 @@ import {byDay, pace, readUsage} from "./usage.js";
 import {localRows} from "./burn.js";
 import {base, burnReport, call, HOSTS, mergedUsage, SELF} from "./remote.js";
 import {STATES} from "./subs.js";
+import {chatLog, watchChat} from "./chat.js";
+import {Online} from "./online.js";
 
 export const PORT = 7681;
 const TICK = 1500;
@@ -222,6 +224,8 @@ export class Server {
     this.allLists = new Set();            // api/events?all=1 clients
     this.sessions = new Set();            // api/s/<pid>/events clients
     this.proxied = new Set();             // api/s/<host>.<pid>/events of another host
+    this.chats = new Set();               // api/chat/events clients
+    this.chatRoot = undefined;            // ~/.claude for chat.js, unless a test sets one
     this.lastList = "";
     this.lastAll = "";
     this.self = SELF;                     // this host, as the merged list names it
@@ -300,7 +304,7 @@ export class Server {
       rows.push(...body.rows.map((r) => tagRow(h, r)));
       offline ||= body.offline ?? "";
     }
-    return {rows, offline, up, down,
+    return {rows, offline, up, down, self: this.self, hosts: this.allHosts(),
       host: up.join(" · ") + (down.length ? ` (${down.map(([h]) => h).join(", ")} down)` : "")};
   }
 
@@ -310,7 +314,8 @@ export class Server {
 
   stop() {
     clearInterval(this.timer);
-    for (const c of [...this.lists, ...this.allLists, ...this.sessions, ...this.proxied]) c.close();
+    for (const c of [...this.lists, ...this.allLists, ...this.sessions, ...this.proxied,
+      ...this.chats]) c.close();
   }
 
   // the list to its streams if it changed; `cchost` also calls it after each poll, and
@@ -410,6 +415,35 @@ export class Server {
     const inst = this.find(pid);
     if (inst) this.follow(c, inst, null).catch((e) => console.error(e));
     return c.response;
+  }
+
+  // api/chat/events: what chat.js reads out of the transcripts of `cwd`, this host's only:
+  // `log` {msgs} at once, then `msg` with each new one
+  chatEvents(cwd) {
+    let stop = () => {};
+    const c = stream(() => {
+      this.chats.delete(c);
+      stop();
+    });
+    this.chats.add(c);
+    c.send("log", {msgs: chatLog(cwd, {root: this.chatRoot})});
+    stop = watchChat(cwd, (m) => c.send("msg", m), {root: this.chatRoot});
+    return c.response;
+  }
+
+  // api/subs and api/unsub of another host, `host` in the query or the body: passed to
+  // its daemon as it would have been called there
+  async subsElsewhere(method, host, path, body) {
+    if (!this.allHosts().includes(host)) return json({error: `no host ${host}`}, 404);
+    try {
+      const r = await fetch(`${this.base(host)}${path}`, {method,
+        headers: {"content-type": "application/json"},
+        body: method === "POST" ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(15_000)});
+      return new Response(r.body, {status: r.status, headers: r.headers});
+    } catch (e) {
+      return json({error: `${host}: ${e.message}`}, 502);
+    }
   }
 
   // `<host>:rest` or `<host>/rest` with a known host, else [null, text]
@@ -555,11 +589,27 @@ export class Server {
       if (!this.relay) return json({error: "no relay here; it runs under cchost"}, 409);
       return answer(await this.relay.deliver(await req.json().catch(() => ({}))));
     }
+    if (get && path === "/api/doctor") {
+      const net = new Online(), probe = await net.probe();
+      return json({self: this.self, api: {url: net.url, from: net.from, ...probe}});
+    }
+    if (get && (path === "/api/chat" || path === "/api/chat/events")) {
+      const cwd = url.searchParams.get("cwd") ?? "";
+      if (!cwd.startsWith("/")) return json({error: "cwd is an absolute path"}, 400);
+      if (path === "/api/chat/events") return this.chatEvents(cwd);
+      return json({cwd, msgs: chatLog(cwd, {root: this.chatRoot})});
+    }
     if (path === "/api/subs" || path === "/api/unsub") {
+      if (!get && !post) return json({error: "not found"}, 404);
+      const body = post ? await req.json().catch(() => ({})) : {};
+      const host = (get ? url.searchParams.get("host") : body.host) || this.self;
+      if (host !== this.self) {
+        delete body.host;
+        return await this.subsElsewhere(req.method, host, path, body);
+      }
       if (!this.subs) return json({error: "no subscriptions here; they run under cchost"}, 409);
       if (get && path === "/api/subs") return json({subs: this.subs.list()});
       if (!post) return json({error: "not found"}, 404);
-      const body = await req.json().catch(() => ({}));
       if (path === "/api/unsub") {
         return this.subs.remove(Number(body.id)) ? json({ok: true})
           : json({error: `no subscription ${body.id}`}, 404);

@@ -144,6 +144,12 @@ daemons' relay streams and ccx call them that way, and marx may run older code.
     GET  api/dirs?prefix=<host>:p  that host's dirs, each `<host>:`-tagged; a bare prefix
                                    with `all=1` asks every host
 
+    GET  api/chat?cwd=<dir>        {cwd, msgs}: chat.js's messages between the sessions
+                                   that ran in dir, this host's transcripts only
+    GET  api/chat/events?cwd=<dir> SSE; `log` {msgs} at once, then `msg` per new message
+    GET  api/doctor                {self, api: {url, from, ok, note, ms}}, one probe
+    *    api/subs, api/unsub       with `host` (query or body) another host's, passed on
+
 - the other hosts' rows are the event streams cchost already follows for the relay
   (`remote.follow`), cached per host as their last `list` body, so `all=1` opens no
   connection. A host whose stream dropped is in `down` with the fetch error, one not yet

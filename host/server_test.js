@@ -217,3 +217,55 @@ Deno.test("cached: shares the call in flight, and the minute starts when it is r
   await s.cached("e", () => (fails++, Promise.resolve(1)), now);
   eq(fails, 2, "a failure is not cached");
 });
+
+Deno.test("Server: subs and unsub with a host go to that host's daemon", async () => {
+  const {Subs} = await import("./subs.js");
+  const source = () => ({instances: [inst(7, "", "", "")], net: null});
+  const b = runServer({source, port: 7697, subs: new Subs("b", () => null)});
+  const s = hosts([inst(5, "", "", "")], "http://127.0.0.1:7697");
+  s.subs = new Subs("a", () => null);
+  const who = {host: "a", pid: 5, name: "x"};
+  const r = await post(s, "/api/subs", JSON.stringify({host: "b", pid: 7, who}));
+  eq([r.status, (await r.json()).state], [200, "wait"], "registered on b");
+  eq((await (await call(s, "/api/subs?host=b")).json()).subs.map((x) => x.target.pid), [7],
+    "b's list");
+  eq((await (await call(s, "/api/subs")).json()).subs, [], "this host's, without host");
+  eq((await post(s, "/api/subs", JSON.stringify({host: "b", pid: 9, who}))).status, 404,
+    "b's 404 for a pid it does not have");
+  const id = (await (await call(s, "/api/subs?host=b")).json()).subs[0].id;
+  eq((await post(s, "/api/unsub", JSON.stringify({host: "b", id}))).status, 200, "unsub on b");
+  eq((await (await call(s, "/api/subs?host=b")).json()).subs, [], "gone from b");
+  eq((await call(s, "/api/subs?host=c")).status, 502, "a host that is down");
+  eq((await call(s, "/api/subs?host=zz")).status, 404, "an unknown host");
+  eq((await (await call(s, "/api/list?all=1")).json()).hosts, ["a", "b", "c"], "hosts");
+  eq((await (await call(s, "/api/list?all=1")).json()).self, "a", "self");
+  s.stop();
+  await b.stop();
+});
+
+Deno.test("Server: api/chat is what chat.js reads for a cwd, and its stream", async () => {
+  const root = Deno.makeTempDirSync();
+  Deno.mkdirSync(`${root}/projects/-tmp-demo`, {recursive: true});
+  Deno.mkdirSync(`${root}/sessions`);
+  const line = (at, id) => JSON.stringify({type: "assistant", timestamp: at, sessionId: "s1",
+    message: {role: "assistant", content: [{type: "tool_use", id, name: "SendMessage",
+      input: {to: "peer", summary: "s", message: `body ${id}`}}]}});
+  const log = `${root}/projects/-tmp-demo/s1.jsonl`;
+  Deno.writeTextFileSync(log, `${line("2026-10-12T10:00:00Z", "u1")}\n`);
+  const s = server([]);
+  s.chatRoot = root;
+  const got = await (await call(s, "/api/chat?cwd=/tmp/demo")).json();
+  eq([got.cwd, got.msgs.map((m) => [m.to, m.body])], ["/tmp/demo", [["peer", "body u1"]]],
+    "one message");
+  eq((await call(s, "/api/chat?cwd=demo")).status, 400, "a relative cwd");
+  const r = await call(s, "/api/chat/events?cwd=/tmp/demo");
+  const reader = r.body.getReader();
+  let text = "";
+  while (!text.includes("event: log")) text += new TextDecoder().decode((await reader.read()).value);
+  Deno.writeTextFileSync(log, `${line("2026-10-12T10:01:00Z", "u2")}\n`, {append: true});
+  while (!text.includes("event: msg")) text += new TextDecoder().decode((await reader.read()).value);
+  eq(JSON.parse(text.split("event: msg\ndata: ")[1].split("\n")[0]).body, "body u2", "a new one");
+  await reader.cancel();
+  eq(s.chats.size, 0, "a closed stream stops its watch");
+  s.stop();
+});

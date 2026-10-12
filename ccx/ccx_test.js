@@ -1046,3 +1046,104 @@ Deno.test("validation: send with no message never reaches resolution", async () 
   ok(err.startsWith("usage: ccx"), `usage: ${err.split("\n")[0]}`);
 });
 
+
+// against cchost's API
+
+// ccx reads the machine through cchost only, so a real Server over fixed instances is all
+// it needs: host `a` with two of its own, `b` with one, `c` down. Nothing here reaches tmux:
+// none of the instances is in a pane, which is the first thing every action checks
+const {runServer} = await import("../host/server.js");
+const {Subs} = await import("../host/subs.js");
+
+async function withApi(f) {
+  const port = 7696;
+  const mine = [new Instance({pid: 11, name: "alpha", path: "/tmp/alpha", state: "wait",
+    since: Date.now() / 1000 - 90, summary: "the alpha"}),
+  new Instance({pid: 12, name: "beta", path: "/tmp/beta", state: "busy", since: 1})];
+  const srv = runServer({source: () => ({instances: mine, net: null}), port,
+    subs: new Subs("a", () => null)});
+  const s = srv.server;
+  Object.assign(s, {self: "a", hosts: ["a", "b", "c"], base: () => "http://127.0.0.1:1"});
+  s.peer("b", {rows: [{pid: 21, name: "gamma", path: "~/g", state: "hold", since: 1,
+    summary: "on b", pane: "", session: ""}], offline: "", host: "b"});
+  s.peer("c", null, "connection refused");
+  try {
+    return await f(s, {CCX_API: `http://127.0.0.1:${port}`});
+  } finally {
+    await srv.stop();
+  }
+}
+
+async function ccxEnv(env, args, cwd = undefined) {
+  const {code, stdout, stderr} = await new Deno.Command(Deno.execPath(), {
+    args: ["run", "-A", "--ext=js", CCX, ...args], env, cwd}).output();
+  const dec = new TextDecoder();
+  return {code, out: dec.decode(stdout).trimEnd(), err: dec.decode(stderr).trimEnd()};
+}
+
+Deno.test("api: list shows this host's rows bare and another's as host:, and who is down",
+  async () => {
+    await withApi(async (_s, env) => {
+      const r = await ccxEnv(env, ["list"]);
+      eq(r.code, 0, `exit: ${r.err}`);
+      const lines = r.out.split("\n");
+      eq(lines.length, 3, `three rows: ${r.out}`);
+      ok(/^● wait\s+1m\s+\/tmp\/alpha\s+the alpha$/.test(lines[0]), lines[0]);
+      ok(/^◐ busy .*\/tmp\/beta/.test(lines[1]), lines[1]);
+      ok(/^○ hold .*b:~\/g\s+on b$/.test(lines[2]), lines[2]);
+      eq(r.err, "c: down, connection refused", "the host that is down, on stderr");
+    });
+  });
+
+Deno.test("api: no cchost is one line and exit 1", async () => {
+  for (const args of [["list"], ["send", "x", "hi"], ["usage"], ["subs"]]) {
+    const r = await ccxEnv({CCX_API: "http://127.0.0.1:1"}, args);
+    eq(r.code, 1, `ccx ${args.join(" ")}`);
+    ok(/^ccx: cchost not answering on 127\.0\.0\.1:1: \S/.test(r.err) && !r.err.includes("\n"),
+      `ccx ${args.join(" ")}: ${r.err}`);
+  }
+});
+
+Deno.test("api: user resolves host: targets and reports cchost's answer per target",
+  async () => {
+    await withApi(async (_s, env) => {
+      const r = await ccxEnv(env, ["user", "alpha,b:gamma,nope", "hi"]);
+      eq(r.code, 1, "a failure is exit 1");
+      const lines = r.out.split("\n");
+      ok(/^failed nope/.test(lines[0]), lines[0]);
+      ok(/^failed alpha .*pid 11 is not inside tmux/.test(lines[1]), lines[1]);
+      // b is not reachable from here, so the proxied call fails with b's name
+      ok(/^failed b:gamma .*b: /.test(lines[2]), lines[2]);
+    });
+  });
+
+Deno.test("api: notify and subs go through cchost, unsub drops one", async () => {
+  await withApi(async (_s, env) => {
+    const n = await ccxEnv(env, ["notify", "alpha", "when", "beta", "is", "wait"]);
+    eq([n.code, n.out], [0, "a:1: tell a:alpha when a:beta is wait, once; now busy"], n.err);
+    const subs = await ccxEnv(env, ["subs"]);
+    ok(/^a:1\s+a:alpha\s+<- a:beta\s+wait\s+once$/m.test(subs.out), subs.out);
+    ok(/^b: down, /m.test(subs.err), subs.err);
+    eq((await ccxEnv(env, ["unsub", "a:1"])).code, 0, "unsub");
+    eq((await ccxEnv(env, ["subs"])).out, "", "none left");
+  });
+});
+
+Deno.test("api: chat --no-follow is cchost's api/chat for the directory ccx runs in",
+  async () => {
+    await withApi(async (s, env) => {
+      const cwd = Deno.realPathSync(Deno.makeTempDirSync());
+      const root = Deno.makeTempDirSync();
+      const slug = cwd.replace(/[^a-zA-Z0-9]/g, "-");
+      Deno.mkdirSync(`${root}/projects/${slug}`, {recursive: true});
+      Deno.writeTextFileSync(`${root}/projects/${slug}/s1.jsonl`, JSON.stringify({
+        type: "assistant", timestamp: new Date().toISOString(), sessionId: "s1",
+        message: {role: "assistant", content: [{type: "tool_use", id: "u1",
+          name: "SendMessage", input: {to: "peer", summary: "s", message: "hello there"}}]},
+      }) + "\n");
+      s.chatRoot = root;
+      const r = await ccxEnv(env, ["chat", "--no-follow"], cwd);
+      eq(r.code, 0, r.err);
+      ok(/s1 → peer\n\s+hello there/.test(r.out), r.out);
+    });
+  });
