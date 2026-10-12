@@ -40,7 +40,7 @@
   .it:hover { background: var(--hover); }
   .it[aria-current=true] { background: var(--cur); }
   .it.hot { background: var(--hot); } .it.hot.red { background: var(--hot-red); } .it.hot[aria-current=true] { box-shadow: inset 3px 0 0 var(--accent); }
-  .it .d { width: 8px; height: 8px; border-radius: 50%; align-self: start; margin-top: calc((1lh - 8px) / 2); }  /* centered on the title's first line */
+  .it .d { width: 8px; height: 8px; border-radius: 50%; position: relative; top: calc(4px - 0.5ex); }  /* bottom on the title's baseline, then up so its center is mid x-height */
   .d.red { background: var(--red); } .d.blue { background: var(--accent); } .d.green { background: var(--green); } .d.yel { background: var(--yel); } .d.gray { background: var(--gray); }
   .it .tx div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .it .tx small { display: block; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.82rem; }
   .it.hot .tx div, .it.unread .tx div { font-weight: 600; }
