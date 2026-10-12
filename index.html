@@ -506,6 +506,7 @@ function newView() {
     <label>directory<input name="dir" value="~/" list="dirs" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" required></label>
     <datalist id="dirs"></datalist>
     <label>name (optional)<input name="name" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+    <label><input type="checkbox" name="focus"> focus (a window on the desk)</label>
     <button>start</button><p class="meta" id="newmsg"></p></form></article>`;
 }
 async function dirHints(f) {
@@ -537,8 +538,8 @@ document.addEventListener("submit", async (e) => {
   f.querySelector("button").disabled = true;
   msg.className = "meta"; msg.textContent = `starting a claude on ${f.host.value} in ${dir}…`;
   try {
-    // beside: a new tmux window next to a claude already in dir, what `ccx new` does
-    const r = await post(`${CCX}/spawn`, {dir: `${f.host.value}:${dir}`, name: f.name.value.trim(), beside: true});
+    // a detached tmux session; with focus, a tmux window beside a claude already in dir, else a kitty window
+    const r = await post(`${CCX}/spawn`, {dir: `${f.host.value}:${dir}`, name: f.name.value.trim(), beside: true, focus: f.focus.checked});
     if (!r.pid) throw new Error(r.error ?? "no pid");
     for (let end = Date.now() + 15e3; !S.rows.some((x) => x.pid === r.pid) && Date.now() < end;) await new Promise((ok) => setTimeout(ok, 300));
     cur = r.pid; push(); open();
