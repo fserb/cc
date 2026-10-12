@@ -32,13 +32,13 @@
 <header>
   <button data-len="short" aria-pressed="true">short</button><button data-len="long" aria-pressed="false">long</button>
   <span style="width: 0.6rem"></span>
-  <button data-pin="bottom" aria-pressed="true">follow bottom</button><button data-pin="top" aria-pressed="false">stop at reply top</button>
+  <button data-pin="bottom" aria-pressed="false">follow bottom</button><button data-pin="top" aria-pressed="true">stop at reply top</button>
   <span style="width: 0.6rem"></span>
   <button id="all">replay all</button>
 </header>
 <main>
   <section data-v="now"><div><h2>now</h2><button>replay</button></div><div class="view"></div></section>
-  <section data-v="steps"><div><h2>1 width, height, text</h2><button>replay</button></div><div class="view"></div></section>
+  <section data-v="steps"><div><h2>1 width, then height uncovers the text</h2><button>replay</button></div><div class="view"></div></section>
   <section data-v="fade"><div><h2>2 grow, then text fades</h2><button>replay</button></div><div class="view"></div></section>
   <section data-v="slide"><div><h2>3 no grow, slide up</h2><button>replay</button></div><div class="view"></div></section>
 </main>
@@ -65,7 +65,7 @@ const LONG = `<p>Found it. When a reply arrives, cc swaps the chat's HTML and sc
 <p>For a reply taller than the screen, following the bottom means you land on its last lines. Stopping when the reply's top reaches the top of the screen means you start reading at its first line, and the "↓ new" button takes you the rest of the way.</p>
 <p>Mocks are in <code>mocks/arrive.html</code>, with a replay button per variant.</p><small>14:07</small>`;
 const DOTS = `<div class="typing"><i></i><i></i><i></i></div>`;
-let len = "short", pin = "bottom";
+let len = "short", pin = "top";
 
 const ease = (t) => 1 - (1 - t) ** 3;
 function tween(ms, f) {
@@ -109,7 +109,7 @@ const arrive = {
     for (const c of reply.children) c.animate([{opacity: 0}, {opacity: 0, offset: 0.4}, {opacity: 1}], o);
     view.scrollTop = 1e9;
   },
-  // the dots bubble widens to the reply's width, then grows down with the scroll following, then the text shows
+  // the dots bubble widens to the reply's width, then grows down over the laid-out text, uncovering it, with the scroll following
   async steps(view) {
     const top = view.scrollTop;
     const {reply, from, width, height} = swap(view);
@@ -120,15 +120,13 @@ const arrive = {
     const dots = reply.lastChild;
     view.scrollTop = top;
     await tween(200, (k) => reply.style.clipPath = `inset(0 ${(width - from.width) * (1 - k)}px 0 0 round 12px)`);
-    dots.animate([{opacity: 1}, {opacity: 0}], {duration: 150, fill: "forwards"});
-    const s0 = view.scrollTop;
+    dots.remove();
+    for (const c of kids) c.style.visibility = "";
     await tween(350, (k) => {
       reply.style.height = `${from.height + (height - from.height) * k}px`;
-      view.scrollTop = pin === "top" ? s0 + (target(view, reply) - s0) * k : 1e9;
+      view.scrollTop = target(view, reply);
     });
-    dots.remove();
     reply.removeAttribute("style");
-    for (const c of kids) c.style.visibility = "";
   },
   // width and height together, then the text fades in
   async fade(view) {
@@ -138,11 +136,10 @@ const arrive = {
     for (const c of kids) c.style.opacity = 0;
     Object.assign(reply.style, {height: `${from.height}px`, overflow: "hidden"});
     view.scrollTop = top;
-    const s0 = view.scrollTop;
     await tween(350, (k) => {
       reply.style.clipPath = `inset(0 ${(width - from.width) * (1 - k)}px 0 0 round 12px)`;
       reply.style.height = `${from.height + (height - from.height) * k}px`;
-      view.scrollTop = pin === "top" ? s0 + (target(view, reply) - s0) * k : 1e9;
+      view.scrollTop = target(view, reply);
     });
     reply.removeAttribute("style");
     for (const c of kids) { c.style.opacity = ""; c.animate([{opacity: 0}, {opacity: 1}], 200); }
