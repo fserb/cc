@@ -143,13 +143,13 @@
 // A static page (no box): everything it shows comes from these, all same origin:
 //   ../ccx/api/...        sessions on every host: list + events (SSE), log, screen, pick, type
 //   ../blog/              the blog (its #posts are inserted here), asks.json, POST answer
-//   files/                todo.md, ideas/, projects/, research/: links to ~/nadya (caddy lists the dirs)
+//   files/                todo.md, reminders.md, ideas/, projects/, research/: links to ~/nadya (caddy lists the dirs)
 const CCX = "../ccx/api";
 const BLOG = "../blog/";
 navigator.serviceWorker?.register("sw.js");
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
-const S = {rows: [], usage: null, burn: null, asks: [], posts: [], todo: [], ideas: [], projects: [], log: [], screens: {}};
+const S = {rows: [], usage: null, burn: null, asks: [], posts: [], todo: [], reminders: [], ideas: [], projects: [], log: [], screens: {}};
 // the open item lives in the URL, so a refresh reopens it: #blog, #marx.1234 (an old #blog/arc opens the blog)
 const hash = decodeURIComponent(location.hash.slice(1));
 const isDoc = (c) => /^(idea|project)\//.test(c ?? "");  // idea/<file> opened from plan, project/<file> from projects
@@ -253,11 +253,15 @@ async function loadBlog() {
   draw();
 }
 async function loadTodo() {
-  const text = await fetch("files/todo.md", {cache: "no-cache"}).then((r) => r.ok ? r.text() : "").catch(() => "");
-  S.todo = [...text.matchAll(/^- \[(.)\] (?:(\d{4}-\d\d-\d\d)(?: (\d\d:\d\d))? )?(.*)$/gm)].map(([, mark, date, time, rest]) => {
-    const due = date ? new Date(`${date}T${time ?? "09:00"}`) : null;
-    return {mark, date, time, due, text: rest.split(/\. |\(user/)[0].trim(), full: rest};
-  }).filter((t) => t.mark !== "x");
+  // both files: `- [m] [YYYY-MM-DD [HH:MM]] text`; reminders.md has the dated ones, todo.md the undated notes
+  [S.todo, S.reminders] = await Promise.all(["todo.md", "reminders.md"].map(async (file) => {
+    const text = await fetch(`files/${file}`, {cache: "no-cache"}).then((r) => r.ok ? r.text() : "").catch(() => "");
+    return [...text.matchAll(/^- \[(.)\] (?:(\d{4}-\d\d-\d\d)(?: (\d\d:\d\d))? )?(.*)$/gm)].map(([, mark, date, time, rest]) => {
+      const due = date ? new Date(`${date}T${time ?? "09:00"}`) : null;
+      return {file, mark, date, time, due, text: rest.split(/\. |\(user/)[0].trim(), full: rest};
+    }).filter((t) => t.mark !== "x");
+  }));
+  S.reminders.sort((a, b) => (a.due ?? Infinity) - (b.due ?? Infinity));
   [S.ideas, S.projects] = await Promise.all([loadDocs("ideas"), loadDocs("projects")]);
   draw();
 }
@@ -302,7 +306,7 @@ function follow(pid) {
 // ---------- what waits on the user
 function asksFor(name) { return S.asks.filter((a) => a.from === name && !sent.has(a.id)); }
 function hasDialog(r) { return r.state === "wait" && (r.asking || (stream?.pid === r.pid && S.screens[r.pid]?.dialog)); }
-function dueTodos() { const soon = Date.now() + 3600e3; return S.todo.filter((t) => t.due && t.due.getTime() <= soon && !sent.has("todo:" + t.full)); }
+function dueTodos() { const soon = Date.now() + 3600e3; return [...S.reminders, ...S.todo].filter((t) => t.due && t.due.getTime() <= soon && !sent.has("todo:" + t.full)); }
 // the pace is ccx's (api/usage, every host's log merged), so the page and `ccx usage` agree
 function pace() {
   const p = S.usage?.pace; if (p?.ratio == null) return null;
@@ -480,10 +484,14 @@ function dialogBox(r) {
 function sessionView(r) {
   return `<article><h1>${esc(r.name)}</h1>${metaLine(r)}${chat(r)}${asksFor(r.name).map(askBox).join("")}${S.asks.filter((a) => a.from === r.name && sent.has(a.id)).map(askBox).join("")}${dialogBox(r)}</article>`;
 }
+function todoRows(ts) {
+  return ts.map((t) => `<li class="${t.mark === "!" ? "x" : ""}"><span>${esc(t.text)}</span>${t.date ? `<small>${t.date}${t.time ? " " + t.time : ""}${t.mark === "!" ? " · reminded" : ""}</small>` : ""}</li>`).join("") || "<li><span class=meta>nothing</span></li>";
+}
 function todoView() {
   const due = dueTodos();
-  return `<article><h1>plan</h1>${due.map((t) => `<div class="need"><b>${esc(t.text)}</b><p>due ${esc(t.date)} ${esc(t.time ?? "")}</p>${sent.has("todo:" + t.full) ? `<p class="done">✓ ${esc(sent.get("todo:" + t.full))}</p>` : `<div class="opts" data-todo="${esc(t.full)}"><button>done</button><button>snooze 1 h</button></div>`}</div>`).join("")}
-    <h2 class="h">todo</h2><ul class="rows">${S.todo.map((t) => `<li class="${t.mark === "!" ? "x" : ""}"><span>${esc(t.text)}</span>${t.date ? `<small>${t.date}${t.time ? " " + t.time : ""}${t.mark === "!" ? " · reminded" : ""}</small>` : ""}</li>`).join("") || "<li><span class=meta>nothing</span></li>"}</ul>
+  return `<article><h1>plan</h1>${due.map((t) => `<div class="need"><b>${esc(t.text)}</b><p>due ${esc(t.date)} ${esc(t.time ?? "")}</p>${sent.has("todo:" + t.full) ? `<p class="done">✓ ${esc(sent.get("todo:" + t.full))}</p>` : `<div class="opts" data-todo="${esc(t.full)}" data-file="${t.file}"><button>done</button><button>snooze 1 h</button></div>`}</div>`).join("")}
+    <h2 class="h">reminders</h2><ul class="rows">${todoRows(S.reminders)}</ul>
+    <h2 class="h">todo</h2><ul class="rows">${todoRows(S.todo)}</ul>
     <h2 class="h">ideas</h2><ul class="rows">${S.ideas.map((x) => `<li class="go" data-go="idea/${esc(x.file)}"><span>${esc(x.title)}</span></li>`).join("")}</ul></article>`;
 }
 function projectsView() {
@@ -731,7 +739,7 @@ document.addEventListener("click", async (e) => {
   try {
     if (box.dataset.pick) await post(`${CCX}/s/${box.dataset.pick}/pick`, {i: +b.dataset.i, labels: JSON.parse(box.dataset.labels)});
     else if (box.dataset.ask) { await post(`${BLOG}answer`, {id: box.dataset.ask, answer: b.textContent}); sent.set(box.dataset.ask, `answered: ${b.textContent}`); }
-    else if (box.dataset.todo) { setTimeout(loadTodo, 60e3); await toNadya(`[cc, todo] ${b.textContent === "done" ? "mark done" : "snooze 1 h"}: ${box.dataset.todo.slice(0, 200)}`); sent.set("todo:" + box.dataset.todo, b.textContent === "done" ? "sent to nadya: done" : "sent to nadya: snooze 1 h"); }
+    else if (box.dataset.todo) { setTimeout(loadTodo, 60e3); await toNadya(`[cc, ${box.dataset.file}] ${b.textContent === "done" ? "mark done" : "snooze 1 h"}: ${box.dataset.todo.slice(0, 200)}`); sent.set("todo:" + box.dataset.todo, b.textContent === "done" ? "sent to nadya: done" : "sent to nadya: snooze 1 h"); }
     box.outerHTML = box.dataset.pick ? `<p class="done">✓ ${esc(JSON.parse(box.dataset.labels)[b.dataset.i])}</p>` : "";
     draw(); drawView(true);
   } catch (err) { box.insertAdjacentHTML("afterend", `<p class="err">${esc(err.message)}</p>`); [...box.children].forEach((x) => x.disabled = false); }
