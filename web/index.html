@@ -1,0 +1,1022 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
+<title>nadya</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ffffff">
+<style>
+  :root {
+    --bg: #fff; --text: #212529; --muted: #6c757d; --line: #e9ecef; --track: #f7f8f9; --hover: #f3f4f6;
+    --accent: #0b7bd3; --on-accent: #fff; --red: #d63939; --green: #2f9e44; --yel: #f59f00; --gray: #ced4da;
+    --cur: #e7f1fb; --hot: #fff4e6; --hot-red: #fdecec; --need: #f4f8fd; --need-red: #fdf3f3;
+    --pre-bg: #1e1f22; --pre-fg: #ddd; --bubble: #f3f4f6;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--font); display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100vh; height: 100dvh; overflow: hidden; }
+  body > header { display: flex; align-items: center; gap: 1.2rem; padding: 0 1.2rem; height: 48px; border-bottom: 1px solid var(--line); }
+  body > header > b { font-size: 1.05rem; cursor: pointer; }
+  body > header > b, #back { user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+  .sum { margin-left: auto; color: var(--muted); font-size: 0.82rem; white-space: nowrap; }
+  #qbtn { all: unset; cursor: pointer; display: flex; align-items: center; gap: 0.55rem; padding: 0.3rem 0.6rem; border-radius: 999px; font-variant-numeric: tabular-nums; } #qbtn:hover { background: var(--hover); }
+  #qbtn .bar { position: relative; width: 84px; height: 6px; border-radius: 3px; background: var(--line); }
+  #qbtn { --qc: var(--accent); } #qbtn.hi { --qc: var(--yel); } #qbtn.out { --qc: var(--red); }
+  #qbtn .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--qc); }
+  #qbtn .bar s { position: absolute; top: calc(100% + 1px); width: 0; height: 0; margin-left: -4px; border: 4px solid transparent; border-top: 0; border-bottom: 5px solid var(--qc); }
+  #qbtn b { color: var(--text); font-weight: 600; }
+  #qbtn.out b, #qbtn.out em { color: var(--red); }
+  #qbtn em { font-style: normal; }
+  #home { display: grid; grid-template-columns: 320px minmax(0, 1fr); min-height: 0; }
+  #left { border-right: 1px solid var(--line); overflow: auto; padding: 0.4rem 0 0; display: flex; flex-direction: column; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  #left > * { flex-shrink: 0; }
+  .addbar { position: sticky; bottom: 0; margin-top: auto; background: var(--bg); padding: 0.6rem 1.1rem calc(0.6rem + env(safe-area-inset-bottom)); }
+  .sec { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 0.8rem 1.1rem 0.25rem; }
+  .it { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 0 0.7rem; padding: 0.45rem 1.1rem; cursor: pointer; align-items: baseline; }
+  .it:hover { background: var(--hover); }
+  .it[aria-current=true] { background: var(--cur); }
+  .it.hot { background: var(--hot); } .it.hot.q { background: var(--hot-red); } .it.hot[aria-current=true] { box-shadow: inset 3px 0 0 var(--accent); }
+  .it .d { width: 8px; height: 8px; border-radius: 50%; position: relative; top: calc(4px - 0.5ex); }  /* bottom on the title's baseline, then up so its center is mid x-height */
+  .d.red { background: var(--red); } .d.blue { background: var(--accent); } .d.green { background: var(--green); } .d.yel { background: var(--yel); } .d.gray { background: var(--gray); }
+  .it .d.q { width: auto; height: auto; top: 0; border-radius: 0; color: var(--red); font-weight: 700; text-align: center; }  /* a session waiting on a dialog: "?" instead of the dot */
+  .it .tx div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .it .tx small { display: block; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.82rem; }
+  .it.hot .tx div, .it.unread .tx div { font-weight: 600; }
+  .it time { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+  #center { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+  #center.nadya { --accent: #d81212; }  /* nadya's chat in the red of the star icon */
+  #view { overflow: auto; overflow-anchor: none; grid-area: 1 / 1; }
+  #newer { grid-area: 1 / 1; align-self: end; justify-self: center; margin-bottom: 0.8rem; border: 0; background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 0.35rem 1rem; font: inherit; font-size: 0.85rem; cursor: pointer; box-shadow: 0 1px 4px #0003; }
+  article { max-width: 46rem; margin: 0 auto; padding: 1.6rem 2rem 2rem; }
+  article h1 { font-size: 1.55rem; line-height: 1.25; margin: 0 0 0.3rem; }
+  .meta { color: var(--muted); margin-bottom: 1rem; font-size: 0.88rem; }
+  article img, article video { max-width: 100%; height: auto; border-radius: 6px; display: block; margin-bottom: 1rem; }
+  pre { background: var(--pre-bg); color: var(--pre-fg); padding: 0.8rem 1rem; border-radius: 6px; font: 12.5px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .need { border-left: 4px solid var(--accent); background: var(--need); border-radius: 0 6px 6px 0; padding: 0.7rem 0.9rem; margin: 1rem 0; } .need.red { border-color: var(--red); background: var(--need-red); } .need p { margin: 0.2rem 0 0; white-space: pre-line; overflow-wrap: anywhere; } .opts button small { display: block; opacity: 0.75; white-space: pre-line; }
+  .opts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0 0; }
+  .opts button { font: inherit; text-align: left; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: 6px; padding: 0.35rem 0.9rem; cursor: pointer; }
+  .opts:not(.multi) button:first-child, .opts button[aria-pressed=true] { background: var(--accent); color: var(--on-accent); }
+  .opts button:disabled { opacity: 0.5; cursor: default; }
+  .done { color: var(--green); font-weight: 600; } .err { color: var(--red); }
+  .msgs { display: flex; flex-direction: column; gap: 0.5rem; }
+  .m { align-self: flex-start; max-width: 78%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--bubble); overflow-wrap: anywhere; } .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); } .m.me small { text-align: right; } .m .q { display: block; font-size: 0.75rem; opacity: 0.75; }
+  .m a { color: var(--accent); } .m.me a { color: inherit; }
+  .m.me.pend { opacity: 0.5; } .m.me[data-pend] { white-space: pre-wrap; } .m.me.stale { opacity: 0.5; cursor: pointer; } .m.me.fail { background: var(--red); opacity: 0.85; cursor: pointer; }
+  @media (pointer: coarse) { .m[data-pend] { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; } }  /* a long press takes it back, not selects */
+  .m small { display: block; text-align: left; font-size: 0.6rem; opacity: 0.7; margin-top: 0.15rem; }
+  .m p { margin: 0 0 0.4rem; } .m p:last-of-type { margin: 0; } .m ul { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; } .m code { font: 0.88em var(--mono); }
+  .typing { align-self: flex-start; display: flex; gap: 4px; padding: 0.75rem 0.9rem; border-radius: 12px; background: var(--bubble); }
+  .typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: bob 1.2s ease-in-out infinite; animation-delay: var(--t, 0s); }
+  .typing i:nth-child(2) { animation-delay: calc(var(--t, 0s) + 0.15s); } .typing i:nth-child(3) { animation-delay: calc(var(--t, 0s) + 0.3s); }
+  .m > .typing { position: absolute; inset: 0; border-radius: 0; }  /* the dots over a reply that's widening out of them */
+  @keyframes bob { 0%, 60%, 100% { opacity: 0.3; transform: none; } 30% { opacity: 1; transform: translateY(-3px); } }
+  #say[hidden] { display: none; }
+  #say { display: flex; align-items: flex-end; gap: 0.5rem; padding: 0.7rem 2rem 0.9rem; border-top: 1px solid var(--line); }
+  #say textarea { flex: 1; box-sizing: border-box; min-height: 2.6rem; font: inherit; line-height: 1.4; border: 1px solid var(--line); border-radius: 1.3rem; padding: 0.55rem 1rem; resize: none; overflow-y: auto; }
+  #say textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  #say button { height: 2.6rem; border: 0; background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 0 1.1rem; cursor: pointer; font: inherit; }
+  #say #mode { background: none; border: 1px solid var(--line); color: var(--muted); padding: 0 0.75rem; font: 0.85rem var(--mono); }
+  #say #mode[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  #say #mode[hidden] { display: none; }
+  article:has(> pre.term) { max-width: none; }
+  pre.term { white-space: pre; overflow-x: auto; overflow-wrap: normal; margin: 0 0 1rem; }
+  #say .note { font-size: 0.78rem; color: var(--muted); align-self: center; }
+  #back { display: none; }
+  details summary { cursor: pointer; }
+  .big { font-size: 2.2rem; font-weight: 700; line-height: 1.1; }
+  .meter { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin: 0.4rem 0 1rem; } .qg .meter { margin: 0.4rem 0 0.5rem; }
+  .qm { position: relative; } .qm s { position: absolute; top: calc(100% + 1px); width: 0; height: 0; margin-left: -5px; border: 5px solid transparent; border-top: 0; border-bottom: 6px solid var(--qc); } .meter i { display: block; height: 100%; }
+  .h { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 1.4rem 0 0.4rem; }
+  .rows { list-style: none; padding: 0; margin: 0; } .rows li { display: flex; gap: 0.8rem; align-items: baseline; padding: 0.45rem 0; border-bottom: 1px solid var(--line); } .rows li small { margin-left: auto; color: var(--muted); white-space: nowrap; }
+  .tabs { display: flex; gap: 0.3rem; margin: 1.4rem 0 0.6rem; } .tabs button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 999px; padding: 0.25rem 0.9rem; cursor: pointer; } .tabs button[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .bp summary, .bs { display: grid; grid-template-columns: minmax(0, 9rem) minmax(0, 1fr) 3.4rem; gap: 0.7rem; align-items: center; padding: 0.35rem 0; font-variant-numeric: tabular-nums; }
+  .bp summary { list-style: none; border-bottom: 1px solid var(--line); } .bp summary::-webkit-details-marker { display: none; }
+  .bp summary .nm::before { content: "▸ "; color: var(--muted); } .bp[open] > summary .nm::before { content: "▾ "; }
+  .bp .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .bp b { text-align: right; font-weight: 600; } .bs b { font-weight: 400; color: var(--muted); }
+  .bs { padding-left: 1rem; font-size: 0.88rem; } .bs small { color: var(--muted); }
+  .bb { display: flex; height: 10px; border-radius: 3px; background: var(--track); overflow: hidden; } .bb i { display: block; height: 100%; background: var(--accent); } .bs .bb i { opacity: 0.55; } .bd > summary .bb { background: none; } .qw { display: flex; flex-wrap: wrap; justify-content: space-between; column-gap: 1rem; } .qw span:last-child:not(:first-child) { margin-left: auto; }
+  .bp .bp { margin-left: 1rem; } .bp .bp summary { font-size: 0.9rem; }
+  .legend { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; font-size: 0.8rem; color: var(--muted); margin: 0.2rem 0 0.6rem; } .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 0.3rem; }
+  .qh { font-size: 0.85rem; font-weight: 600; color: var(--muted); margin: 1.6rem 0 0.4rem; }
+  .qg { margin: 0; } .qd { position: relative; height: 1.2em; font-size: 0.72rem; color: var(--muted); } .qd span { position: absolute; top: 0.1em; padding-left: 3px; }
+  .rows li.go { cursor: pointer; } .rows li.go:hover span { color: var(--accent); }
+  .m h1, .m h2, .m h3, .m h4 { font-size: 1em; margin: 0 0 0.3rem; } .m ol { margin: 0.2rem 0 0.4rem; padding-left: 1.4rem; } .m .tbl { margin: 0.3rem 0; }
+  .doc h2 { font-size: 1.2rem; margin: 1.8rem 0 0.5rem; } .doc h3 { font-size: 1.02rem; margin: 1.4rem 0 0.4rem; } .doc h4 { font-size: 0.95rem; margin: 1.2rem 0 0.3rem; }
+  .doc p, .doc ul, .doc ol { margin: 0 0 0.8rem; } .doc ul, .doc ol { padding-left: 1.4rem; } .doc li { margin: 0.2rem 0; } .doc li > ul, .doc li > ol { margin: 0.2rem 0 0; }
+  .doc a { color: var(--accent); } .doc :not(pre) > code { font: 0.88em var(--mono); background: var(--hover); padding: 0.05em 0.25em; border-radius: 3px; }
+  .tbl { overflow-x: auto; margin: 0 0 1rem; } .tbl table { border-collapse: collapse; font-size: 0.86rem; } .tbl th, .tbl td { border: 1px solid var(--line); padding: 0.35rem 0.55rem; text-align: left; vertical-align: top; min-width: 7rem; } .tbl th { background: var(--track); }
+  .doc blockquote { margin: 0 0 0.8rem; padding: 0 0 0 0.9rem; border-left: 3px solid var(--line); color: var(--muted); } .doc hr { border: 0; border-top: 1px solid var(--line); margin: 1.4rem 0; } .doc li > input { margin: 0 0.35rem 0 0; }
+  .fl li span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .fl li.dir span { font-weight: 600; } .fl li small { font-variant-numeric: tabular-nums; } .fl li small i { font-style: normal; } .doc ul.fl { padding: 0; } .doc .fl li { margin: 0; }
+  .crumbs a { color: var(--accent); text-decoration: none; } .crumbs a:hover { text-decoration: underline; } .doc pre.plain { margin: 0; } .doc pre.fm { background: var(--track); color: var(--muted); margin: 0 0 1.2rem; }
+  .rows li.x span { text-decoration: line-through; color: var(--muted); }
+  .add { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 0.35rem 0; text-align: center; font-size: 1.3rem; line-height: 1.2; color: var(--muted); border: 1px dashed var(--gray); border-radius: 6px; cursor: pointer; }
+  .add:hover, .add[aria-current=true] { color: var(--accent); border-color: var(--accent); background: var(--cur); }
+  #new { display: grid; gap: 0.9rem; max-width: 28rem; }
+  #new label { display: grid; gap: 0.2rem; font-size: 0.85rem; color: var(--muted); }
+  #new input, #new select { font: inherit; font-size: 16px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 0.5rem 0.7rem; }
+  .seg { border: 0; padding: 0; margin: 0; display: flex; } .seg legend { padding: 0; margin-bottom: 0.2rem; font-size: 0.85rem; color: var(--muted); }
+  #new .seg label { display: block; flex: 1; font-size: 15px; } #new .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg span { display: block; text-align: center; padding: 0.5rem 0.7rem; border: 1px solid var(--line); color: var(--text); cursor: pointer; user-select: none; }
+  .seg label:first-of-type span { border-radius: 6px 0 0 6px; } .seg label:last-of-type span { border-radius: 0 6px 6px 0; border-left: 0; }
+  .seg input:checked + span { background: var(--accent); border-color: var(--accent); color: var(--on-accent); } .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #new button { justify-self: start; font: inherit; border: 0; background: var(--accent); color: var(--on-accent); border-radius: 6px; padding: 0.5rem 1.4rem; cursor: pointer; }
+  #new button:disabled { opacity: 0.5; cursor: default; }
+  #view iframe { display: block; width: 100%; height: 100%; border: 0; }
+  #view:has(iframe) { overflow: hidden; }
+  @media (max-width: 760px) {
+    body > header { gap: 0.5rem; padding: 0 0.6rem; } #qbtn .bar { width: 56px; }
+    #home { display: block; position: relative; }
+    #left, #center { position: absolute; inset: 0; } #center { display: none; }
+    body.view #center { display: grid; } body.view #left { display: none; }
+    #back { display: inline-flex; all: unset; cursor: pointer; font-size: 1.4rem; padding: 0 0.3rem; } body:not(.view) #back { visibility: hidden; }
+    #left { border-right: 0; } .addbar { padding: 0; } .add { border-width: 1px 0 0; border-radius: 0; padding: 0.6rem 0 calc(0.6rem + env(safe-area-inset-bottom)); }
+    .it { padding: 12px 14px; gap: 2px 10px; line-height: 1.4; } .it .tx div, .it .d { font-size: 17px; } .it .tx small { font-size: 15px; margin-top: 2px; } .it time { font-size: 14px; }
+    .sec { font-size: 13px; padding: 1rem 14px 0.35rem; }
+    article { padding: 1rem; } .fl .sz { display: none; } #say { padding: 0.6rem 0.8rem calc(0.7rem + env(safe-area-inset-bottom)); } #say textarea { font-size: 16px; }
+  }
+</style>
+</head>
+<body>
+<header><button id="back" aria-label="back">‹</button><b id="title">nadya</b><span class="sum" id="sum"></span></header>
+<section id="home">
+  <nav id="left"></nav>
+  <section id="center"><div id="view"></div><button id="newer" hidden>↓ new</button><form id="say"><button type="button" id="mode" aria-pressed="false" title="terminal view" aria-label="terminal view">&gt;_</button><textarea name="q" rows="1" autocomplete="off"></textarea><button>send</button></form></section>
+</section>
+<script type="module">
+// A static page (no box): everything it shows comes from these, all same origin:
+//   ../ccx/api/...        sessions on every host: list + events (SSE), log, screen, pick, type
+//   ../blog/              the blog (its #posts are inserted here)
+//   files/                todo.md, reminders.md, ideas/, projects/, research/: links to ~/nadya (caddy lists the dirs)
+//   ../nadya/             all of ~/nadya, for the files tab: a dir asked with Accept: application/json is caddy's listing as JSON
+const CCX = "../ccx/api";
+const NADYA = "../nadya/";
+const BLOG = "../blog/";
+navigator.serviceWorker?.register("sw.js");
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
+const S = {rows: [], usage: null, burn: null, posts: [], todo: [], reminders: [], ideas: [], projects: [], log: [], screens: {}};
+// the open item lives in the URL, so a refresh reopens it: #blog, #marx.1234 (an old #blog/arc opens the blog)
+const hash = decodeURIComponent(location.hash.slice(1));
+const isDoc = (c) => /^(idea|project)\//.test(c ?? "");  // idea/<file> opened from plan, project/<file> from projects
+const isFiles = (c) => /^files(\/|$)/.test(c ?? "");  // files, files/<dir>/, files/<dir>/<file>: a path in ~/nadya
+const hashCur = isDoc(hash) || isFiles(hash) ? hash : hash.split("/")[0];
+let cur = hashCur || (innerWidth > 760 ? "nadya" : null);
+const isPid = (c) => c?.includes(".") && !isDoc(c) && !isFiles(c);  // marx.1234
+function setHash() { if (cur) history.replaceState(history.state, "", `#${encodeURI(cur).replace(/#/g, "%23")}`); }
+const sent = new Map();  // item -> what was sent, for "✓" lines
+
+// ---------- helpers
+function ago(t) {
+  const s = Math.max(0, Date.now() / 1000 - t);
+  if (s < 60) return `${Math.round(s)}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}min`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
+}
+const hhmm = (t) => new Date(t * 1000).toLocaleTimeString("en-CA", {hour: "2-digit", minute: "2-digit", hour12: false});
+// bare http(s) URLs in escaped text become links, opened in a new tab; skips ones already in an href or link text, and
+// trailing punctuation or markdown (**url**); a code span that is just a URL is a link too. wrap: what to do with each link's html
+const linkHtml = (u, t) => `<a href="${u}" target="_blank" rel="noopener">${t}</a>`;
+const autolink = (s, wrap = (h) => h) => s.replace(/(^|[^"=>a-zA-Z0-9])(https?:\/\/[^\s<"]+?)(?=[.,;:!?)\]*_]*(?:\s|<|\0|&quot;|&gt;|&#39;|$))/g, (m, pre, u) => pre + wrap(linkHtml(u, u)));
+// a relative link in the file at dir (a path in ~/nadya, "" or ending in /) -> the path it points at
+const resolve = (dir, u) => decodeURIComponent(new URL(u, `https://x/${dir}`).pathname.slice(1));
+function md(text, doc) {
+  // a small markdown subset: # headings, paragraphs, - and 1. lists (nested by indent), - [ ] boxes, ``` code, | tables,
+  // > quotes, --- rules, **bold**, *italic*, `code`, links, images. doc: hard-wrapped lines join into one paragraph (chat keeps
+  // its line breaks); doc.base: the file's dir in ~/nadya, so relative links open in the files tab and images load
+  const base = doc?.base;
+  const link = (m, t, u) => /^https?:/.test(u) ? linkHtml(u, t) : /^\/nadya(\/|$)/.test(u) ? linkHtml(esc(u), t) : base != null && !/^(#|\w+:)/.test(u) ? `<a href="#files/${esc(resolve(base, u))}" data-go="files/${esc(resolve(base, u))}">${t}</a>` : doc && /^[\w.-]+\.md$/.test(u) ? `<a href="#idea/${u}" data-go="idea/${u}">${t}</a>` : t;
+  const img = (m, t, u) => /^https?:/.test(u) ? `<img src="${u}" alt="${t}">` : base != null ? `<img src="${esc(NADYA + encodeURI(resolve(base, u)))}" alt="${t}">` : m;
+  const inline = (s) => {
+    const keep = [], hold = (h) => `\0${keep.push(h) - 1}\0`;  // code spans and links wait outside, so ** and _ inside them stay as typed
+    return autolink(esc(s).replace(/`([^`]+)`/g, (m, c) => hold(`<code>${/^https?:\/\/\S+$/.test(c) ? linkHtml(c, c) : c}</code>`)).replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (...x) => hold(img(...x))).replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (...x) => hold(link(...x))), hold)
+      .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/(^|[^\w*])\*(?=\S)(.+?)\*(?!\w)/g, "$1<i>$2</i>").replace(/(^|\W)_(?=\S)(.+?)_(?!\w)/g, "$1<i>$2</i>")
+      .replace(/\0(\d+)\0/g, (m, k) => keep[k]);
+  };
+  const cells = (row) => row.trim().replace(/^\||\|$/g, "").split("|").map((c) => inline(c.trim()));
+  const out = [], lists = [];
+  // a paragraph's or list item's lines are read as one text, so a code span or link can wrap across them
+  let para = [], item = null;
+  const lines2 = (ls) => inline(ls.join("\n")).replace(/\n/g, doc ? " " : "<br>");
+  const endItem = () => { if (item) out.push(item.pre + lines2(item.lines)); item = null; };
+  const endPara = () => { endItem(); if (para.length) out.push(`<p>${lines2(para)}</p>`); para = []; };
+  const endLists = (ind = -1) => { endItem(); while (lists.length && lists.at(-1).ind > ind) out.push(`</li></${lists.pop().tag}>`); };
+  let lines = text.trim().split("\n");
+  // a doc's --- frontmatter --- shows as it is
+  const fm = doc && lines[0] === "---" ? lines.indexOf("---", 1) : -1;
+  if (fm > 0) { out.push(`<pre class="fm">${esc(lines.slice(1, fm).join("\n"))}</pre>`); lines = lines.slice(fm + 1); }
+  for (let k = 0; k < lines.length; k++) {
+    const line = lines[k];
+    if (!line.trim()) { endPara(); if (!/^\s+\S/.test(lines[k + 1] ?? "")) endLists(); continue; }
+    if (line.startsWith("```")) {
+      endPara(); endLists();
+      const code = [];
+      while (++k < lines.length && !lines[k].startsWith("```")) code.push(lines[k]);
+      out.push(`<pre><code>${esc(code.join("\n"))}</code></pre>`); continue;
+    }
+    if (/^ {0,3}([-*_])( *\1){2,} *$/.test(line)) { endPara(); endLists(); out.push("<hr>"); continue; }
+    if (/^>( |$)/.test(line)) {
+      endPara(); endLists();
+      const q = [];
+      for (; k < lines.length && /^>/.test(lines[k]); k++) q.push(lines[k].replace(/^> ?/, ""));
+      k--;
+      out.push(`<blockquote>${md(q.join("\n"), doc)}</blockquote>`); continue;
+    }
+    const h = line.match(/^(#{1,6}) (.*)$/);
+    if (h) { endPara(); endLists(); out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); continue; }
+    if (line.startsWith("|") && /^\|?[\s:|-]+$/.test(lines[k + 1] ?? "") && lines[k + 1].includes("-")) {
+      endPara(); endLists();
+      const head = cells(line), body = [];
+      for (k += 2; k < lines.length && lines[k].startsWith("|"); k++) body.push(cells(lines[k]));
+      k--;
+      out.push(`<div class="tbl"><table><thead><tr>${head.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`);
+      continue;
+    }
+    const li = line.match(/^(\s*)([-*]|\d+\.) (.*)$/);
+    if (li) {
+      endPara();
+      const ind = li[1].length, tag = /\d/.test(li[2]) ? "ol" : "ul";
+      endLists(ind);
+      const top = lists.at(-1);
+      if (top?.ind === ind && top.tag === tag) out.push("</li>");
+      else { if (top?.ind === ind) endLists(ind - 1); lists.push({ind, tag}); out.push(`<${tag}>`); }
+      const box = li[3].match(/^\[([ xX])\] (.*)$/);
+      item = {pre: box ? `<li><input type="checkbox" disabled${box[1] === " " ? "" : " checked"}>` : "<li>", lines: [box ? box[2] : li[3]]};
+      continue;
+    }
+    if (lists.length && /^\s/.test(line)) { (item ??= {pre: doc ? " " : "<br>", lines: []}).lines.push(line.trim()); continue; }
+    endLists(); para.push(line);
+  }
+  endPara(); endLists();
+  return out.join("");
+}
+async function json(url, opts) {
+  const r = await fetch(url, opts);
+  if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+  return r.json();
+}
+const post = (url, body) => json(url, {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body)});
+// while nadya's host is out of the list (its daemon restarting, the list stream reconnecting), the last row it had
+let lastNadya = null;
+function nadyaRow() {
+  const n = S.rows.find((r) => r.name === "nadya" && r.pid.startsWith("nadya."));
+  if (n) return lastNadya = n;
+  return S.up?.includes("nadya") ? null : lastNadya;
+}
+
+// ---------- data
+async function loadUsage() { S.usage = (await json(`${CCX}/usage`).catch(() => null))?.usage ?? S.usage; draw(); if (cur === "quota") loadBurn(); }
+async function loadBurn() {
+  const [b, d] = await Promise.all([`${CCX}/burn`, `${CCX}/burn?hours=24`].map((u) => json(u).catch((e) => ({error: e.message}))));
+  if (!b.error || !S.burn) S.burn = b;
+  if (!d.error || !S.burn24) S.burn24 = d;
+  drawView(true);
+}
+async function loadBlog() {
+  const html = await fetch(BLOG, {cache: "no-cache"}).then((r) => r.text()).catch(() => "");
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const posts = doc.querySelector("#posts");
+  if (!posts) return;
+  S.posts = [...posts.querySelectorAll("article")].map((a) => ({title: (a.querySelector("h2") ?? a.querySelector("p:not(.meta) b") ?? a.querySelector("p:not(.meta)"))?.textContent.trim(), time: a.querySelector("time")?.textContent.trim()}));
+  draw();
+}
+async function loadTodo() {
+  // both files: `- [m] [YYYY-MM-DD [HH:MM]] text`; reminders.md has the dated ones, todo.md the undated notes
+  [S.todo, S.reminders] = await Promise.all(["todo.md", "reminders.md"].map(async (file) => {
+    const text = await fetch(`files/${file}`, {cache: "no-cache"}).then((r) => r.ok ? r.text() : "").catch(() => "");
+    return [...text.matchAll(/^- \[(.)\] (?:(\d{4}-\d\d-\d\d)(?: (\d\d:\d\d))? )?(.*)$/gm)].map(([, mark, date, time, rest]) => {
+      const due = date ? new Date(`${date}T${time ?? "09:00"}`) : null;
+      return {file, mark, date, time, due, text: rest.split(/\. |\(user/)[0].trim(), full: rest};
+    }).filter((t) => t.mark !== "x");
+  }));
+  S.reminders.sort((a, b) => (a.due ?? Infinity) - (b.due ?? Infinity));
+  [S.ideas, S.projects] = await Promise.all([loadDocs("ideas"), loadDocs("projects")]);
+  draw();
+}
+async function loadDocs(dir) {
+  // every .md in files/<dir>/ (caddy's listing): # title, Status: line
+  const list = await fetch(`files/${dir}/`, {cache: "no-cache"}).then((r) => r.ok ? r.text() : "").catch(() => "");
+  const files = [...new Set([...list.matchAll(/href="(?:\.\/)?([\w.-]+\.md)"/g)].map((m) => m[1]))];
+  return Promise.all(files.map(async (f) => {
+    const t = await fetch(`files/${dir}/${f}`, {cache: "no-cache"}).then((r) => r.text()).catch(() => "");
+    return {file: f, text: t, title: t.match(/^# (.+)$/m)?.[1] ?? f, status: t.match(/^Status: ([^.(]+)/m)?.[1]?.trim() ?? ""};
+  }));
+}
+// the files tab: the path open in it, as caddy gives it (a dir ends in /), read again each time it's opened
+S.fs = {};
+const IMG = /\.(png|jpe?g|gif|webp|svg|avif|ico)$/i;
+async function loadPath(path) {
+  const url = NADYA + encodeURI(path).replace(/#/g, "%23");
+  let got;
+  try {
+    if (path === "" || path.endsWith("/")) {
+      const list = await json(url, {headers: {accept: "application/json"}, cache: "no-cache"});
+      got = {list: list.filter((x) => !x.name.startsWith("."))};  // boxer hides dotfiles: caddy lists them, they 404
+    } else if (IMG.test(path)) got = {img: url};
+    else {
+      const r = await fetch(url, {cache: "no-cache"});
+      if (!r.ok) throw new Error(`${r.status}`);
+      if (r.redirected && r.url.endsWith("/")) { if (cur === `files/${path}`) { cur += "/"; setHash(); loadPath(`${path}/`); } return; }  // a dir typed without its /
+      const size = +r.headers.get("content-length") || 0;
+      // text: up to 2 MB, valid UTF-8 with no NUL in it; anything else is only a link
+      const buf = size > 2e6 ? null : new Uint8Array(await r.arrayBuffer());
+      let text = null;
+      try { if (buf && !buf.slice(0, 8192).includes(0)) text = new TextDecoder("utf-8", {fatal: true}).decode(buf); } catch {}
+      got = {text, size: size || buf?.length};
+    }
+  } catch (e) { got = {error: e.message}; }
+  S.fs[path] = got;
+  if (cur === `files/${path}` || (cur === "files" && path === "")) drawView(true);
+}
+function listen() {
+  const es = new EventSource(`${CCX}/events`);
+  es.addEventListener("list", (e) => {
+    const d = JSON.parse(e.data), had = isPid(cur) && S.rows.some((r) => r.pid === cur);
+    S.rows = d.rows ?? []; S.offline = d.offline;
+    // the open session ended (its host still answers): go to nadya, replacing the hash
+    const up = S.up = (d.host ?? "").split(" (")[0].split(" · ");
+    if (had && !S.rows.some((r) => r.pid === cur) && up.includes(cur.split(".")[0])) { cur = "nadya"; if (history.state?.cc) history.replaceState({cc: cur}, ""); open(); return; }
+    draw(); drawView(true);
+  });
+  es.onerror = () => { S.offline = "events stream lost, retrying"; draw(); };
+}
+// one session stream at a time: the open one (log for nadya, screen + dialog for all)
+let stream = null;
+function follow(pid) {
+  if (stream?.pid === pid) return;
+  // a dialog is known only while its session's stream is open: a closed one keeps no old dialog
+  if (stream) { stream.es.close(); delete S.screens[stream.pid]?.dialog; }
+  stream = null;
+  if (!pid) return;
+  S.log = [];
+  const es = new EventSource(`${CCX}/s/${pid}/events`);
+  stream = {pid, es};
+  // the stream starts with the log's tail as a reset: that's history, drawn at once at the bottom; later events are live
+  es.addEventListener("log", (e) => {
+    const d = JSON.parse(e.data);
+    if (d.reset || !stream.loaded) { S.log = d.events; Object.assign(stream, {loaded: true, start: d.start}); ackPending(); draw(); drawView(); return; }
+    S.log = S.log.concat(d.events); ackPending(); draw(); drawView(true);
+  });
+  es.addEventListener("screen", (e) => { (S.screens[pid] ??= {}).text = JSON.parse(e.data).text; drawView(true); });
+  es.addEventListener("dialog", (e) => { (S.screens[pid] ??= {}).dialog = JSON.parse(e.data); drawView(true); draw(); });
+}
+// a ccx log page holds the last 40 chat messages: scrolling up pages back (?before=) until the chat has `want` messages or the log's top
+const chatCount = () => S.log.filter((e) => e.type === "user" || e.type === "text").length;
+async function older(want) {
+  const s = stream;
+  if (!s?.loaded || s.paging || !s.start) return;
+  s.paging = true;
+  try {
+    while (stream === s && s.start > 0 && chatCount() < want) {
+      const d = await json(`${CCX}/s/${s.pid}/log?before=${s.start}`);
+      if (stream !== s) return;
+      S.log = d.events.concat(S.log); s.start = d.start;
+    }
+  } catch {} finally { s.paging = false; }
+  if (stream === s) drawView(true);
+}
+
+// ---------- what waits on the user
+function hasDialog(r) { return r.state === "wait" && (r.asking || (stream?.pid === r.pid && S.screens[r.pid]?.dialog)); }
+function dueTodos() { const soon = Date.now() + 3600e3; return [...S.reminders, ...S.todo].filter((t) => t.due && t.due.getTime() <= soon && !sent.has("todo:" + t.full)); }
+// the pace is ccx's (api/usage, every host's log merged), so the page and `ccx usage` agree
+function pace() {
+  const p = S.usage?.pace; if (p?.ratio == null) return null;
+  return {x: p.ratio, out: p.out ? new Date(p.out) : null};
+}
+const day = (d) => d.toLocaleString("en-CA", {weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false});
+
+// ---------- list
+// a busy session, or one whose last chat message is the user's (known only for the open one), shows a blank line under its title (a space, so the row keeps its height)
+// a reply that is empty or only "·": nadya's answer to a routine ccx notice; not drawn, and not a row's subtitle
+const blank = (e) => e.type === "text" && ["", "·"].includes(e.text?.trim() ?? "");
+function quiet(r) {
+  if (r.state === "busy") return true;
+  const log = stream?.pid === r.pid ? S.log : [];
+  return log.findLast((e) => e.type === "user" || e.type === "text")?.type === "user";
+}
+function items() {
+  const it = [];
+  const n = nadyaRow();
+  const nadyaHot = n && hasDialog(n);
+  const nLog = n && stream?.pid === n.pid ? S.log : [];
+  const lastText = nLog.findLast((e) => e.type === "text" && !blank(e));
+  it.push({id: "nadya", d: nadyaHot ? "q" : n ? {busy: "green", wait: "", hold: "yel", free: "gray"}[n.state] : "gray", hot: nadyaHot, title: "nadya",
+    sub: nadyaHot ? `waits on a dialog: ${n.asking || "see pane"}` : n && quiet(n) ? "\u00a0" : lastText?.text.split("\n")[0] ?? (n ? n.summary : "not running"), t: n ? ago(n.since) : ""});
+  if (!localStorage.cc_blog_seen && S.posts.length) localStorage.cc_blog_seen = Date.now();
+  const seen = +localStorage.cc_blog_seen || 0, top = S.posts[0];
+  const fresh = S.posts.filter((x) => Date.parse(x.time) > seen).length;
+  it.push({id: "blog", d: fresh ? "green" : "", unread: fresh, title: "blog", sub: top?.title ?? "", t: top?.time ? `${fresh ? `${fresh} new · ` : ""}${ago(new Date(top.time.replace(" ", "T")) / 1000)}` : ""});
+  const due = dueTodos();
+  it.push({id: "plan", d: due.length ? "blue" : "", hot: due.length, title: "plan", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : "", t: ""});
+  const ps = projects(), run = ps.filter((x) => x.running).length;
+  it.push({id: "projects", d: run ? "green" : "", title: "projects", sub: ps.filter((x) => x.running).map((x) => `${x.file.replace(/\.md$/, "")} running`).join(" · "), t: ""});
+  it.push({id: "files", d: "", title: "files", sub: "", t: ""});
+  const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, dialog: !!hasDialog(r)}));
+  ss.sort((a, b) => b.dialog - a.dialog);
+  for (const {r, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "q" : {busy: "green", wait: "", hold: "yel", free: "gray"}[r.state] ?? "gray", hot: dialog,
+    title: r.name, sub: dialog ? `waits on a dialog: ${r.asking || "see pane"}` : quiet(r) ? "\u00a0" : r.summary !== r.name ? r.summary : r.path, t: `${r.pid.split(".")[0] === "nadya" ? "" : r.pid.split(".")[0] + " · "}${ago(r.since)}`});
+  return it;
+}
+function draw() {
+  const all = items();
+  let sec = null, html = "";
+  for (const i of all) {
+    if ((i.sec ?? "") !== sec) { sec = i.sec ?? ""; html += sec ? `<div class="sec">${sec}</div>` : `<div style="height:.4rem"></div>`; }
+    html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""}" data-id="${esc(i.id)}" aria-current="${i.id === (isDoc(cur) ? docParent(cur) : isFiles(cur) ? "files" : cur)}"><span class="d ${i.d}">${i.d === "q" ? "?" : ""}</span><span class="tx"><div>${esc(i.title)}</div><small>${esc(i.sub)}</small></span><time>${esc(i.t)}</time></div>`;
+  }
+  if (S.offline) html += `<p class="meta" style="padding:0 1.1rem">${esc(S.offline)}</p>`;
+  html += `<div class="addbar"><button class="add" id="add" aria-label="new session" title="start a new claude session" aria-current="${cur === "new"}">+</button></div>`;
+  $("#left").innerHTML = html;
+  const u = S.usage, p = pace();
+  // the bar: % used; the tick: where the even pace would be by now
+  const even = u ? Math.min(100, Math.max(0, (Math.min(Date.now(), u.resetsAt) - (u.resetsAt - 7 * 86400e3)) / (7 * 86400e3) * 100)) : 0;
+  const tip = u ? `quota ${u.used}% used${p ? `, ${p.x.toFixed(1)}x the pace that lasts to the reset` : ""}${p?.out ? `, runs out ${day(p.out)}` : ""}; reset ${day(new Date(u.resetsAt))}` : "no usage data";
+  $("#sum").innerHTML = `<button id="qbtn" class="${p?.out ? "out" : p?.x > 1 ? "hi" : ""}" title="${esc(tip)}" aria-label="${esc(tip)}"><span class="bar"><i style="width:${u?.used ?? 0}%"></i>${u ? `<s style="left:${even.toFixed(1)}%"></s>` : ""}</span><b>${u ? u.used + "%" : "?"}</b>${p ? `<em>${p.x.toFixed(1)}x${p.out ? ` · out ${day(p.out)}` : ""}</em>` : ""}</button>`;
+  if (["nadya", "plan", "projects", "quota"].includes(cur) || isPid(cur) || isDoc(cur)) drawView(true);
+}
+
+// ---------- center
+let lastView = "";
+// a user scroll away from the bottom pauses autoscroll until they're back at the bottom or 30 s pass with no scroll
+let pausedAt = 0, autoTop = -1;
+// autoscroll stops when the first reply that came while at the bottom (cap, its log time) reaches the top (user)
+let cap = null;
+const atBottom = (v) => v.scrollHeight - v.scrollTop - v.clientHeight < 40;
+function keepUp() {
+  const v = $("#view"), end = v.scrollHeight - v.clientHeight, el = cap !== null && v.querySelector(`.m[data-at="${cap}"]`);
+  v.scrollTop = el ? Math.min(end, el.getBoundingClientRect().top - v.getBoundingClientRect().top + v.scrollTop - 16) : end;
+  autoTop = v.scrollTop; pausedAt = 0; $("#newer").hidden = atBottom(v);
+}
+function toBottom() { cap = null; keepUp(); }
+// also run from drawView, in case the scroll event hasn't fired yet
+function noteScroll() {
+  const v = $("#view");
+  if (Math.abs(v.scrollTop - autoTop) < 2) return;  // ours
+  autoTop = -1; cap = null;
+  if (atBottom(v)) { pausedAt = 0; $("#newer").hidden = true; }
+  else pausedAt = Date.now();
+}
+// scrolled near the top of a chat: 20 more messages from further back
+$("#view").addEventListener("scroll", (e) => { noteScroll(); if (e.target.scrollTop < 300 && e.target.querySelector(".msgs")) older(chatCount() + 20); });
+$("#newer").onclick = toBottom;
+$("#mode").onclick = () => { term = !term; drawView(); };
+// the typing bubble as last drawn: a reply up to 5 s later still grows out of it (the state can turn idle before the log has the reply)
+let dots = null, linger = null, growing = 0, later = 0, shown;
+const replyAts = (v) => [...v.querySelectorAll(".m:not(.me)[data-at]")].map((m) => +m.dataset.at);
+// a redraw while a finger or button is down on the view would take the link or the selection from under it: wait for the release
+let held = false, missed = false;
+$("#view").addEventListener("pointerdown", () => { held = true; });
+function release() { held = false; if (missed) { missed = false; setTimeout(() => drawView(true)); } }
+addEventListener("pointerup", release);
+addEventListener("pointercancel", release);
+function drawView(soft) {
+  if (soft && held) { missed = true; return; }
+  // a redraw replaces the view and would cut a reply's grow short: wait for it to end
+  if (soft && Date.now() < growing) { later ||= setTimeout(() => { later = 0; drawView(true); }, growing - Date.now() + 20); return; }
+  const i = items().find((x) => x.id === cur);
+  const view = $("#view");
+  noteScroll();
+  const low = atBottom(view), keep = low || Date.now() - pausedAt > 30e3, same = soft && shown === cur;
+  const {scrollTop} = view, tail = view.querySelector(".msgs")?.lastElementChild?.outerHTML;
+  // replies after the newest one drawn are new: by log time, so older pages added above or a reset don't count
+  const was = Math.max(-1, ...replyAts(view));
+  // the message at the top of the screen stays in place when the chat isn't following the bottom
+  const vt = view.getBoundingClientRect().top, top = [...view.querySelectorAll(".m[data-at]")].find((m) => m.getBoundingClientRect().bottom > vt);
+  const anchor = top && {at: top.dataset.at, off: top.getBoundingClientRect().top - vt};
+  let html, ph = "Message nadya";
+  if (cur === "quota") html = quotaView();
+  else if (!cur || cur === "nadya") html = nadyaView();
+  else if (cur === "blog") html = `<iframe src="${BLOG}" title="blog" onload="this.contentDocument?.addEventListener('click', (e) => window.filesLink(e))"></iframe>`;
+  else if (cur === "plan") html = todoView();
+  else if (cur === "projects") html = projectsView();
+  else if (isDoc(cur)) html = docView(...cur.split("/"));
+  else if (isFiles(cur)) html = filesView(cur.slice(6));
+  else if (cur === "new") html = newView();
+  else if (i?.r) { html = sessionView(i.r); ph = `Message ${i.r.name}`; }
+  else html = `<article><p class="meta">gone</p></article>`;
+  if (soft && html === lastView) return;
+  if (soft && cur === "blog") return;  // don't rebuild the blog under the reader
+  lastView = html;
+  const t = same && view.querySelector(".msgs > .typing");
+  if (t) dots = {cur, at: Date.now(), rect: t.getBoundingClientRect()};
+  view.innerHTML = html;
+  if (!soft) growing = 0;
+  // keep the dots' bounce going across redraws; a reply that arrives grows out of the dots bubble
+  view.querySelector(".typing")?.style.setProperty("--t", `-${Date.now() % 1200}ms`);
+  const chatty = !cur || cur === "nadya" || isPid(cur);
+  // only replies that came live: history drawn on open, on a switch or after a reset shows at once
+  const fresh = same && stream?.loaded ? [...view.querySelectorAll(".m:not(.me)[data-at]")].filter((m) => +m.dataset.at > was) : [];
+  if (!same) cap = null;
+  else if (fresh.length && keep && (low || cap === null)) cap = fresh[0].dataset.at;
+  shown = cur;
+  if (fresh.length) {
+    // a hidden tab shows them at once; a burst grows only its last 3
+    if (dots?.cur === cur && Date.now() - dots.at < 5e3 && !document.hidden) {
+      view.scrollTop = scrollTop;
+      growing = Date.now() + grow(fresh.slice(-3), dots.rect, view.querySelector(".msgs > .typing"), chatty && keep);
+    }
+    dots = null;
+  }
+  $("#say").q.placeholder = ph;
+  $("#say").hidden = !(!cur || cur === "nadya" || i?.r);  // the prompt only where it talks to nadya or a session
+  loadDraft();
+  $("#center").classList.toggle("nadya", !cur || cur === "nadya");
+  $("#mode").hidden = !chatty;
+  $("#mode").setAttribute("aria-pressed", term);
+  if (!soft) { pausedAt = 0; $("#newer").hidden = true; }
+  if (chatty && !soft) return toBottom();
+  if (chatty && keep) return keepUp();
+  view.scrollTop = soft ? scrollTop : 0;
+  const a = same && anchor && view.querySelector(`.m[data-at="${anchor.at}"]`);
+  if (a) view.scrollTop += a.getBoundingClientRect().top - vt - anchor.off;
+  autoTop = view.scrollTop;
+  if (chatty && same && view.querySelector(".msgs")?.lastElementChild?.outerHTML !== tail) $("#newer").hidden = false;
+}
+// rAF stops in a hidden tab: a timer ends each step anyway, so no reply stays hidden
+function tween(ms, f, ease = (t) => 1 - (1 - t) ** 2) {
+  return new Promise((done) => {
+    const t0 = performance.now();
+    let over = false;
+    const finish = () => { if (over) return; over = true; f(1); done(); };
+    const timer = setTimeout(finish, ms + 100);
+    const step = (now) => {
+      if (over) return;
+      const t = Math.min(1, (now - t0) / ms);
+      if (t < 1) { f(ease(t)); requestAnimationFrame(step); } else { clearTimeout(timer); finish(); }
+    };
+    requestAnimationFrame(step);
+  });
+}
+// each new reply starts as the dots bubble, widens to its width (200 ms), then grows down over its laid-out text at
+// 40 ms a line (3 s at most), the chat following its bottom; then the dots below show again (user). Returns how long it all takes.
+function grow(els, from, after, scroll) {
+  const sizes = els.map((el) => el.getBoundingClientRect()), lh = parseFloat(getComputedStyle(els[0]).lineHeight);
+  const times = sizes.map(({height}) => Math.min(3000, Math.max(150, (height - from.height) / lh * 40)));
+  for (const el of els) el.style.display = "none";
+  if (after) after.style.display = "none";
+  const v = $("#view");
+  // a bubble or the dots showing up below: scroll there over the step instead of at once
+  const glide = (s0, k) => { keepUp(); v.scrollTop = s0 + (v.scrollTop - s0) * k; autoTop = v.scrollTop; };
+  (async () => {
+    for (const [i, el] of els.entries()) {
+      const {width, height} = sizes[i], cut = Math.max(0, width - from.width);
+      Object.assign(el.style, {display: "", position: "relative", height: `${from.height}px`, overflow: "hidden", clipPath: `inset(0 ${cut}px 0 0 round 12px)`});
+      el.insertAdjacentHTML("beforeend", `<div class="typing" aria-hidden="true" style="--t: -${Date.now() % 1200}ms"><i></i><i></i><i></i></div>`);
+      const s0 = v.scrollTop;
+      await tween(200, (k) => { el.style.clipPath = `inset(0 ${cut * (1 - k)}px 0 0 round 12px)`; if (scroll && el.isConnected) glide(s0, k); });
+      el.lastChild.remove();
+      await tween(times[i], (k) => { el.style.height = `${from.height + (height - from.height) * k}px`; if (scroll && el.isConnected) keepUp(); }, (t) => t);
+      el.removeAttribute("style");
+      if (!el.isConnected) return;  // a redraw replaced the view
+    }
+    if (!after) return;
+    after.style.display = "";
+    after.animate([{opacity: 0}, {opacity: 1}], 200);
+    const s0 = v.scrollTop;
+    if (scroll) await tween(200, (k) => after.isConnected && glide(s0, k));
+  })();
+  return times.reduce((a, t) => a + t + 200, after ? 200 : 0);
+}
+// Claude Code wraps pasted text in <pasted_content id="..."> ... </pasted_content id="...">: show only the text
+const unpaste = (t) => t.replace(/<\/?pasted_content(?: id="[^"]*")?>\n?/g, "");
+// messages sent from this page, shown at once and dropped when the session's log has them
+let pending = [], pendId = 0;
+const norm = (t) => unpaste(t).replace(/\s+/g, " ").trim();
+function ackPending() {
+  if (!stream || !pending.length) return;
+  const seen = S.log.filter((e) => e.type === "user").map((e) => ({at: e.at * 1000, t: norm(e.text)}));
+  pending = pending.filter((p) => {
+    if (p.err || p.pid !== stream.pid) return true;
+    const t = norm(p.text);
+    // a log entry acks one bubble only (the same text sent twice); 10 s for clock skew between hosts
+    const k = seen.findIndex((e) => e.at > p.at - 10e3 && (e.t.includes(t) || (e.t.length >= 40 && t.startsWith(e.t.slice(0, 200)))));
+    if (k >= 0) seen.splice(k, 1);
+    return k < 0;
+  });
+}
+// an AskUserQuestion result reads `Your questions have been answered: "Q1"="A1", "Q2"="A2". You can now continue…`
+const answers = (t) => [...(t ?? "").matchAll(/"([^]*?)"="([^]*?)(?:"(?=, "|\. You can)|(…)$)/g)].map((m) => [m[1], m[2] + (m[3] ?? "")]);
+// a session's transcript as a chat, the same for nadya and every other session
+// chat or terminal (the pane text); each session opens in chat
+let term = false;
+const metaLine = (r) => `<p class="meta">${esc(r.pid)} · ${esc(r.path)} · ${r.state} ${ago(r.since)}</p>`;
+function chat(r) {
+  if (term) return `<pre class="term">${esc(S.screens[r.pid]?.text ?? "loading…")}</pre>`;
+  const log = stream?.pid === r.pid ? S.log : [];
+  const msgs = [];
+  for (const e of log) {
+    if (e.type === "result" && !e.error && e.text?.startsWith("Your questions have been answered:")) {
+      const qa = answers(e.text);
+      if (qa.length) msgs.push({at: e.at, me: true, body: qa.map(([q, a]) => `<span class="q">${esc(q.length > 80 ? q.slice(0, 80) + "…" : q)}</span>${autolink(esc(a))}`).join("<br>"), small: hhmm(e.at)});
+    }
+    if ((e.type !== "user" && e.type !== "text") || blank(e)) continue;
+    msgs.push({at: e.at, me: e.type === "user", body: e.type === "user" ? autolink(esc(unpaste(e.text).length > 600 ? unpaste(e.text).slice(0, 600) + "…" : unpaste(e.text))) : md(e.text), small: hhmm(e.at)});
+  }
+  const out = msgs.map((m) => `<div class="m ${m.me ? "me" : ""}" data-at="${m.at}">${m.body}<small>${m.small}</small></div>`);
+  // sent from here, not in the log yet: kept below everything until the log shows it
+  for (const p of pending.filter((x) => x.pid === r.pid)) {
+    const stale = !p.err && Date.now() - p.at > 120e3;
+    const note = p.err ? `not sent: ${esc(p.err)} · hold to take back` : stale ? "not seen yet · hold to take back" : esc(p.note ?? "sending…");
+    out.push(`<div class="m me ${p.err ? "fail" : stale ? "stale" : "pend"}" data-pend="${p.id}">${esc(p.text.length > 600 ? p.text.slice(0, 600) + "…" : p.text)}<small>${note}</small></div>`);
+  }
+  // the state turns idle before the log has the reply: keep the dots up to 5 s until the reply shows, so it grows out of them
+  const said = msgs.filter((m) => m.body && !m.me).length;
+  if (r.state === "busy") linger = {pid: r.pid, said, until: Date.now() + 5e3};
+  else if (linger?.pid === r.pid && linger.said === said && Date.now() < linger.until) setTimeout(() => drawView(true), linger.until - Date.now() + 50);
+  else linger = null;
+  if (linger?.pid === r.pid) out.push(`<div class="typing" role="status" aria-label="working"><i></i><i></i><i></i></div>`);
+  return `<div class="msgs">${out.join("") || `<p class="meta">${stream?.pid === r.pid ? "no messages yet" : "loading…"}</p>`}</div>`;
+}
+function nadyaView() {
+  const n = nadyaRow();
+  if (!n) return S.up?.includes("nadya") ? `<article><h1>nadya</h1><p class="meta">nadya isn't running.</p></article>` : "<article></article>";
+  return `<article>${metaLine(n)}${chat(n)}${dialogBox(n)}</article>`;
+}
+function dialogBox(r) {
+  const dg = r.state === "wait" && stream?.pid === r.pid ? S.screens[r.pid]?.dialog : null;
+  if (!dg?.options?.length) return r.state === "wait" && r.asking ? `<div class="need red"><b>Waiting: ${esc(r.asking)}</b><p>Reading the dialog from the pane…</p></div>` : "";
+  const labels = dg.options.map((o) => o.label);
+  // a multi-select: its checked options are filled with a ✓, not the first one
+  const multi = dg.options.some((o) => o.checked !== null);
+  return `<div class="need red"><b>${esc(dg.title ?? dg.question ?? "Dialog")}</b>${dg.body ? `<p>${esc(dg.body)}</p>` : ""}<div class="opts${multi ? " multi" : ""}" data-pick="${esc(r.pid)}" data-labels="${esc(JSON.stringify(labels))}">${dg.options.map((o, k) => `<button data-i="${k}"${o.checked !== null ? ` aria-pressed="${o.checked}"` : ""}>${o.checked ? "✓ " : ""}${esc(o.label)}${o.detail ? `<small>${esc(o.detail)}</small>` : ""}</button>`).join("")}</div></div>`;
+}
+function sessionView(r) {
+  return `<article><h1>${esc(r.name)}</h1>${metaLine(r)}${chat(r)}${dialogBox(r)}</article>`;
+}
+function todoRows(ts) {
+  return ts.map((t) => `<li class="${t.mark === "!" ? "x" : ""}"><span>${esc(t.text)}</span>${t.date ? `<small>${t.date}${t.time ? " " + t.time : ""}${t.mark === "!" ? " · reminded" : ""}</small>` : ""}</li>`).join("") || "<li><span class=meta>nothing</span></li>";
+}
+function todoView() {
+  const due = dueTodos();
+  return `<article><h1>plan</h1>${due.map((t) => `<div class="need"><b>${esc(t.text)}</b><p>due ${esc(t.date)} ${esc(t.time ?? "")}</p>${sent.has("todo:" + t.full) ? `<p class="done">✓ ${esc(sent.get("todo:" + t.full))}</p>` : `<div class="opts" data-todo="${esc(t.full)}" data-file="${t.file}"><button>done</button><button>snooze 1 h</button></div>`}</div>`).join("")}
+    <h2 class="h">reminders</h2><ul class="rows">${todoRows(S.reminders)}</ul>
+    <h2 class="h">todo</h2><ul class="rows">${todoRows(S.todo)}</ul>
+    <h2 class="h">ideas</h2><ul class="rows">${S.ideas.map((x) => `<li class="go" data-go="idea/${esc(x.file)}"><span>${esc(x.title)}</span></li>`).join("")}</ul></article>`;
+}
+function projectsView() {
+  const row = (x) => `<li class="go" data-go="project/${esc(x.file)}"><span>${esc(x.title)}</span>${x.running ? "<small>running</small>" : ""}</li>`;
+  const ps = projects(), open = ps.filter((x) => x.state !== "done"), done = ps.filter((x) => x.state === "done");
+  return `<article><h1>projects</h1><ul class="rows">${open.map(row).join("") || "<li><span class=meta>none</span></li>"}</ul>${done.length ? `<details><summary class="h">done (${done.length})</summary><ul class="rows">${done.map(row).join("")}</ul></details>` : ""}</article>`;
+}
+const docParent = (c) => c.startsWith("project/") ? "projects" : "plan";
+function projects() {
+  // state: running (a live <stem>-co, or <last part>-co: arcade-switch -> switch-co), else the Status: line's first word
+  const live = new Set(S.rows.map((r) => r.name)), order = ["running", "todo"];
+  const rank = (x) => (order.indexOf(x.state) + 3) % 3 + (x.state === "done") * 3;  // running, todo, other words, done
+  return S.projects.map((x) => {
+    const stem = x.file.replace(/\.md$/, "");
+    const running = live.has(`${stem}-co`) || live.has(`${stem.split("-").pop()}-co`);
+    return {...x, running, state: running ? "running" : x.status.split(/\s/)[0].toLowerCase()};
+  }).sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title));
+}
+function docView(kind, file) {
+  const all = kind === "idea" ? S.ideas : S.projects, x = all.find((y) => y.file === file), up = docParent(`${kind}/`);
+  return `<article class="doc"><p class="meta"><a href="#${up}" data-go="${up}">← ${up}</a> · ${esc(file)}</p>${x ? md(x.text, true) : `<p class="meta">${all.length ? `no such ${kind}` : "loading…"}</p>`}</article>`;
+}
+const fsize = (n) => n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+// a change in the last week as an age (3h, 2d), older ones as a date
+function changed(iso) {
+  const t = Date.parse(iso);
+  return Date.now() - t < 7 * 864e5 ? ago(t / 1000) : new Date(t).toLocaleDateString("en-CA", {year: Date.now() - t > 300 * 864e5 ? "numeric" : undefined, month: "short", day: "numeric"});
+}
+function filesView(path) {
+  const parts = path.split("/").filter(Boolean), dir = path === "" || path.endsWith("/");
+  const go = (p, t) => `<a href="#files/${esc(p)}" data-go="files/${esc(p)}">${esc(t)}</a>`;
+  const crumbs = [go("", "nadya"), ...parts.map((x, k) => k === parts.length - 1 ? `<b>${esc(x)}</b>` : go(`${parts.slice(0, k + 1).join("/")}/`, x))].join(" / ");
+  const raw = NADYA + encodeURI(path).replace(/#/g, "%23"), f = S.fs[path];
+  const head = `<p class="meta crumbs">${crumbs}${dir ? "" : ` · <a href="${esc(raw)}" target="_blank" rel="noopener" data-out>open ↗</a>`}</p>`;
+  if (!f) return `<article class="doc">${head}<p class="meta">loading…</p></article>`;
+  if (f.error) return `<article class="doc">${head}<p class="meta err">${esc(f.error)}</p></article>`;
+  if (f.list) {
+    const ls = [...f.list].sort((a, b) => b.is_dir - a.is_dir || a.name.localeCompare(b.name));
+    return `<article class="doc">${head}<ul class="rows fl">${ls.map((x) => `<li class="go${x.is_dir ? " dir" : ""}" data-go="files/${esc(path + x.name)}"><span>${esc(x.name)}</span><small>${x.is_dir ? "" : `<i class="sz">${fsize(x.size)} · </i>`}${changed(x.mod_time)}</small></li>`).join("") || "<li><span class=meta>empty</span></li>"}</ul></article>`;
+  }
+  if (f.img) return `<article class="doc">${head}<img src="${esc(f.img)}" alt="${esc(parts.at(-1))}"></article>`;
+  if (f.text == null) return `<article class="doc">${head}<p><a href="${esc(raw)}" target="_blank" rel="noopener" data-out>open ${esc(parts.at(-1))}</a> <small class="meta">${f.size ? fsize(f.size) : ""}</small></p></article>`;
+  if (/\.md$/i.test(path)) return `<article class="doc">${head}${md(f.text, {base: parts.slice(0, -1).map((x) => `${x}/`).join("")})}</article>`;
+  return `<article class="doc">${head}<pre class="plain">${esc(f.text)}</pre></article>`;
+}
+const HOSTS = ["nadya", "marx"];
+function newView() {
+  return `<article><h1>new session</h1><form id="new">
+    <fieldset class="seg"><legend>host</legend>${HOSTS.map((h, k) => `<label><input type="radio" name="host" value="${h}"${k ? "" : " checked"}><span>${h}</span></label>`).join("")}</fieldset>
+    <label>directory<input name="dir" value="~/" list="dirs" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" required></label>
+    <datalist id="dirs"></datalist>
+    <label>name (optional)<input name="name" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+    <label><input type="checkbox" name="focus"> focus (a window on the desk)</label>
+    <button>start</button><p class="meta" id="newmsg"></p></form></article>`;
+}
+async function dirHints(f) {
+  const {host, dir} = f;
+  const prefix = `${host.value}:${dir.value}`;
+  const d = await json(`${CCX}/dirs?prefix=${encodeURIComponent(prefix)}`).catch(() => null);
+  if (!d || `${host.value}:${dir.value}` !== prefix) return;
+  $("#dirs").innerHTML = d.dirs.map((x) => `<option value="${esc(x.slice(x.indexOf(":") + 1))}/">`).join("");
+}
+document.addEventListener("input", (e) => { if (e.target.form?.id === "new" && e.target.name !== "name") dirHints(e.target.form); });
+document.addEventListener("submit", async (e) => {
+  if (e.target.id !== "new") return;
+  e.preventDefault();
+  const f = e.target, msg = $("#newmsg");
+  const dir = f.dir.value.trim().replace(/(.)\/+$/, "$1");
+  f.querySelector("button").disabled = true;
+  msg.className = "meta"; msg.textContent = `starting a claude on ${f.host.value} in ${dir}…`;
+  try {
+    // a detached tmux session; with focus, a tmux window beside a claude already in dir, else a kitty window
+    const r = await post(`${CCX}/spawn`, {dir: `${f.host.value}:${dir}`, name: f.name.value.trim(), beside: true, focus: f.focus.checked});
+    if (!r.pid) throw new Error(r.error ?? "no pid");
+    for (let end = Date.now() + 15e3; !S.rows.some((x) => x.pid === r.pid) && Date.now() < end;) await new Promise((ok) => setTimeout(ok, 300));
+    cur = r.pid; push(); open();
+  } catch (err) {
+    msg.className = "err"; msg.textContent = err.message;
+    f.querySelector("button").disabled = false;
+  }
+});
+
+let qTab = "24h";
+const qOpen = new Set();  // the open rows of the quota view, kept across redraws
+const TOPN = 5;  // projects with their own row in the usage breakdown; the rest go into "others"
+// one color per project on the page: the PCOL.length busiest over all burn data (weeks and days) by rank, the rest gray.
+// Tableau 20 without its two grays (gray is "others"), the dark half first
+const PCOL = ["#4e79a7", "#f28e2b", "#59a14f", "#e15759", "#b07aa1", "#499894", "#b6992d", "#d37295", "#9d7660",
+  "#a0cbe8", "#ffbe7d", "#8cd17d", "#ff9d9a", "#d4a6c8", "#86bcb6", "#f1ce63", "#fabfd2", "#d7b5a6"];
+let pcolMap = null;
+function projColors(b) {
+  if (pcolMap) return pcolMap;
+  const tot = new Map();
+  for (const w of [...b.weeks, ...b.days]) for (const x of merged(w.projects ?? [])) tot.set(x.p, (tot.get(x.p) ?? 0) + x.w);
+  const ranked = [...tot].filter(([, w]) => w > 0).sort((a, b) => b[1] - a[1]);
+  pcolMap = new Map(ranked.slice(0, PCOL.length).map(([p], n) => [p, PCOL[n]]));
+  return pcolMap;
+}
+function quotaView() {
+  const u = S.usage, p = pace();
+  if (!u) return `<article><h1>quota</h1><p class="meta">no usage data</p></article>`;
+  const h = u.history.filter((x) => x.resetsAt === u.resetsAt);
+  const W = 600, H = 120, t0 = u.resetsAt - 7 * 86400e3;
+  const days = [];
+  for (let d = new Date(t0); d.setHours(24, 0, 0, 0) < u.resetsAt;) days.push(new Date(d));
+  const X = (t) => (t - t0) / (7 * 86400e3) * W;
+  // both the curve's end and the tick are now: u.at is only when one host's file was written, hours old when idle
+  const now = Math.min(Date.now(), u.resetsAt);
+  const pts = [...h, {at: now, used: u.used}].map((x) => `${(X(x.at)).toFixed(1)},${(H - x.used / 100 * H).toFixed(1)}`).join(" ");
+  return `<article><h1>quota</h1><div class="meta">${p ? `${p.x.toFixed(1)}x the pace that lasts to the reset · ` : ""}${p?.out ? `<b class="err">runs out ${day(p.out)}</b> · ` : ""}reset ${day(new Date(u.resetsAt))}</div>
+    <div class="big" style="color:${p?.out ? "var(--red)" : "inherit"}">${u.used}%</div>
+    <figure class="qg" style="--qc:${p?.out ? "var(--red)" : "var(--accent)"}"><div class="qm"><div class="meter"><i style="width:${u.used}%;background:var(--qc)"></i></div><s style="left:${X(now) / W * 100}%"></s></div><svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible" aria-label="quota used this week">${days.map((d) => `<line x1="${X(d).toFixed(1)}" y1="0" x2="${X(d).toFixed(1)}" y2="${H}" stroke="var(--gray)" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join("")}<line x1="0" y1="${H}" x2="${W}" y2="0" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/>${pts ? `<circle cx="${pts.split(" ").at(-1).split(",")[0]}" cy="${pts.split(" ").at(-1).split(",")[1]}" r="3.5" fill="var(--accent)"/>` : ""}</svg>
+    <div class="qd">${days.map((d) => `<span style="left:${(X(d) / W * 100).toFixed(2)}%">${d.toLocaleDateString(undefined, { weekday: "short" })}</span>`).join("")}</div></figure>
+    <p class="meta">The dashed line is the even pace from the start of the week to the reset.</p>${burnView()}</article>`;
+}
+// who used it (ccx api/burn): last week | this week | last 24h, then the days below, a row per project, its sessions on tap.
+// A % is of the limit: a project's share of the window's weighted tokens times what the log added
+// over it; a window with no log shows the share of its tokens instead
+function burnView() {
+  const b = S.burn;
+  const tabs = `<div class="tabs" role="group" aria-label="window">${[["last", "last week"], ["this", "this week"], ["24h", "last 24h"]].map(([k, l]) => `<button data-qt="${k}" aria-pressed="${qTab === k}">${l}</button>`).join("")}</div>`;
+  if (!b) return `${tabs}<p class="meta">loading…</p>`;
+  if (b.error) return `${tabs}<p class="meta err">${esc(b.error)}</p>`;
+  // last 24h and days: % of a day's even share (the limit / 7), so 100% is on pace
+  const perDay = (w) => (w === S.burn24 || b.days.includes(w)) && w.used != null ? 7 : 1;
+  const val = (w, x) => fmtQ(w.used == null ? x.share : x.q * perDay(w));
+  const down = b.down?.length ? `<p class="meta err">${b.down.map(([host, e]) => esc(`${host}: ${e}`)).join("<br>")}</p>` : "";
+  // the TOPN busiest projects of the window, the rest in one "others" row, last
+  const group = (w) => {
+    const ps = merged(w.projects).filter((x) => x.w > 0).sort((a, b) => b.w - a.w);
+    const shown = ps.slice(0, TOPN), rest = ps.slice(TOPN);
+    if (rest.length < 2) return shown.concat(rest);
+    const sum = (f) => rest.reduce((a, x) => a + (x[f] ?? 0), 0);
+    return shown.concat({p: "others", w: sum("w"), q: sum("q"), share: sum("share"), others: rest});
+  };
+  const cmap = projColors(b), pcol = (x) => (!x.others && cmap.get(x.p)) || "var(--gray)";
+  const list = (w, key) => {
+    const max = Math.max(1, ...group(w).map((x) => x.w));
+    const sub = (x) => x.others ? x.others.map((o) => ({n: o.p, w: o.w, q: o.q, share: o.share})) : x.sessions.filter((s) => s.w >= max / 1000);
+    return group(w).map((x) => { const k = `${key}/${x.p}`; return `<details class="bp" data-k="${esc(k)}" ${qOpen.has(k) ? "open" : ""}><summary><span class="nm">${x.others ? `<i>others</i> <small>${x.others.length}</small>` : esc(x.p)}</span><span class="bb"><i style="width:${(x.w / max * 100).toFixed(1)}%;background:${pcol(x)}"></i></span><b>${val(w, x)}</b></summary>${sub(x).map((s) => `<div class="bs"><span class="nm">${esc(s.n)} <small>${esc(s.host ?? "")}</small></span><span class="bb"><i style="width:${(s.w / max * 100).toFixed(1)}%;background:${pcol(x)}"></i></span><b>${val(w, s)}</b></div>`).join("")}</details>`; }).join("") || `<p class="meta">nothing used</p>`;
+  };
+  const when = (t) => esc(new Date(t).toLocaleString("en-CA", {weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false}));
+  const pace = (w) => (w.used / ((w.to - w.from) / 3600_000 / 168 * 100)).toFixed(1);
+  const head = (w) => `<p class="meta qw"><span>${when(w.from)} – ${when(w.to)}</span>${w.used == null ? "" : `<span>${perDay(w) > 1 ? `${fmtQ(w.used * 7)} of a day` : `${fmtQ(w.used)} of limit`} · ${pace(w)}x</span>`}</p>`;
+  const w = qTab === "24h" ? S.burn24 : b.weeks[qTab === "last" ? 0 : 1];
+  const view = !w ? `<p class="meta">loading…</p>` : w.error ? `<p class="meta err">${esc(w.error)}</p>` : `${head(w)}${list(w, qTab)}`;
+  // days: newest first, a stacked bar each (widths by weighted tokens, the busiest day full), its projects on tap
+  const days = [...b.days].reverse(), max = Math.max(1, ...days.map((d) => d.w)), inBars = new Set();
+  const rows = days.map((d) => {
+    const k = `days/${d.from}`;
+    const segs = group(d).map((x) => (inBars.add(x.others ? "" : x.p), x)).map((x) => `<i style="width:${(x.w / max * 100).toFixed(2)}%;background:${pcol(x)}" title="${esc(x.others ? `others (${x.others.length})` : x.p)}"></i>`).join("");
+    const label = `${d.label} ${new Date(d.from).getDate()}${d.from === b.weeks[1].from ? " ↻" : ""}`;
+    return `<details class="bp bd" data-k="${esc(k)}" ${qOpen.has(k) ? "open" : ""}><summary><span class="nm">${esc(label)}</span><span class="bb">${segs}</span><b>${d.used == null ? "" : fmtQ(d.used * 7)}</b></summary>${list(d, k)}</details>`;
+  }).join("");
+  const lg = [...cmap.keys()].filter((p) => inBars.has(p)), gray = [...inBars].some((p) => !cmap.has(p));
+  const legend = `<div class="legend">${lg.map((p) => `<span><i style="background:${cmap.get(p)}"></i>${esc(p)}</span>`).join("")}${gray ? `<span><i style="background:var(--gray)"></i>others</span>` : ""}</div>`;
+  return `${tabs}${view}<h3 class="qh">by day</h3>${legend}${rows}<p class="meta">A bar is the day's weighted tokens; the % what the usage log added that day, as a share of a day's even pace (the limit / 7, so 100% = on pace); tap a day for its projects. ↻ the weekly reset.</p>${down}`;
+}
+// a project's name as shown: a path's last part ("~/prj/bank" -> "bank"); /tmp dirs -> "tmp",
+// anything in .dotfiles or .claude -> "dotfiles" or "claude", "~/" -> "home", a dated dir -> its parent
+function pname(p) {
+  if (/^(\/private)?\/tmp\//.test(p)) return "tmp";
+  if (p.includes(".dotfiles")) return "dotfiles";
+  if (p.includes(".claude")) return "claude";
+  const parts = p.split("/").filter((x) => x && x !== "~");
+  if (!parts.length) return "home";
+  const last = /^\d/.test(parts.at(-1)) && parts.length > 1 ? parts.at(-2) : parts.at(-1);
+  return last.replace(/^\./, "");
+}
+// projects with the same shown name become one row (e.g. "ccx" and "~/prj/ccx")
+function merged(projects) {
+  const by = new Map();
+  for (const x of projects) {
+    const n = pname(x.p), m = by.get(n);
+    if (!m) { by.set(n, {...x, p: n}); continue; }
+    for (const f of ["w", "q", "share"]) m[f] = (m[f] ?? 0) + (x[f] ?? 0);
+    m.sessions = m.sessions.concat(x.sessions).sort((a, b) => b.w - a.w);
+  }
+  return [...by.values()];
+}
+const fmtQ = (q) => q == null ? "" : q < 0.05 ? "<0.1%" : `${q < 10 ? q.toFixed(1) : Math.round(q)}%`;
+document.addEventListener("toggle", (e) => { const k = e.target.dataset?.k; if (k) e.target.open ? qOpen.add(k) : qOpen.delete(k); }, true);
+
+// ---------- actions
+async function toNadya(text) {
+  const n = nadyaRow();
+  if (!n) throw new Error("nadya isn't running");
+  await post(`${CCX}/s/${n.pid}/type`, {text});
+}
+function context() {
+  if (!cur || cur === "nadya") return "";
+  if (cur === "blog") return "about the blog";
+  if (cur === "plan") return "plan";
+  if (cur === "projects") return "projects";
+  if (cur === "quota") return "about the quota";
+  const r = S.rows.find((x) => x.pid === cur);
+  return r ? `about ${r.name} (${r.pid})` : "";
+}
+// unsent text per session (cur, nadya when null), kept in localStorage; a week without typing drops it
+const drafts = JSON.parse(localStorage.cc_drafts ?? "{}");
+for (const [k, d] of Object.entries(drafts)) if (Date.now() - d.at > 7 * 864e5) delete drafts[k];
+let draftKey = null;
+function setDraft(k, t) {
+  if (t) drafts[k] = {t, at: Date.now()}; else delete drafts[k];
+  localStorage.cc_drafts = JSON.stringify(drafts);
+}
+function loadDraft() {
+  const k = cur ?? "nadya"; if (k === draftKey) return;
+  draftKey = k; $("#say").q.value = drafts[k]?.t ?? ""; fit();
+}
+// the box grows up with its text, to 40% of the visible height (the part above the phone's keyboard), then scrolls
+function fit() {
+  const q = $("#say").q, v = $("#view"), low = !pausedAt || atBottom(v);
+  const top = q.scrollTop;
+  q.style.height = "auto";
+  q.style.height = `${Math.min(q.scrollHeight + 2, (visualViewport?.height ?? innerHeight) * 0.4)}px`;
+  q.scrollTop = q.selectionEnd === q.value.length ? 1e9 : top;  // typing at the end: keep the last line in sight
+  if (low) keepUp();
+}
+visualViewport?.addEventListener("resize", () => { fit(); if (!pausedAt) keepUp(); });
+$("#say").q.oninput = (e) => { setDraft(draftKey, e.target.value); fit(); };
+// desktop: Enter sends, Shift+Enter is a newline; phone: Enter is a newline, the button sends
+$("#say").q.onkeydown = (e) => {
+  if (e.key !== "Enter" || e.shiftKey || e.isComposing || !matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+  e.preventDefault(); $("#say").requestSubmit();
+};
+$("#say").onsubmit = async (e) => {
+  e.preventDefault();
+  const q = e.target.q.value.trim(); if (!q) return;
+  const r = isPid(cur) ? S.rows.find((x) => x.pid === cur) : null;
+  const c = context(), text = r || !c ? q : `[cc, ${c}] ${q}`, to = r ?? nadyaRow();
+  if (!to) return alert("Not sent: nadya isn't running");
+  const p = {id: ++pendId, pid: to.pid, q, text, at: Date.now()};
+  // a dialog takes the paste and the Enter (which can pick its first option), so the text never reaches the session
+  if (hasDialog(to)) p.err = `${to.name} waits on a dialog; answer it first`;
+  const dk = draftKey;
+  pending.push(p); e.target.q.value = p.err ? q : ""; setDraft(dk, e.target.q.value); fit();
+  setTimeout(() => drawView(true), 121e3);
+  if (!r && cur !== "nadya") { cur = "nadya"; open(); } else drawView(true);
+  toBottom();
+  if (p.err) return;
+  try { await post(`${CCX}/s/${to.pid}/type`, {text}); }
+  catch (err) { p.err = err.message; if (!drafts[dk]) { setDraft(dk, q); if (draftKey === dk) { e.target.q.value = q; fit(); } } drawView(true); }
+};
+// a bubble not in the log yet: double-tap/double-click sends it now (Claude Code's ctrl+x ctrl+s: stops the turn, sends
+// the queue); hold 500 ms takes it back into the box (ccx unqueue drops the whole queue, so the others are typed again)
+const say = $("#say").q;
+const queued = (p) => !p.err;
+async function sendNow(p) {
+  try {
+    if (!queued(p)) {
+      if (hasDialog(S.rows.find((r) => r.pid === p.pid) ?? {})) return;  // the Enter would answer the dialog
+      p.err = null; p.at = Date.now(); drawView(true);
+      if (say.value.trim() === p.q) { say.value = ""; setDraft(draftKey, ""); fit(); }
+      await post(`${CCX}/s/${p.pid}/type`, {text: p.text});
+    }
+    p.note = "sending now…"; drawView(true);
+    await post(`${CCX}/s/${p.pid}/now`, {});
+  } catch (err) { p.err = err.message; drawView(true); }
+}
+async function unsend(p) {
+  pending = pending.filter((x) => x !== p);
+  if (!say.value.includes(p.q)) { say.value = say.value.trim() ? `${say.value.trimEnd()}\n${p.q}` : p.q; setDraft(draftKey, say.value); fit(); }
+  drawView(true); say.focus();
+  if (!queued(p)) return;
+  try {
+    await post(`${CCX}/s/${p.pid}/unqueue`, {});
+    for (const o of pending.filter((x) => x.pid === p.pid && queued(x))) { o.at = Date.now(); await post(`${CCX}/s/${o.pid}/type`, {text: o.text}); }
+  } catch (err) { p.err = `not taken back: ${err.message}`; pending.push(p); drawView(true); }
+}
+let hold = null, lastTap = null;
+document.addEventListener("pointerdown", (e) => {
+  const b = e.target.closest(".m[data-pend]"); if (!b || e.button) return;
+  const p = pending.find((x) => x.id === +b.dataset.pend); if (!p) return;
+  hold = {p, x: e.clientX, y: e.clientY, t: setTimeout(() => { hold = null; lastTap = null; unsend(p); }, 500)};
+});
+document.addEventListener("pointermove", (e) => { if (hold && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 10) { clearTimeout(hold.t); hold = null; } });
+document.addEventListener("pointercancel", () => { if (hold) { clearTimeout(hold.t); hold = null; } });
+document.addEventListener("pointerup", () => {
+  if (!hold) return;
+  clearTimeout(hold.t);
+  const {p} = hold; hold = null;
+  if (lastTap?.p === p && Date.now() - lastTap.at < 400) { lastTap = null; getSelection()?.removeAllRanges(); sendNow(p); return; }
+  lastTap = {p, at: Date.now()};
+});
+document.addEventListener("contextmenu", (e) => { if (e.target.closest(".m[data-pend]")) e.preventDefault(); });
+document.addEventListener("click", async (e) => {
+  if (e.target.closest(".m[data-pend]")) return;
+  if (e.target.closest("#qbtn")) { cur = "quota"; push(); open(); loadBurn(); return; }
+  const qt = e.target.closest("[data-qt]"); if (qt) { qTab = qt.dataset.qt; drawView(true); return; }
+  if (e.target.closest("#add")) { cur = "new"; push(); open(); dirHints($("#new")); return; }
+  // on the phone, the title of an open view goes back like "‹"
+  if (e.target.closest("#title") && !(narrow() && document.body.classList.contains("view"))) { cur = "nadya"; push(); open(); return; }
+  if (e.target.closest("#back, #title")) { if (history.state?.cc) history.back(); else document.body.classList.remove("view"); return; }
+  const row = e.target.closest(".it"); if (row) { cur = row.dataset.id; push(); if (cur === "blog") localStorage.cc_blog_seen = Date.now(); if (cur === "plan" || cur === "projects") loadTodo(); open(); if ((cur === "nadya" || cur.includes(".")) && matchMedia("(hover: hover) and (pointer: fine)").matches) $("#say").q.focus(); return; }
+  if (filesLink(e)) return;
+  const go = e.target.closest("[data-go]"); if (go) { e.preventDefault(); cur = go.dataset.go; push(isDoc(cur) || isFiles(cur)); if (cur === "plan" || cur === "projects") loadTodo(); open(); return; }
+  const b = e.target.closest(".opts button"); if (!b) return;
+  const box = b.parentElement; [...box.children].forEach((x) => x.disabled = true);
+  try {
+    if (box.dataset.pick) await post(`${CCX}/s/${box.dataset.pick}/pick`, {i: +b.dataset.i, labels: JSON.parse(box.dataset.labels)});
+    else if (box.dataset.todo) { setTimeout(loadTodo, 60e3); await toNadya(`[cc, ${box.dataset.file}] ${b.textContent === "done" ? "mark done" : "snooze 1 h"}: ${box.dataset.todo.slice(0, 200)}`); sent.set("todo:" + box.dataset.todo, b.textContent === "done" ? "sent to nadya: done" : "sent to nadya: snooze 1 h"); }
+    // a multi-select toggle stays in the dialog: the next screen read shows the box checked
+    if (!box.classList.contains("multi")) box.outerHTML = box.dataset.pick ? `<p class="done">✓ ${esc(JSON.parse(box.dataset.labels)[b.dataset.i])}</p>` : "";
+    draw(); drawView(true);
+  } catch (err) { box.insertAdjacentHTML("afterend", `<p class="err">${esc(err.message)}</p>`); [...box.children].forEach((x) => x.disabled = false); }
+});
+// a plain click on a link into ~/nadya (https://nadya.giraffe-yo.ts.net/nadya/..., http://nadya/nadya/..., /nadya/...) opens it
+// in the files tab; ctrl/cmd/shift/middle-click still open a tab, and data-out links (the files tab's "open ↗") always do
+window.filesLink = filesLink;  // for the blog iframe's onload
+function filesLink(e) {
+  const a = e.target.closest?.("a[href]");
+  if (!a || a.dataset.out != null || e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return false;
+  const u = new URL(a.href, location.href);
+  if (![location.host, "nadya", "nadya.giraffe-yo.ts.net"].includes(u.host) || !/^\/nadya(\/|$)/.test(u.pathname)) return false;
+  e.preventDefault();
+  const path = decodeURIComponent(u.pathname.replace(/^\/nadya\/?/, ""));
+  cur = path ? `files/${path}` : "files"; push(true); open();
+  return true;
+}
+// phone: opening an item is a history entry, so the browser's back (and the swipe) returns to the list
+const narrow = () => matchMedia("(max-width: 760px)").matches;
+function push(deeper) {
+  // desktop: only a step inside the files tab is a history entry, so back and forward move through it
+  if (!narrow()) { if (isFiles(cur) && deeper) history.pushState({cc: cur}, ""); return; }
+  if (history.state?.cc && !deeper) history.replaceState({cc: cur}, "");
+  else history.pushState({cc: cur}, "");
+}
+addEventListener("popstate", (e) => {
+  if (e.state?.cc) { cur = e.state.cc; open(); }
+  else document.body.classList.remove("view");
+});
+// a hash typed or pasted, or back on desktop to an entry with no state: open what it names (the phone's list has no state)
+addEventListener("hashchange", () => {
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (!h || h === cur || (narrow() && !history.state?.cc)) return;
+  cur = isDoc(h) || isFiles(h) ? h : h.split("/")[0]; open();
+});
+function open() {
+  document.body.classList.add("view");
+  term = false;
+  setHash();
+  const pid = cur === "nadya" || cur === null ? nadyaRow()?.pid : isPid(cur) ? cur : null;
+  follow(pid);
+  if (isFiles(cur)) loadPath(cur.slice(6));
+  draw(); drawView(); fit();  // a draft restored while the view was hidden had no height to measure
+}
+
+// ---------- start
+listen();
+loadUsage(); loadBlog(); loadTodo();
+setInterval(loadUsage, 5 * 60e3); setInterval(loadBlog, 60e3); setInterval(loadTodo, 30e3);
+// back on the tab (or the phone woke up): read everything again at once
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { loadUsage(); loadBlog(); loadTodo(); if (isFiles(cur)) loadPath(cur.slice(6)); } });
+setInterval(draw, 30e3);  // ages
+// on start the input takes the focus (desktop only: on a phone it would open the keyboard)
+const wait = setInterval(() => {
+  if (!S.rows.length) return;
+  clearInterval(wait);
+  if (cur) open();
+  if (!matchMedia("(pointer: coarse)").matches && !$("#say").hidden) $("#say").q.focus();
+}, 200);
+</script>
+</body>
+</html>
