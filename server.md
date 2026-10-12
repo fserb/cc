@@ -129,6 +129,10 @@ All JSON, all under the page's own path.
     POST api/s/<pid>/pick   {i, labels}    option i of the dialog, refused unless its
                                            labels are still `labels`
     POST api/s/<pid>/esc                   Escape
+    POST api/s/<pid>/now                   ctrl+x ctrl+s, Claude Code's "send now": with an
+                                           empty input, stops the turn and sends the queue
+    POST api/s/<pid>/unqueue               drops every queued message (Up moves them into the
+                                           input, 200 ctrl+u empty it); the turn goes on
     POST api/spawn  {dir, after?, mkdir?}
                                    with `after`, a pane id: a new tmux window right after
                                    that pane's, in its session. Without: a new kitty

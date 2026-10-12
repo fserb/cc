@@ -417,7 +417,7 @@ export class Server {
         mkdir: body.mkdir === true, name: String(body.name ?? ""), focus});
       return r.error ? json(r, r.pane ? 502 : 409) : json({...r, after});
     }
-    const m = path.match(/^\/api\/s\/(\d+)\/(log|events|type|pick|esc|screen|send|select|close)$/);
+    const m = path.match(/^\/api\/s\/(\d+)\/(log|events|type|pick|esc|now|unqueue|screen|send|select|close)$/);
     if (!m) return json({error: "not found"}, 404);
     const [, pidText, verb] = m, pid = Number(pidText);
     // the pid has to be a claude in the current poll: a pane whose claude exited types
@@ -454,6 +454,10 @@ export class Server {
       return answer(await pick(inst, Number(body.i), body.labels));
     }
     if (verb === "esc") return answer(await sendKeys(inst, ["Escape"]));
+    // Claude Code's chat:sendNow: with an empty input it stops the turn and sends the queued messages
+    if (verb === "now") return answer(await sendKeys(inst, ["C-x", "C-s"]));
+    // Up moves every queued message into the input, and ctrl+u deletes a line, then the newline before it
+    if (verb === "unqueue") return answer(await sendKeys(inst, ["Up", ...Array(200).fill("C-u")]));
     if (verb === "select") {
       return answer(await select(inst), {ok: true, background: await tmuxBackground()});
     }

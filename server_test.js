@@ -49,6 +49,7 @@ Deno.test("Server: the list, and a pid not in the poll is 404 before any action"
   eq((await call(s, "/api/s/7/log")).status, 404, "log on an unknown pid");
   eq((await post(s, "/api/s/7/type", '{"text":"rm -rf"}')).status, 404, "type on one");
   eq((await post(s, "/api/s/7/esc")).status, 404, "esc on one");
+  eq((await post(s, "/api/s/7/now")).status, 404, "now on one");
   eq((await call(s, "/api/nope")).status, 404, "an unknown route");
 });
 
@@ -58,6 +59,8 @@ Deno.test("Server: an instance outside tmux is read-only", async () => {
   eq([r.status, (await r.json()).error], [409, "pid 6 is not inside tmux; nothing to type into"],
     "type");
   eq((await post(s, "/api/s/6/esc")).status, 409, "esc");
+  eq((await post(s, "/api/s/6/now")).status, 409, "now");
+  eq((await post(s, "/api/s/6/unqueue")).status, 409, "unqueue");
   eq((await post(s, "/api/s/6/type")).status, 400, "no text");
   eq(await (await call(s, "/api/s/6/log")).json(), {events: [], start: 0, end: 0},
     "no sessionId, no history");
