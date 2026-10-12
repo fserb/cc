@@ -215,6 +215,7 @@ export async function close(inst, wait = 2000) {
     }
   }
   if (!inst.pane) return null;
+  // a pane whose command was claude itself (ccx new) closes when claude exits
   const r = await run("tmux", "kill-pane", "-t", inst.pane);
-  return r.code === 0 ? null : TMUX_ERR(r);
+  return r.code === 0 || /can't find pane/.test(r.err) ? null : TMUX_ERR(r);
 }
