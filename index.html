@@ -253,7 +253,7 @@ async function loadBlog() {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const posts = doc.querySelector("#posts");
   if (!posts) return;
-  S.posts = [...posts.querySelectorAll("article")].map((a) => ({title: a.querySelector("h2")?.textContent.trim(), time: a.querySelector("time")?.textContent.trim()}));
+  S.posts = [...posts.querySelectorAll("article")].map((a) => ({title: (a.querySelector("h2") ?? a.querySelector("p:not(.meta) b") ?? a.querySelector("p:not(.meta)"))?.textContent.trim(), time: a.querySelector("time")?.textContent.trim()}));
   draw();
 }
 async function loadTodo() {
