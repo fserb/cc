@@ -30,17 +30,17 @@
   .m .typing { position: absolute; left: 0; top: 0; background: none; }
 </style>
 <header>
-  <button data-len="short" aria-pressed="true">short</button><button data-len="long" aria-pressed="false">long</button>
+  <button data-len="short" aria-pressed="true">short</button><button data-len="long" aria-pressed="false">long</button><button data-len="two" aria-pressed="false">2 at once</button><button data-len="apart" aria-pressed="false">2, 2 s apart</button>
   <span style="width: 0.6rem"></span>
   <button data-pin="bottom" aria-pressed="false">follow bottom</button><button data-pin="top" aria-pressed="true">stop at reply top</button>
+  <span style="width: 0.6rem"></span>
+  <button data-ms="20" aria-pressed="false">20 ms/line</button><button data-ms="35" aria-pressed="true">35 ms/line</button><button data-ms="50" aria-pressed="false">50 ms/line</button>
   <span style="width: 0.6rem"></span>
   <button id="all">replay all</button>
 </header>
 <main>
   <section data-v="now"><div><h2>now</h2><button>replay</button></div><div class="view"></div></section>
   <section data-v="steps"><div><h2>1 width, then height uncovers the text</h2><button>replay</button></div><div class="view"></div></section>
-  <section data-v="fade"><div><h2>2 grow, then text fades</h2><button>replay</button></div><div class="view"></div></section>
-  <section data-v="slide"><div><h2>3 no grow, slide up</h2><button>replay</button></div><div class="view"></div></section>
 </main>
 <script type="module">
 const $$ = (s, e = document) => [...e.querySelectorAll(s)];
@@ -65,93 +65,88 @@ const LONG = `<p>Found it. When a reply arrives, cc swaps the chat's HTML and sc
 <p>For a reply taller than the screen, following the bottom means you land on its last lines. Stopping when the reply's top reaches the top of the screen means you start reading at its first line, and the "↓ new" button takes you the rest of the way.</p>
 <p>Mocks are in <code>mocks/arrive.html</code>, with a replay button per variant.</p><small>14:07</small>`;
 const DOTS = `<div class="typing"><i></i><i></i><i></i></div>`;
-let len = "short", pin = "top";
+const BATCHES = {short: [[SHORT]], long: [[LONG]], two: [[SHORT, LONG]], apart: [[SHORT], [LONG]]};
+let len = "short", pin = "top", ms = 35;
 
-const ease = (t) => 1 - (1 - t) ** 3;
-function tween(ms, f) {
+const easeOut = (t) => 1 - (1 - t) ** 2;
+function tween(dur, f, ease = easeOut) {
   return new Promise((done) => {
     const t0 = performance.now();
-    const step = (now) => { const t = Math.min(1, (now - t0) / ms); f(ease(t)); t < 1 ? requestAnimationFrame(step) : done(); };
+    const step = (now) => { const t = Math.min(1, (now - t0) / dur); f(ease(t)); t < 1 ? requestAnimationFrame(step) : done(); };
     requestAnimationFrame(step);
   });
 }
-// where the view should be scrolled: the bottom, or (stop at reply top) no further than the reply's top
-function target(view, reply) {
+const atBottom = (v) => v.scrollHeight - v.scrollTop - v.clientHeight < 40;
+// the bottom, or (stop at reply top) no further than the top of the first message that came while you were at the bottom
+function target(view) {
   const bottom = view.scrollHeight - view.clientHeight;
-  if (pin !== "top") return bottom;
-  return Math.min(bottom, reply.offsetTop - view.offsetTop - 16);
+  if (pin !== "top" || !view.cap) return bottom;
+  return Math.min(bottom, view.cap.offsetTop - view.offsetTop - 16);
 }
 
 function reset(sec) {
   const view = sec.querySelector(".view");
-  sec.run = (sec.run ?? 0) + 1;
+  const run = sec.run = (sec.run ?? 0) + 1;
   view.innerHTML = `<div class="msgs">${BEFORE}${DOTS}</div>`;
   view.scrollTop = 1e9;
-  const run = sec.run;
-  setTimeout(() => run === sec.run && arrive[sec.dataset.v](view), 1200);
+  view.cap = null;
+  const batches = BATCHES[len];
+  batches.forEach((b, i) => setTimeout(() => run === sec.run && arrive[sec.dataset.v](view, b, i < batches.length - 1), 1200 + i * 2500));
 }
-function swap(view) {
-  const dots = view.querySelector(".typing"), from = dots.getBoundingClientRect();
-  const reply = document.createElement("div");
-  reply.className = "m";
-  reply.innerHTML = len === "long" ? LONG : SHORT;
-  dots.replaceWith(reply);
-  const {width, height} = reply.getBoundingClientRect();
-  return {reply, from, width, height};
+function bubble(html) {
+  const el = document.createElement("div");
+  el.className = "m";
+  el.innerHTML = html;
+  return el;
 }
 
 const arrive = {
-  // today's cc: swap, scroll to the bottom at once, unclip downward
-  now(view) {
-    const {reply, from, height} = swap(view);
+  // today's cc: swap, scroll to the bottom at once, unclip the first new bubble downward
+  now(view, batch, more) {
+    const dots = view.querySelector(".typing"), from = dots.getBoundingClientRect();
+    const els = batch.map(bubble);
+    dots.replaceWith(...els);
+    if (more) els.at(-1).insertAdjacentHTML("afterend", DOTS);
+    const {height} = els[0].getBoundingClientRect();
     const o = {duration: 350, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)"};
-    reply.animate([{clipPath: `inset(0 0 ${Math.max(0, height - from.height)}px 0 round 12px)`}, {clipPath: "inset(0 round 12px)"}], o);
-    for (const c of reply.children) c.animate([{opacity: 0}, {opacity: 0, offset: 0.4}, {opacity: 1}], o);
+    els[0].animate([{clipPath: `inset(0 0 ${Math.max(0, height - from.height)}px 0 round 12px)`}, {clipPath: "inset(0 round 12px)"}], o);
+    for (const c of els[0].children) c.animate([{opacity: 0}, {opacity: 0, offset: 0.4}, {opacity: 1}], o);
     view.scrollTop = 1e9;
   },
-  // the dots bubble widens to the reply's width, then grows down over the laid-out text, uncovering it, with the scroll following
-  async steps(view) {
-    const top = view.scrollTop;
-    const {reply, from, width, height} = swap(view);
-    const kids = [...reply.children];
-    for (const c of kids) c.style.visibility = "hidden";
-    Object.assign(reply.style, {position: "relative", height: `${from.height}px`, overflow: "hidden"});
-    reply.insertAdjacentHTML("beforeend", DOTS);
-    const dots = reply.lastChild;
-    view.scrollTop = top;
-    await tween(200, (k) => reply.style.clipPath = `inset(0 ${(width - from.width) * (1 - k)}px 0 0 round 12px)`);
-    dots.remove();
-    for (const c of kids) c.style.visibility = "";
-    await tween(350, (k) => {
-      reply.style.height = `${from.height + (height - from.height) * k}px`;
-      view.scrollTop = target(view, reply);
-    });
-    reply.removeAttribute("style");
-  },
-  // width and height together, then the text fades in
-  async fade(view) {
-    const top = view.scrollTop;
-    const {reply, from, width, height} = swap(view);
-    const kids = [...reply.children];
-    for (const c of kids) c.style.opacity = 0;
-    Object.assign(reply.style, {height: `${from.height}px`, overflow: "hidden"});
-    view.scrollTop = top;
-    await tween(350, (k) => {
-      reply.style.clipPath = `inset(0 ${(width - from.width) * (1 - k)}px 0 0 round 12px)`;
-      reply.style.height = `${from.height + (height - from.height) * k}px`;
-      view.scrollTop = target(view, reply);
-    });
-    reply.removeAttribute("style");
-    for (const c of kids) { c.style.opacity = ""; c.animate([{opacity: 0}, {opacity: 1}], 200); }
-  },
-  // the reply is laid out in full; the chat scrolls up to it while it fades in
-  async slide(view) {
-    const top = view.scrollTop;
-    const {reply} = swap(view);
-    view.scrollTop = top;
-    const s0 = view.scrollTop, s1 = target(view, reply);
-    reply.animate([{opacity: 0, transform: "translateY(12px)"}, {opacity: 1, transform: "none"}], {duration: 350, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)"});
-    await tween(350, (k) => view.scrollTop = s0 + (s1 - s0) * k);
+  // each new bubble starts as the dots bubble, widens to its width, then grows down over its laid-out text, uncovering it
+  async steps(view, batch, more) {
+    if (atBottom(view)) view.cap = null;
+    let at = view.querySelector(".typing");
+    const from = at.getBoundingClientRect();
+    for (const html of batch) {
+      const top = view.scrollTop;
+      const el = bubble(html);
+      if (at.classList.contains("typing")) at.replaceWith(el); else at.after(el);
+      at = el;
+      view.cap ??= el;
+      const {width, height} = el.getBoundingClientRect();
+      const kids = [...el.children];
+      for (const c of kids) c.style.visibility = "hidden";
+      Object.assign(el.style, {position: "relative", height: `${from.height}px`, overflow: "hidden", clipPath: `inset(0 ${width - from.width}px 0 0 round 12px)`});
+      el.insertAdjacentHTML("beforeend", DOTS);
+      const dots = el.lastChild;
+      view.scrollTop = top;
+      view.scrollTop = target(view);
+      await tween(200, (k) => el.style.clipPath = `inset(0 ${(width - from.width) * (1 - k)}px 0 0 round 12px)`);
+      dots.remove();
+      for (const c of kids) c.style.visibility = "";
+      // the height grows at ms per line of text, at a steady speed
+      const lines = (height - from.height) / parseFloat(getComputedStyle(el).lineHeight);
+      await tween(Math.max(150, lines * ms), (k) => {
+        el.style.height = `${from.height + (height - from.height) * k}px`;
+        view.scrollTop = target(view);
+      }, (t) => t);
+      el.removeAttribute("style");
+    }
+    if (!more) return;
+    at.insertAdjacentHTML("afterend", DOTS);
+    at.nextSibling.animate([{opacity: 0}, {opacity: 1}], 200);
+    view.scrollTop = target(view);
   },
 };
 
@@ -159,10 +154,10 @@ const secs = $$("section");
 for (const sec of secs) { sec.querySelector("button").onclick = () => reset(sec); reset(sec); }
 $("#all").onclick = () => secs.forEach(reset);
 function $(s) { return document.querySelector(s); }
-for (const b of $$("header button[data-len], header button[data-pin]")) b.onclick = () => {
-  const k = b.dataset.len ? "len" : "pin";
+for (const b of $$("header button[data-len], header button[data-pin], header button[data-ms]")) b.onclick = () => {
+  const k = b.dataset.len ? "len" : b.dataset.pin ? "pin" : "ms";
   for (const o of $$(`header button[data-${k}]`)) o.setAttribute("aria-pressed", o === b);
-  if (k === "len") len = b.dataset.len; else pin = b.dataset.pin;
+  if (k === "len") len = b.dataset.len; else if (k === "pin") pin = b.dataset.pin; else ms = +b.dataset.ms;
   secs.forEach(reset);
 };
 </script>
