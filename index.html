@@ -65,6 +65,7 @@
   .m { align-self: flex-start; max-width: 78%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--bubble); overflow-wrap: anywhere; } .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); } .m.me small { text-align: right; } .m .q { display: block; font-size: 0.75rem; opacity: 0.75; }
   .m a { color: var(--accent); } .m.me a { color: inherit; }
   .m.me.pend { opacity: 0.5; } .m.me[data-pend] { white-space: pre-wrap; } .m.me.stale { opacity: 0.5; cursor: pointer; } .m.me.fail { background: var(--red); opacity: 0.85; cursor: pointer; }
+  @media (pointer: coarse) { .m[data-pend] { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; } }  /* a long press takes it back, not selects */
   .m small { display: block; text-align: left; font-size: 0.6rem; opacity: 0.7; margin-top: 0.15rem; }
   .m p { margin: 0 0 0.4rem; } .m p:last-of-type { margin: 0; } .m ul { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; } .m code { font: 0.88em var(--mono); }
   .typing { align-self: flex-start; display: flex; gap: 4px; padding: 0.75rem 0.9rem; border-radius: 12px; background: var(--bubble); }
@@ -619,7 +620,7 @@ function chat(r) {
   // sent from here, not in the log yet: kept below everything until the log shows it
   for (const p of pending.filter((x) => x.pid === r.pid)) {
     const stale = !p.err && Date.now() - p.at > 120e3;
-    const note = p.err ? `not sent: ${esc(p.err)} · tap to dismiss` : stale ? "not seen yet · tap to dismiss" : "sending…";
+    const note = p.err ? `not sent: ${esc(p.err)} · hold to take back` : stale ? "not seen yet · hold to take back" : esc(p.note ?? "sending…");
     out.push(`<div class="m me ${p.err ? "fail" : stale ? "stale" : "pend"}" data-pend="${p.id}">${esc(p.text.length > 600 ? p.text.slice(0, 600) + "…" : p.text)}<small>${note}</small></div>`);
   }
   // the state turns idle before the log has the reply: keep the dots up to 5 s until the reply shows, so it grows out of them
@@ -886,7 +887,7 @@ $("#say").onsubmit = async (e) => {
   const r = isPid(cur) ? S.rows.find((x) => x.pid === cur) : null;
   const c = context(), text = r || !c ? q : `[cc, ${c}] ${q}`, to = r ?? nadyaRow();
   if (!to) return alert("Not sent: nadya isn't running");
-  const p = {id: ++pendId, pid: to.pid, text, at: Date.now()};
+  const p = {id: ++pendId, pid: to.pid, q, text, at: Date.now()};
   // a dialog takes the paste and the Enter (which can pick its first option), so the text never reaches the session
   if (hasDialog(to)) p.err = `${to.name} waits on a dialog; answer it first`;
   const dk = draftKey;
@@ -898,8 +899,50 @@ $("#say").onsubmit = async (e) => {
   try { await post(`${CCX}/s/${to.pid}/type`, {text}); }
   catch (err) { p.err = err.message; if (!drafts[dk]) { setDraft(dk, q); if (draftKey === dk) { e.target.q.value = q; fit(); } } drawView(true); }
 };
+// a bubble not in the log yet: double-tap/double-click sends it now (Claude Code's ctrl+x ctrl+s: stops the turn, sends
+// the queue); hold 500 ms takes it back into the box (ccx unqueue drops the whole queue, so the others are typed again)
+const say = $("#say").q;
+const queued = (p) => !p.err;
+async function sendNow(p) {
+  try {
+    if (!queued(p)) {
+      if (hasDialog(S.rows.find((r) => r.pid === p.pid) ?? {})) return;  // the Enter would answer the dialog
+      p.err = null; p.at = Date.now(); drawView(true);
+      if (say.value.trim() === p.q) { say.value = ""; setDraft(draftKey, ""); fit(); }
+      await post(`${CCX}/s/${p.pid}/type`, {text: p.text});
+    }
+    p.note = "sending now…"; drawView(true);
+    await post(`${CCX}/s/${p.pid}/now`, {});
+  } catch (err) { p.err = err.message; drawView(true); }
+}
+async function unsend(p) {
+  pending = pending.filter((x) => x !== p);
+  if (!say.value.includes(p.q)) { say.value = say.value.trim() ? `${say.value.trimEnd()}\n${p.q}` : p.q; setDraft(draftKey, say.value); fit(); }
+  drawView(true); say.focus();
+  if (!queued(p)) return;
+  try {
+    await post(`${CCX}/s/${p.pid}/unqueue`, {});
+    for (const o of pending.filter((x) => x.pid === p.pid && queued(x))) { o.at = Date.now(); await post(`${CCX}/s/${o.pid}/type`, {text: o.text}); }
+  } catch (err) { p.err = `not taken back: ${err.message}`; pending.push(p); drawView(true); }
+}
+let hold = null, lastTap = null;
+document.addEventListener("pointerdown", (e) => {
+  const b = e.target.closest(".m[data-pend]"); if (!b || e.button) return;
+  const p = pending.find((x) => x.id === +b.dataset.pend); if (!p) return;
+  hold = {p, x: e.clientX, y: e.clientY, t: setTimeout(() => { hold = null; lastTap = null; unsend(p); }, 500)};
+});
+document.addEventListener("pointermove", (e) => { if (hold && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 10) { clearTimeout(hold.t); hold = null; } });
+document.addEventListener("pointercancel", () => { if (hold) { clearTimeout(hold.t); hold = null; } });
+document.addEventListener("pointerup", () => {
+  if (!hold) return;
+  clearTimeout(hold.t);
+  const {p} = hold; hold = null;
+  if (lastTap?.p === p && Date.now() - lastTap.at < 400) { lastTap = null; getSelection()?.removeAllRanges(); sendNow(p); return; }
+  lastTap = {p, at: Date.now()};
+});
+document.addEventListener("contextmenu", (e) => { if (e.target.closest(".m[data-pend]")) e.preventDefault(); });
 document.addEventListener("click", async (e) => {
-  const pd = e.target.closest(".m.fail[data-pend], .m.stale[data-pend]"); if (pd) { pending = pending.filter((p) => p.id !== +pd.dataset.pend); drawView(true); return; }
+  if (e.target.closest(".m[data-pend]")) return;
   if (e.target.closest("#qbtn")) { cur = "quota"; push(); open(); loadBurn(); return; }
   const qt = e.target.closest("[data-qt]"); if (qt) { qTab = qt.dataset.qt; drawView(true); return; }
   if (e.target.closest("#add")) { cur = "new"; push(); open(); dirHints($("#new")); return; }
