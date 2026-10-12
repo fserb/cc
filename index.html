@@ -47,7 +47,7 @@
   .it time { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
   #center { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
   #center.nadya { --accent: #d81212; }  /* nadya's chat in the red of the star icon */
-  #view { overflow: auto; grid-area: 1 / 1; }
+  #view { overflow: auto; overflow-anchor: none; grid-area: 1 / 1; }
   #newer { grid-area: 1 / 1; align-self: end; justify-self: center; margin-bottom: 0.8rem; border: 0; background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 0.35rem 1rem; font: inherit; font-size: 0.85rem; cursor: pointer; box-shadow: 0 1px 4px #0003; }
   article { max-width: 46rem; margin: 0 auto; padding: 1.6rem 2rem 2rem; }
   article h1 { font-size: 1.55rem; line-height: 1.25; margin: 0 0 0.3rem; }
@@ -69,6 +69,7 @@
   .typing { align-self: flex-start; display: flex; gap: 4px; padding: 0.75rem 0.9rem; border-radius: 12px; background: var(--bubble); }
   .typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: bob 1.2s ease-in-out infinite; animation-delay: var(--t, 0s); }
   .typing i:nth-child(2) { animation-delay: calc(var(--t, 0s) + 0.15s); } .typing i:nth-child(3) { animation-delay: calc(var(--t, 0s) + 0.3s); }
+  .m > .typing { position: absolute; inset: 0; border-radius: 0; }  /* the dots over a reply that's widening out of them */
   @keyframes bob { 0%, 60%, 100% { opacity: 0.3; transform: none; } 30% { opacity: 1; transform: translateY(-3px); } }
   #say[hidden] { display: none; }
   #say { display: flex; align-items: flex-end; gap: 0.5rem; padding: 0.7rem 2rem 0.9rem; border-top: 1px solid var(--line); }
@@ -297,10 +298,29 @@ function follow(pid) {
   S.log = [];
   const es = new EventSource(`${CCX}/s/${pid}/events`);
   stream = {pid, es};
-  json(`${CCX}/s/${pid}/log`).then((d) => { if (stream?.pid === pid && !S.log.length) { S.log = d.events; ackPending(); drawView(); } }).catch(() => {});
-  es.addEventListener("log", (e) => { const d = JSON.parse(e.data); S.log = d.reset ? d.events : S.log.concat(d.events); ackPending(); drawView(true); });
+  // the stream starts with the log's tail as a reset: that's history, drawn at once at the bottom; later events are live
+  es.addEventListener("log", (e) => {
+    const d = JSON.parse(e.data);
+    if (d.reset || !stream.loaded) { S.log = d.events; Object.assign(stream, {loaded: true, start: d.start}); ackPending(); drawView(); return older(30); }
+    S.log = S.log.concat(d.events); ackPending(); drawView(true);
+  });
   es.addEventListener("screen", (e) => { (S.screens[pid] ??= {}).text = JSON.parse(e.data).text; drawView(true); });
   es.addEventListener("dialog", (e) => { (S.screens[pid] ??= {}).dialog = JSON.parse(e.data); drawView(true); draw(); });
+}
+// ccx's log page holds the last 40 events, tool calls and results included: page back (?before=) until the chat has `want` messages or the log's top
+const chatCount = () => S.log.filter((e) => e.type === "user" || e.type === "text").length;
+async function older(want) {
+  const s = stream;
+  if (!s?.loaded || s.paging || !s.start) return;
+  s.paging = true;
+  try {
+    while (stream === s && s.start > 0 && chatCount() < want) {
+      const d = await json(`${CCX}/s/${s.pid}/log?before=${s.start}`);
+      if (stream !== s) return;
+      S.log = d.events.concat(S.log); s.start = d.start;
+    }
+  } catch {} finally { s.paging = false; }
+  if (stream === s) drawView(true);
 }
 
 // ---------- what waits on the user
@@ -359,29 +379,43 @@ function draw() {
 let lastView = "";
 // a user scroll away from the bottom pauses autoscroll until they're back at the bottom or 30 s pass with no scroll
 let pausedAt = 0, autoTop = -1;
+// autoscroll stops when the first reply that came while at the bottom (cap, its log time) reaches the top (user)
+let cap = null;
 const atBottom = (v) => v.scrollHeight - v.scrollTop - v.clientHeight < 40;
-function toBottom() { const v = $("#view"); v.scrollTop = 1e9; autoTop = v.scrollTop; pausedAt = 0; $("#newer").hidden = true; }
+function keepUp() {
+  const v = $("#view"), end = v.scrollHeight - v.clientHeight, el = cap !== null && v.querySelector(`.m[data-at="${cap}"]`);
+  v.scrollTop = el ? Math.min(end, el.getBoundingClientRect().top - v.getBoundingClientRect().top + v.scrollTop - 16) : end;
+  autoTop = v.scrollTop; pausedAt = 0; $("#newer").hidden = atBottom(v);
+}
+function toBottom() { cap = null; keepUp(); }
 // also run from drawView, in case the scroll event hasn't fired yet
 function noteScroll() {
   const v = $("#view");
   if (Math.abs(v.scrollTop - autoTop) < 2) return;  // ours
-  autoTop = -1;
+  autoTop = -1; cap = null;
   if (atBottom(v)) { pausedAt = 0; $("#newer").hidden = true; }
   else pausedAt = Date.now();
 }
-$("#view").addEventListener("scroll", noteScroll);
+// scrolled near the top of a chat: 20 more messages from further back
+$("#view").addEventListener("scroll", (e) => { noteScroll(); if (e.target.scrollTop < 300 && e.target.querySelector(".msgs")) older(chatCount() + 20); });
 $("#newer").onclick = toBottom;
 $("#mode").onclick = () => { term = !term; drawView(); };
 // the typing bubble as last drawn: a reply up to 5 s later still grows out of it (the state can turn idle before the log has the reply)
-let dots = null, linger = null, growing = 0;
+let dots = null, linger = null, growing = 0, later = 0, shown;
+const replyAts = (v) => [...v.querySelectorAll(".m:not(.me)[data-at]")].map((m) => +m.dataset.at);
 function drawView(soft) {
   // a redraw replaces the view and would cut a reply's grow short: wait for it to end
-  if (soft && Date.now() < growing) { setTimeout(() => drawView(true), growing - Date.now() + 20); return; }
+  if (soft && Date.now() < growing) { later ||= setTimeout(() => { later = 0; drawView(true); }, growing - Date.now() + 20); return; }
   const i = items().find((x) => x.id === cur);
   const view = $("#view");
   noteScroll();
-  const keep = atBottom(view) || Date.now() - pausedAt > 30e3;
-  const {scrollTop} = view, msgs = view.querySelector(".msgs")?.innerHTML;
+  const low = atBottom(view), keep = low || Date.now() - pausedAt > 30e3, same = soft && shown === cur;
+  const {scrollTop} = view, tail = view.querySelector(".msgs")?.lastElementChild?.outerHTML;
+  // replies after the newest one drawn are new: by log time, so older pages added above or a reset don't count
+  const was = Math.max(-1, ...replyAts(view));
+  // the message at the top of the screen stays in place when the chat isn't following the bottom
+  const vt = view.getBoundingClientRect().top, top = [...view.querySelectorAll(".m[data-at]")].find((m) => m.getBoundingClientRect().bottom > vt);
+  const anchor = top && {at: top.dataset.at, off: top.getBoundingClientRect().top - vt};
   let html, ph = "Message nadya";
   if (cur === "quota") html = quotaView();
   else if (!cur || cur === "nadya") html = nadyaView();
@@ -395,32 +429,85 @@ function drawView(soft) {
   if (soft && html === lastView) return;
   if (soft && cur === "blog") return;  // don't rebuild the blog under the reader
   lastView = html;
-  const t = soft && view.querySelector(".typing");
-  if (t) dots = {cur, at: Date.now(), said: view.querySelectorAll(".m:not(.me)").length, rect: t.getBoundingClientRect()};
+  const t = same && view.querySelector(".msgs > .typing");
+  if (t) dots = {cur, at: Date.now(), rect: t.getBoundingClientRect()};
   view.innerHTML = html;
+  if (!soft) growing = 0;
   // keep the dots' bounce going across redraws; a reply that arrives grows out of the dots bubble
   view.querySelector(".typing")?.style.setProperty("--t", `-${Date.now() % 1200}ms`);
-  const reply = dots?.cur === cur && Date.now() - dots.at < 5e3 && view.querySelectorAll(".m:not(.me)")[dots.said];
-  if (reply) { grow(reply, dots.rect); growing = Date.now() + 350; dots = null; }
+  const chatty = !cur || cur === "nadya" || isPid(cur);
+  // only replies that came live: history drawn on open, on a switch or after a reset shows at once
+  const fresh = same && stream?.loaded ? [...view.querySelectorAll(".m:not(.me)[data-at]")].filter((m) => +m.dataset.at > was) : [];
+  if (!same) cap = null;
+  else if (fresh.length && keep && (low || cap === null)) cap = fresh[0].dataset.at;
+  shown = cur;
+  if (fresh.length) {
+    // a hidden tab shows them at once; a burst grows only its last 3
+    if (dots?.cur === cur && Date.now() - dots.at < 5e3 && !document.hidden) {
+      view.scrollTop = scrollTop;
+      growing = Date.now() + grow(fresh.slice(-3), dots.rect, view.querySelector(".msgs > .typing"), chatty && keep);
+    }
+    dots = null;
+  }
   $("#say").q.placeholder = ph;
   $("#say").hidden = !(!cur || cur === "nadya" || i?.r);  // the prompt only where it talks to nadya or a session
   loadDraft();
-  const chatty = !cur || cur === "nadya" || isPid(cur);
   $("#center").classList.toggle("nadya", !cur || cur === "nadya");
   $("#mode").hidden = !chatty;
   $("#mode").setAttribute("aria-pressed", term);
   if (!soft) { pausedAt = 0; $("#newer").hidden = true; }
-  if (chatty && (!soft || keep)) return toBottom();
+  if (chatty && !soft) return toBottom();
+  if (chatty && keep) return keepUp();
   view.scrollTop = soft ? scrollTop : 0;
+  const a = same && anchor && view.querySelector(`.m[data-at="${anchor.at}"]`);
+  if (a) view.scrollTop += a.getBoundingClientRect().top - vt - anchor.off;
   autoTop = view.scrollTop;
-  if (chatty && view.querySelector(".msgs")?.innerHTML !== msgs) $("#newer").hidden = false;
+  if (chatty && same && view.querySelector(".msgs")?.lastElementChild?.outerHTML !== tail) $("#newer").hidden = false;
 }
-function grow(el, from) {
-  // the reply opens downward from the dots' height (user)
-  const {height} = el.getBoundingClientRect();
-  const ease = {duration: 350, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)"};
-  el.animate([{clipPath: `inset(0 0 ${Math.max(0, height - from.height)}px 0 round 12px)`}, {clipPath: "inset(0 round 12px)"}], ease);
-  for (const c of el.children) c.animate([{opacity: 0}, {opacity: 0, offset: 0.4}, {opacity: 1}], ease);
+// rAF stops in a hidden tab: a timer ends each step anyway, so no reply stays hidden
+function tween(ms, f, ease = (t) => 1 - (1 - t) ** 2) {
+  return new Promise((done) => {
+    const t0 = performance.now();
+    let over = false;
+    const finish = () => { if (over) return; over = true; f(1); done(); };
+    const timer = setTimeout(finish, ms + 100);
+    const step = (now) => {
+      if (over) return;
+      const t = Math.min(1, (now - t0) / ms);
+      if (t < 1) { f(ease(t)); requestAnimationFrame(step); } else { clearTimeout(timer); finish(); }
+    };
+    requestAnimationFrame(step);
+  });
+}
+// each new reply starts as the dots bubble, widens to its width (200 ms), then grows down over its laid-out text at
+// 40 ms a line (3 s at most), the chat following its bottom; then the dots below show again (user). Returns how long it all takes.
+function grow(els, from, after, scroll) {
+  const sizes = els.map((el) => el.getBoundingClientRect()), lh = parseFloat(getComputedStyle(els[0]).lineHeight);
+  const times = sizes.map(({height}) => Math.min(3000, Math.max(150, (height - from.height) / lh * 40)));
+  for (const el of els) el.style.display = "none";
+  if (after) after.style.display = "none";
+  const v = $("#view");
+  // a bubble or the dots showing up below: scroll there over the step instead of at once
+  const glide = (s0, k) => { keepUp(); v.scrollTop = s0 + (v.scrollTop - s0) * k; autoTop = v.scrollTop; };
+  (async () => {
+    for (const [i, el] of els.entries()) {
+      const {width, height} = sizes[i], cut = Math.max(0, width - from.width);
+      Object.assign(el.style, {display: "", position: "relative", height: `${from.height}px`, overflow: "hidden", clipPath: `inset(0 ${cut}px 0 0 round 12px)`});
+      el.insertAdjacentHTML("beforeend", `<div class="typing" aria-hidden="true" style="--t: -${Date.now() % 1200}ms"><i></i><i></i><i></i></div>`);
+      const s0 = v.scrollTop;
+      await tween(200, (k) => { el.style.clipPath = `inset(0 ${cut * (1 - k)}px 0 0 round 12px)`; if (scroll && el.isConnected) glide(s0, k); });
+      el.lastChild.remove();
+      await tween(times[i], (k) => { el.style.height = `${from.height + (height - from.height) * k}px`; if (scroll && el.isConnected) keepUp(); }, (t) => t);
+      el.removeAttribute("style");
+      if (!el.isConnected) return;  // a redraw replaced the view
+    }
+    if (!after) return;
+    after.style.display = "";
+    after.animate([{opacity: 0}, {opacity: 1}], 200);
+    const s0 = v.scrollTop;
+    if (scroll) await tween(200, (k) => after.isConnected && glide(s0, k));
+  })();
+  return times.reduce((a, t) => a + t + 200, after ? 200 : 0);
 }
 // Claude Code wraps pasted text in <pasted_content id="..."> ... </pasted_content id="...">: show only the text
 const unpaste = (t) => t.replace(/<\/?pasted_content(?: id="[^"]*")?>\n?/g, "");
@@ -449,9 +536,9 @@ function chat(r) {
   const msgs = [];
   for (const e of log) {
     if (e.type !== "user" && e.type !== "text") continue;
-    msgs.push({me: e.type === "user", body: e.type === "user" ? autolink(esc(unpaste(e.text).length > 600 ? unpaste(e.text).slice(0, 600) + "…" : unpaste(e.text))) : md(e.text), small: hhmm(e.at)});
+    msgs.push({at: e.at, me: e.type === "user", body: e.type === "user" ? autolink(esc(unpaste(e.text).length > 600 ? unpaste(e.text).slice(0, 600) + "…" : unpaste(e.text))) : md(e.text), small: hhmm(e.at)});
   }
-  const out = msgs.map((m) => `<div class="m ${m.me ? "me" : ""}">${m.body}<small>${m.small}</small></div>`);
+  const out = msgs.map((m) => `<div class="m ${m.me ? "me" : ""}" data-at="${m.at}">${m.body}<small>${m.small}</small></div>`);
   // sent from here, not in the log yet: kept below everything until the log shows it
   for (const p of pending.filter((x) => x.pid === r.pid)) {
     const stale = !p.err && Date.now() - p.at > 120e3;
@@ -699,9 +786,9 @@ function fit() {
   q.style.height = "auto";
   q.style.height = `${Math.min(q.scrollHeight + 2, (visualViewport?.height ?? innerHeight) * 0.4)}px`;
   q.scrollTop = q.selectionEnd === q.value.length ? 1e9 : top;  // typing at the end: keep the last line in sight
-  if (low) toBottom();
+  if (low) keepUp();
 }
-visualViewport?.addEventListener("resize", () => { fit(); if (!pausedAt) toBottom(); });
+visualViewport?.addEventListener("resize", () => { fit(); if (!pausedAt) keepUp(); });
 $("#say").q.oninput = (e) => { setDraft(draftKey, e.target.value); fit(); };
 // desktop: Enter sends, Shift+Enter is a newline; phone: Enter is a newline, the button sends
 $("#say").q.onkeydown = (e) => {
@@ -771,7 +858,13 @@ setInterval(loadUsage, 5 * 60e3); setInterval(loadAsks, 60e3); setInterval(loadB
 // back on the tab (or the phone woke up): read everything again at once
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { loadUsage(); loadAsks(); loadBlog(); loadTodo(); } });
 setInterval(draw, 30e3);  // ages
-const wait = setInterval(() => { if (!S.rows.length) return; clearInterval(wait); if (cur) open(); }, 200);
+// on start the input takes the focus (desktop only: on a phone it would open the keyboard)
+const wait = setInterval(() => {
+  if (!S.rows.length) return;
+  clearInterval(wait);
+  if (cur) open();
+  if (!matchMedia("(pointer: coarse)").matches && !$("#say").hidden) $("#say").q.focus();
+}, 200);
 </script>
 </body>
 </html>
