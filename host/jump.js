@@ -38,7 +38,9 @@ export function sendKitty(command, payload, tty = null) {
 
 // A tty to write kitty commands to when we have no terminal of our own, as when Raycast or
 // launchd runs us: a kitty window's tmux client, whose tty kitty reads like its own pane.
-// null when /dev/tty or tmux will carry them, "" when nothing can
+// One in a ktmux `kitty-` session, else any client with kitty above it, as a window that
+// focus switched to an instance's session. null when /dev/tty or tmux will carry them, ""
+// when nothing can
 export async function kittyTty() {
   if (Deno.env.get("TMUX")) return null;
   try {
@@ -47,8 +49,12 @@ export async function kittyTty() {
   } catch {
     // no controlling terminal
   }
-  return (await sh("tmux", "list-clients", "-F", "#{client_tty}\t#{client_session}"))
-    .split("\n").map((l) => l.split("\t")).find(([, s]) => s?.startsWith("kitty-"))?.[0] ?? "";
+  const clients = (await sh("tmux", "list-clients", "-F",
+    "#{client_tty}\t#{client_session}\t#{client_pid}")).split("\n").map((l) => l.split("\t"));
+  const own = clients.find(([, s]) => s?.startsWith("kitty-"));
+  if (own) return own[0];
+  const procs = clients.length ? await processes() : null;
+  return clients.find(([t, , pid]) => t && kittyOwner(Number(pid), procs)[1])?.[0] ?? "";
 }
 
 // The niri window id for a process, or null. A kitty process owns exactly one OS window,
@@ -256,9 +262,32 @@ const attachArgs = (host, session, tmux = "tmux") => host
 // made, `set-colors` on every focus after, so a theme changed since still lands
 const PAINTED = ["background", "active_border_color", "inactive_border_color"];
 
+// kitty on macOS keeps running with every window closed, and then no tty reaches it.
+// `open -a kitty` reopens it with one window, which runs ktmux (kitty.conf `shell`): a tmux
+// client in a new `kitty-<pid>` session. [tty, session, client pid], or null after 5s
+async function openKitty() {
+  if (!MAC) return null;
+  const clients = async () => (await sh("tmux", "list-clients", "-F",
+    "#{client_tty}\t#{client_session}\t#{client_pid}")).split("\n").map((l) => l.split("\t"))
+    .filter(([, s]) => s?.startsWith("kitty-"));
+  const before = new Set((await clients()).map(([t]) => t));
+  await sh("open", "-a", "kitty");
+  for (let n = 0; n < 50; n++) {
+    const got = (await clients()).find(([t]) => !before.has(t));
+    if (got) return got;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return null;
+}
+
 export async function attachSession(host, session, background = "") {
-  const tty = await kittyTty();
-  if (tty === "") return "no terminal of our own and no kitty window in tmux to reach kitty by";
+  let tty = await kittyTty(), helper = null;
+  if (tty === "") {
+    // a window opened only to reach kitty by, closed once the attached one is up
+    helper = await openKitty();
+    if (!helper) return "no terminal of our own and no kitty window in tmux to reach kitty by";
+    tty = helper[0];
+  }
   const bg = /^#[0-9a-f]{6}$/.test(background ?? "") ? background : "";
   const tmux = host ? "tmux" : (await sh("sh", "-c", "command -v tmux")).trim() || "tmux";
   const args = attachArgs(host, session, tmux);
@@ -290,6 +319,10 @@ export async function attachSession(host, session, background = "") {
     sendKitty("set-colors", {match_window: `var:ccx_remote=^${tag.replace(/[.\\^$*+?()[\]{}|]/g, "\\$&")}$`,
       colors: Object.fromEntries(PAINTED.map((c) => [c, rgb]))}, tty);
   }
+  if (helper) {
+    const [child] = kittyOwner(Number(helper[2]), await processes());
+    sendKitty("close-window", {match: `pid:${child}`}, tty);
+  }
   if (MAC) await sh("open", "-a", "kitty");
   return null;
 }
@@ -301,5 +334,13 @@ export async function show(inst) {
   if (!inst.pane) return `pid ${inst.pid} is not inside tmux; nothing to focus`;
   const w = await withClient(inst);
   if (w.clientTty) return await jump(w);
-  return await select(inst) ?? await attachSession("", inst.session, await tmuxBackground());
+  const err = await select(inst);
+  if (err) return err;
+  if (await kittyTty() !== "") return await attachSession("", inst.session, await tmuxBackground());
+  // nothing reaches kitty: the window opened to reach it by shows the session itself
+  const got = await openKitty();
+  if (!got) return "no kitty window in tmux to reach kitty by, and none opened";
+  const r = await run("tmux", "switch-client", "-c", got[0], "-t", inst.session, ";",
+    "kill-session", "-t", got[1]);
+  return r.code === 0 ? null : `tmux: ${r.err.trim() || `exit ${r.code}`}`;
 }
