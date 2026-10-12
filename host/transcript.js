@@ -92,7 +92,7 @@ export function readPage(path, before = null, size = PAGE, want = WANT, budget =
       continue;
     }
     end ??= from + Math.max(a, b);
-    const got = parse(buf.subarray(a, Math.max(a, b))).map(short);
+    const got = parse(buf.subarray(a, Math.max(a, b)), from + a).map(short);
     chat += got.filter((e) => CHAT.has(e.type)).length;
     events = [...got, ...events];
     if (chat >= want || from === 0 || from <= limit) {
@@ -119,20 +119,25 @@ export function readFrom(path, offset) {
   if (total === offset) return {events: [], end: offset};
   const buf = readRange(path, offset, total);
   const b = buf.lastIndexOf(10) + 1;
-  return {events: parse(buf.subarray(0, b)), end: offset + b};
+  return {events: parse(buf.subarray(0, b), offset), end: offset + b};
 }
 
-export function parse(bytes) {
+// `base` is where `bytes` starts in the log: a prompt with images carries its line's
+// offset as `img`, which api/s/<pid>/img reads them back from.
+export function parse(bytes, base = 0) {
   const events = [], peers = new Set();
-  for (const line of UTF8.decode(bytes).split("\n")) {
-    if (!line) continue;
+  for (let a = 0; a < bytes.length;) {
+    const nl = bytes.indexOf(10, a), b = nl < 0 ? bytes.length : nl, at = a;
+    a = b + 1;
+    if (b === at) continue;
     let rec;
     try {
-      rec = JSON.parse(line);
+      rec = JSON.parse(UTF8.decode(bytes.subarray(at, b)));
     } catch {
       continue;           // one unreadable line, not the end of the log
     }
     for (const e of eventsOf(rec)) {
+      if (e.type === "user" && e.images) e.img = base + at;
       if (e.type === "peer" && e.id) {
         if (peers.has(e.id)) continue;
         peers.add(e.id);
@@ -235,6 +240,35 @@ function systemEvents(rec, at) {
   if (rec.subtype !== "local_command") return [];
   const out = TAG("local-command-stdout", rec.content ?? "");
   return out && out !== "(no content)" ? [{type: "output", at, text: clip(out)}] : [];
+}
+
+// The k-th image of the prompt on the line at `offset`, {type, bytes}, or null.
+export function imageAt(path, offset, k) {
+  const total = sizeOf(path);
+  if (!(offset >= 0 && offset < total)) return null;
+  let to = Math.min(total, offset + PAGE), buf;
+  for (;;) {
+    buf = readRange(path, offset, to);
+    const nl = buf.indexOf(10);
+    if (nl >= 0) { buf = buf.subarray(0, nl); break; }
+    if (to === total) break;
+    to = Math.min(total, offset + buf.length * 4);
+  }
+  let rec;
+  try {
+    rec = JSON.parse(UTF8.decode(buf));
+  } catch {
+    return null;
+  }
+  const content = rec.type === "attachment" ? rec.attachment?.prompt : rec.message?.content;
+  const src = Array.isArray(content) ? content.filter((b) => b?.type === "image")[k]?.source : null;
+  if (src?.type !== "base64" || typeof src.data !== "string") return null;
+  try {
+    const type = /^image\/(png|jpeg|gif|webp)$/.test(src.media_type) ? src.media_type : "application/octet-stream";
+    return {type, bytes: Uint8Array.fromBase64(src.data)};
+  } catch {
+    return null;
+  }
 }
 
 // Text and image blocks, or a bare string, as text plus how many images were in it.

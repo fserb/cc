@@ -95,6 +95,10 @@
   #att img, .m img.att { height: 4rem; max-width: 8rem; object-fit: cover; border-radius: 0.4rem; border: 1px solid var(--line); display: block; }
   #say #att button { position: absolute; top: -0.4rem; right: -0.4rem; height: 1.3rem; width: 1.3rem; padding: 0; font-size: 0.8rem; line-height: 1; background: var(--muted); }
   .m .atts { display: flex; gap: 0.3rem; flex-wrap: wrap; margin-bottom: 0.3rem; }
+  .m img.att { cursor: zoom-in; margin: 0; }
+  #pic { padding: 0; border: 0; background: none; max-width: 100vw; max-height: 100dvh; cursor: zoom-out; outline: none; }
+  #pic::backdrop { background: rgb(0 0 0 / 0.85); }
+  #pic img { display: block; max-width: 96vw; max-height: 96dvh; object-fit: contain; border-radius: 0.4rem; }
   @media (pointer: coarse), (max-width: 760px) { #say #focus { display: none; } }  /* a kitty window opens on marx, where the desktop is */
   article:has(> pre.term) { max-width: none; }
   pre.term { white-space: pre; overflow-x: auto; overflow-wrap: normal; margin: 0 0 1rem; width: max-content; max-width: 100%; box-sizing: border-box; }
@@ -160,6 +164,7 @@
   <nav id="left"></nav>
   <section id="center"><div id="view"></div><button id="newer" hidden>↓ new</button><form id="say"><div id="att" hidden></div><button type="button" id="focus" title="focus in kitty" aria-label="focus in kitty"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button><button type="button" id="mode" aria-pressed="false" title="terminal view" aria-label="terminal view">&gt;_</button><textarea name="q" rows="1" autocomplete="off"></textarea><button>send</button></form></section>
 </section>
+<dialog id="pic"><img alt="image"></dialog>
 <script type="module">
 // A static page (no box): everything it shows comes from these, all same origin:
 //   ../ccapi/api/...      cchost on nadya (caddy forwards it), sessions on every host: list + events (SSE, ?all=1), log, screen, pick, type
@@ -678,10 +683,18 @@ const IMAGE = "\u{1F5BC}", unpic = (t) => t.replace(/\[Image #\d+\]/g, IMAGE);
 const atts = {}, IMG_MAX = 10 << 20, attsOf = (k = draftKey) => atts[k] ??= [], marks = (t) => t.split(IMAGE).length - 1;
 // messages sent from this page, shown at once and dropped when the session's log has them
 let pending = [], pendId = 0;
+// a log prompt's images: cchost's api/s/<pid>/img by its line's offset (`img`), or the ones this page sent with it,
+// kept by "<pid>:<img>" when its bubble was acked so the thumbnails don't load again
+const sentPics = {};
+function picsOf(pid, e) {
+  if (!e.images || e.img == null) return [];
+  return sentPics[`${pid}:${e.img}`] ?? Array.from({length: e.images}, (_, i) => `${CCX}/s/${pid}/img?at=${e.img}&i=${i}`);
+}
+const thumbs = (urls) => urls.length ? `<span class="atts">${urls.map((u) => `<img class="att" src="${esc(u)}" alt="image">`).join("")}</span>` : "";
 const norm = (t) => unpaste(t).replace(/\s+/g, " ").trim();
 function ackPending() {
   if (!stream || !pending.length) return;
-  const seen = S.log.filter((e) => e.type === "user").map((e) => ({at: e.at * 1000, t: norm(e.text)}));
+  const seen = S.log.filter((e) => e.type === "user").map((e) => ({at: e.at * 1000, t: norm(e.text), img: e.img, n: e.images}));
   pending = pending.filter((p) => {
     if (p.err || p.pid !== stream.pid) return true;
     const t = norm(p.text), segs = t.split(IMAGE).map((x) => x.trim()).filter(Boolean);
@@ -690,8 +703,10 @@ function ackPending() {
       : e.t.includes(t) || (e.t.length >= 40 && t.startsWith(e.t.slice(0, 200)));
     // a log entry acks one bubble only (the same text sent twice); 10 s for clock skew between hosts
     const k = seen.findIndex((e) => e.at > p.at - 10e3 && has(e));
-    if (k >= 0) seen.splice(k, 1);
-    return k < 0;
+    if (k < 0) return true;
+    if (p.imgs?.length && seen[k].img != null && seen[k].n === p.imgs.length) sentPics[`${p.pid}:${seen[k].img}`] = p.imgs.map((x) => x.url);
+    seen.splice(k, 1);
+    return false;
   });
 }
 // an AskUserQuestion result's `answers` is [[question, answer], ...]; a cchost older than 2026-10-12 sends only the text,
@@ -711,14 +726,14 @@ function chat(r) {
       if (qa.length) msgs.push({at: e.at, me: true, body: qa.map(([q, a]) => `<span class="q">${esc(q.length > 80 ? q.slice(0, 80) + "…" : q)}</span>${autolink(esc(a))}`).join("<br>"), small: hhmm(e.at)});
     }
     if ((e.type !== "user" && e.type !== "text") || blank(e)) continue;
-    msgs.push({at: e.at, me: e.type === "user", body: e.type === "user" ? autolink(esc(clip(unpic(unpaste(e.text)).trim()))) : md(e.text), small: hhmm(e.at)});
+    msgs.push({at: e.at, me: e.type === "user", body: e.type === "user" ? thumbs(picsOf(r.pid, e)) + autolink(esc(clip(unpic(unpaste(e.text)).trim()))) : md(e.text), small: hhmm(e.at)});
   }
   const out = msgs.map((m) => `<div class="m ${m.me ? "me" : ""}" data-at="${m.at}">${m.body}<small>${m.small}</small></div>`);
   // sent from here, not in the log yet: kept below everything until the log shows it
   for (const p of pending.filter((x) => x.pid === r.pid)) {
     const stale = !p.err && Date.now() - p.at > 120e3;
     const note = p.err ? `not sent: ${esc(p.err)} · hold to take back` : stale ? "not seen yet · hold to take back" : esc(p.note ?? "sending…");
-    out.push(`<div class="m me ${p.err ? "fail" : stale ? "stale" : "pend"}" data-pend="${p.id}">${p.imgs?.length ? `<span class="atts">${p.imgs.map((i) => `<img class="att" src="${i.url}" alt="">`).join("")}</span>` : ""}${esc(clip(p.text))}<small>${note}</small></div>`);
+    out.push(`<div class="m me ${p.err ? "fail" : stale ? "stale" : "pend"}" data-pend="${p.id}">${thumbs((p.imgs ?? []).map((x) => x.url))}${esc(clip(p.text))}<small>${note}</small></div>`);
   }
   // the state turns idle before the log has the reply: keep the dots up to 5 s until the reply shows, so it grows out of them
   const said = msgs.filter((m) => m.body && !m.me).length;
@@ -1091,7 +1106,11 @@ document.addEventListener("pointerup", () => {
   lastTap = {p, at: Date.now()};
 });
 document.addEventListener("contextmenu", (e) => { if (e.target.closest(".m[data-pend]")) e.preventDefault(); });
+// a bubble's thumbnail opens full size; a click anywhere or Escape closes it
 document.addEventListener("click", async (e) => {
+  const pic = e.target.closest(".m img.att");
+  if (pic) { $("#pic").firstChild.src = pic.src; $("#pic").showModal(); return; }
+  if (e.target.closest("#pic")) { $("#pic").close(); return; }
   if (e.target.closest(".m[data-pend]")) return;
   if (e.target.closest("#qbtn")) { cur = "quota"; push(); open(); loadBurn(); return; }
   const qt = e.target.closest("[data-qt]"); if (qt) { qTab = qt.dataset.qt; drawView(true); return; }

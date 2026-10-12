@@ -61,6 +61,8 @@ Deno.test("readPage: each record shape becomes the event the page draws", () => 
     user("<cross-session-message>hi</cross-session-message>",
       {isMeta: true, origin: peerOrigin("m1", "hi")}),
   ]);
+  const log = Deno.readTextFileSync(path);
+  const IMG = log.lastIndexOf("\n", log.indexOf('"text":"see"')) + 1;
   eq(shapes(readPage(path).events), [
     {type: "user", text: "hello", images: 0},
     {type: "command", text: "/clear"},
@@ -74,12 +76,34 @@ Deno.test("readPage: each record shape becomes the event the page draws", () => 
     {type: "result", id: "t1", error: false, text: "a\nb", images: 0},
     {type: "result", id: "t2", error: true, text: "no", images: 1},
     {type: "note", text: "[Request interrupted by user]"},
-    {type: "user", text: "see", images: 1},
+    {type: "user", text: "see", images: 1, img: IMG},
     {type: "note", text: "conversation compacted"},
     {type: "user", text: "typed mid-turn", images: 0},
     {type: "peer", id: "m1", from: "ccx-1", text: "hi"},
   ], "every shape, the peer message once");
   eq(readPage(path).events[0].at, AT, "timestamps are epoch seconds");
+});
+
+Deno.test("imageAt: the images of a prompt, read back by its line's offset", async () => {
+  const {imageAt} = await import("./transcript.js");
+  const pic = (bytes, type = "image/png") =>
+    ({type: "image", source: {type: "base64", media_type: type, data: new Uint8Array(bytes).toBase64()}});
+  const path = file([
+    user("first"),
+    user([{type: "text", text: "two [Image #1] [Image #2]"}, pic([1, 2, 3]), pic([4], "text/html")],
+      {origin: {kind: "human"}}),
+    queued([{type: "text", text: "mid-turn [Image #3]"}, pic(new Array(300000).fill(7), "image/jpeg")],
+      {kind: "human"}),
+  ]);
+  const [, a, b] = readPage(path).events;
+  eq([a.images, b.images], [2, 1], "counted");
+  eq([...imageAt(path, a.img, 0).bytes], [1, 2, 3], "the first");
+  eq(imageAt(path, a.img, 1).type, "application/octet-stream", "a type that is not an image is not served as one");
+  eq(imageAt(path, a.img, 2), null, "past the last");
+  const big = imageAt(path, b.img, 0);
+  eq([big.type, big.bytes.length], ["image/jpeg", 300000], "a line longer than a page, from an attachment");
+  eq(readFrom(path, a.img).events.map((e) => e.img), [a.img, b.img], "readFrom gives the same offsets");
+  eq(imageAt(path, a.img + 1, 0), null, "an offset inside a line");
 });
 
 Deno.test("readPage: paging back gives every event once, in order", () => {

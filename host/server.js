@@ -17,7 +17,7 @@
 //   answers
 
 import {byCodePoint, HOME} from "./sh.js";
-import {logPath, readFrom, readPage} from "./transcript.js";
+import {imageAt, logPath, readFrom, readPage} from "./transcript.js";
 import {parseDialog, pick, screen} from "./dialog.js";
 import {attachSession, select, sendKeys, show, tmuxBackground, typeInto} from "./jump.js";
 import {unqueue} from "./queue.js";
@@ -733,7 +733,7 @@ export class Server {
       tag = host;
       path = `/api/s/${pid}/${verb}`;
     }
-    const m = path.match(/^\/api\/s\/(\d+)\/(log|events|type|pick|now|unqueue|screen|send|select|close)$/);
+    const m = path.match(/^\/api\/s\/(\d+)\/(log|img|events|type|pick|now|unqueue|screen|send|select|close)$/);
     if (!m) return json({error: "not found"}, 404);
     const [, pidText, verb] = m, pid = Number(pidText);
     // the pid has to be a claude in the current poll: a pane whose claude exited types
@@ -744,6 +744,14 @@ export class Server {
       if (!inst.sessionId) return json({events: [], start: 0, end: 0});
       const before = url.searchParams.get("before");
       return json(readPage(logPath(inst.cwd, inst.sessionId), before === null ? null : Number(before)));
+    }
+    // the i-th image of the prompt whose line starts at byte `at`, the `img` of its event
+    if (get && verb === "img") {
+      const at = Number(url.searchParams.get("at")), i = Number(url.searchParams.get("i") ?? 0);
+      const got = inst.sessionId ? imageAt(logPath(inst.cwd, inst.sessionId), at, i) : null;
+      if (!got) return json({error: "no image there"}, 404);
+      return new Response(got.bytes, {headers: {"content-type": got.type,
+        "cache-control": "private, max-age=86400"}});
     }
     if (get && verb === "events") {
       const id = req.headers.get("last-event-id") ?? url.searchParams.get("from");

@@ -97,7 +97,11 @@ All JSON, all under `api/`.
     GET  api/events                SSE; `list` with the same body at once, then whenever
                                    it changes
     GET  api/s/<pid>/log?before=N  {events, start, end}: the page ending before byte N,
-                                   the tail with no N. `start` is the next N back
+                                   the tail with no N. `start` is the next N back. A
+                                   `user` event with `images` carries `img`, its line's
+                                   byte offset
+    GET  api/s/<pid>/img?at=N&i=K  the K-th image of the prompt on the line at byte N,
+                                   decoded from the log's base64, as its own type
     GET  api/s/<pid>/events?from=N SSE from byte N (or Last-Event-ID): `state` with the
                                    row, `log` {events, end, reset?} with `end` as its id,
                                    `screen` {text}, `dialog` (parsed, or null), `gone`
