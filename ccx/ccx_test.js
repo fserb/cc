@@ -2,8 +2,8 @@
 // tmux, no ~/.claude. The library is imported, the renderer is driven as a subprocess, and
 // the icon is pure.
 
-import {fmtAge, Instance, IS_CLAUDE, openSubscriptions, paneState, StateClock, summaryOf,
-  waitsOn} from "../host/claudes.js";
+import {fmtAge, Instance, IS_CLAUDE, openSubscriptions, paneState, processes, StateClock,
+  summaryOf, waitsOn} from "../host/claudes.js";
 import {fuzzy, NUMBERS, PALETTE, rank, SORTS, STATE} from "../host/view.js";
 import {baseFromSettings, Online, pickBase} from "../host/online.js";
 
@@ -490,6 +490,18 @@ Deno.test("snapshot: offline is written beside the counter, and keeps the key hi
 // a rename is not caught anywhere else
 
 const SPINNER_LINE = "✽ Working… (16m 29s · ↓ 54.6k tokens)";
+
+Deno.test("processes: a failed ps throws for discover(), and is an empty table for the rest", async () => {
+  const ps = (r) => () => Promise.resolve({out: "", err: "", ...r});
+  const ok7372 = await processes(true, ps({code: 0, out: " 7372  7324 claude -n arcade-a\n"}));
+  eq(ok7372.get(7372), [7324, "claude -n arcade-a"]);
+  for (const r of [{code: -1, err: "Too many open files"}, {code: 143}, {code: 0}]) {
+    let threw = "";
+    await processes(true, ps(r)).catch((e) => threw = e.message);
+    ok(threw.startsWith(`ps: exit ${r.code}: `), threw);
+    eq((await processes(false, ps(r))).size, 0);
+  }
+});
 
 Deno.test("IS_CLAUDE: argv0 or the local cli.js, not a path anywhere in the line", () => {
   for (const cmd of ["claude", "claude --resume", "/opt/homebrew/bin/claude",

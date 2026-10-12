@@ -53,7 +53,8 @@ async function serve(args) {
       timer = setTimeout(repoll, !watching || instances.some((i) => !i.peer) ? 1500 : 60000);
     }
   };
-  const repoll = () => poll().catch((e) => console.error(e));
+  // a failed poll keeps the instances it had, and says when
+  const repoll = () => poll().catch((e) => console.error(`${new Date().toISOString()} poll: ${e?.message ?? e}`));
   const watching = watchSessions(repoll);
   setInterval(() => net.tick(), 5000);
   net.tick();
@@ -73,7 +74,7 @@ async function serve(args) {
     return inst ? await sendPeer(inst, text, "ccx") : `no claude instance with pid ${who.pid}`;
   }, undefined, `${HOME}/.claude/ccx-subs.json`);
   clock.on((events) => subs.onEvents(events));
-  await poll();
+  await repoll();
   subs.load(instances.map((i) => i.pid));
   clearStandIns(remote.SELF);
   const relay = new Relay(remote.SELF, async (host, body) =>

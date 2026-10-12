@@ -1,7 +1,7 @@
 // Every running Claude Code instance and what it is doing. No UI here, and no focusing
 // either: discover() is the listing, jump() in jump.js is the action.
 
-import {byCodePoint, HOME, MAC, sh, UTF8} from "./sh.js";
+import {byCodePoint, HOME, MAC, run, sh, UTF8} from "./sh.js";
 
 export class Instance {
   constructor(fields) {
@@ -406,15 +406,20 @@ export const IS_CLAUDE = /^(\S*\/)?claude(\s|$)|^\S+\s+\S*\.claude\/local\/\S*cl
 const DAEMON = /^\S+\s+(daemon|bg-pty-host|bg-spare)(\s|$)/;
 const PS_LINE = /^\s*(\d+)\s+(\d+)\s+(.*)$/;
 
-// pid -> [ppid, command]
-export async function processes() {
+// pid -> [ppid, command]. `strict` throws when ps fails instead of answering an empty
+// table: discover() read that as every claude gone, sent `gone` for each, and drew none
+// until a poll's ps worked again (marx, 2026-10-12, 14:26-15:07, nothing in the log).
+export async function processes(strict = false, ps = run) {
   const table = new Map();
   // procps has no -x; -e is every process on both, but BSD ps then drops the command column
   const args = MAC ? ["-axo", "pid=,ppid=,command="] : ["-eo", "pid=,ppid=,args="];
-  for (const line of (await sh("ps", ...args)).split("\n")) {
+  const r = await ps("ps", ...args);
+  for (const line of (r.code === 0 ? r.out : "").split("\n")) {
     const m = PS_LINE.exec(line);
     if (m) table.set(Number(m[1]), [Number(m[2]), m[3]]);
   }
+  // ps lists at least itself, so an empty table is a ps that did not run
+  if (strict && !table.size) throw new Error(`ps: exit ${r.code}: ${r.err.trim() || "no output"}`);
   return table;
 }
 
@@ -506,7 +511,7 @@ export async function discover() {
   // read first, so a watched change is seen as it was and not after ps and tmux return
   const records = sessionRecords();
   const [procs, tmux] = await Promise.all([
-    processes(),
+    processes(true),
     tmuxTables([
       ["p", "list-panes", ["session_name", "window_index", "pane_index",
         "pane_id", "pane_pid", "pane_current_path", "pane_title"], "-a"],
