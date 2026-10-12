@@ -39,9 +39,10 @@
   .it { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 0 0.7rem; padding: 0.45rem 1.1rem; cursor: pointer; align-items: baseline; }
   .it:hover { background: var(--hover); }
   .it[aria-current=true] { background: var(--cur); }
-  .it.hot { background: var(--hot); } .it.hot.red { background: var(--hot-red); } .it.hot[aria-current=true] { box-shadow: inset 3px 0 0 var(--accent); }
+  .it.hot { background: var(--hot); } .it.hot.q { background: var(--hot-red); } .it.hot[aria-current=true] { box-shadow: inset 3px 0 0 var(--accent); }
   .it .d { width: 8px; height: 8px; border-radius: 50%; position: relative; top: calc(4px - 0.5ex); }  /* bottom on the title's baseline, then up so its center is mid x-height */
   .d.red { background: var(--red); } .d.blue { background: var(--accent); } .d.green { background: var(--green); } .d.yel { background: var(--yel); } .d.gray { background: var(--gray); }
+  .it .d.q { width: auto; height: auto; top: 0; border-radius: 0; color: var(--red); font-weight: 700; text-align: center; }  /* a session waiting on a dialog: "?" instead of the dot */
   .it .tx div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .it .tx small { display: block; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.82rem; }
   .it.hot .tx div, .it.unread .tx div { font-weight: 600; }
   .it time { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
@@ -54,12 +55,11 @@
   .meta { color: var(--muted); margin-bottom: 1rem; font-size: 0.88rem; }
   article img, article video { max-width: 100%; height: auto; border-radius: 6px; display: block; margin-bottom: 1rem; }
   pre { background: var(--pre-bg); color: var(--pre-fg); padding: 0.8rem 1rem; border-radius: 6px; font: 12.5px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
-  .need { border-left: 4px solid var(--accent); background: var(--need); border-radius: 0 6px 6px 0; padding: 0.7rem 0.9rem; margin: 1rem 0; } .need.red { border-color: var(--red); background: var(--need-red); } .need p { margin: 0.2rem 0 0; white-space: pre-line; overflow-wrap: anywhere; } .opts button small { display: block; opacity: 0.75; white-space: pre-line; } .need p.suggest { color: var(--muted); }
+  .need { border-left: 4px solid var(--accent); background: var(--need); border-radius: 0 6px 6px 0; padding: 0.7rem 0.9rem; margin: 1rem 0; } .need.red { border-color: var(--red); background: var(--need-red); } .need p { margin: 0.2rem 0 0; white-space: pre-line; overflow-wrap: anywhere; } .opts button small { display: block; opacity: 0.75; white-space: pre-line; }
   .opts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0 0; }
   .opts button { font: inherit; text-align: left; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: 6px; padding: 0.35rem 0.9rem; cursor: pointer; }
   .opts:not(.multi) button:first-child, .opts button[aria-pressed=true] { background: var(--accent); color: var(--on-accent); }
   .opts button:disabled { opacity: 0.5; cursor: default; }
-  .need .free { display: flex; gap: 0.4rem; margin: 0.5rem 0 0; } .need .free input { flex: 1; min-width: 0; font: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 0.35rem 0.7rem; } .need .free button { font: inherit; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: 6px; padding: 0.35rem 0.9rem; cursor: pointer; }
   .done { color: var(--green); font-weight: 600; } .err { color: var(--red); }
   .msgs { display: flex; flex-direction: column; gap: 0.5rem; }
   .m { align-self: flex-start; max-width: 78%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--bubble); overflow-wrap: anywhere; } .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); } .m.me small { text-align: right; } .m .q { display: block; font-size: 0.75rem; opacity: 0.75; }
@@ -147,7 +147,7 @@
 <script type="module">
 // A static page (no box): everything it shows comes from these, all same origin:
 //   ../ccx/api/...        sessions on every host: list + events (SSE), log, screen, pick, type
-//   ../blog/              the blog (its #posts are inserted here), asks.json, POST answer
+//   ../blog/              the blog (its #posts are inserted here)
 //   files/                todo.md, reminders.md, ideas/, projects/, research/: links to ~/nadya (caddy lists the dirs)
 //   ../nadya/             all of ~/nadya, for the files tab: a dir asked with Accept: application/json is caddy's listing as JSON
 const CCX = "../ccx/api";
@@ -156,7 +156,7 @@ const BLOG = "../blog/";
 navigator.serviceWorker?.register("sw.js");
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
-const S = {rows: [], usage: null, burn: null, asks: [], posts: [], todo: [], reminders: [], ideas: [], projects: [], log: [], screens: {}};
+const S = {rows: [], usage: null, burn: null, posts: [], todo: [], reminders: [], ideas: [], projects: [], log: [], screens: {}};
 // the open item lives in the URL, so a refresh reopens it: #blog, #marx.1234 (an old #blog/arc opens the blog)
 const hash = decodeURIComponent(location.hash.slice(1));
 const isDoc = (c) => /^(idea|project)\//.test(c ?? "");  // idea/<file> opened from plan, project/<file> from projects
@@ -165,7 +165,7 @@ const hashCur = isDoc(hash) || isFiles(hash) ? hash : hash.split("/")[0];
 let cur = hashCur || (innerWidth > 760 ? "nadya" : null);
 const isPid = (c) => c?.includes(".") && !isDoc(c) && !isFiles(c);  // marx.1234
 function setHash() { if (cur) history.replaceState(history.state, "", `#${encodeURI(cur).replace(/#/g, "%23")}`); }
-const sent = new Map();  // ask id / item -> what was sent, for "✓" lines
+const sent = new Map();  // item -> what was sent, for "✓" lines
 
 // ---------- helpers
 function ago(t) {
@@ -274,7 +274,6 @@ async function loadBurn() {
   if (!d.error || !S.burn24) S.burn24 = d;
   drawView(true);
 }
-async function loadAsks() { S.asks = (await json(`${BLOG}asks.json`, {cache: "no-cache"}).catch(() => null))?.asks ?? S.asks; draw(); }
 async function loadBlog() {
   const html = await fetch(BLOG, {cache: "no-cache"}).then((r) => r.text()).catch(() => "");
   const doc = new DOMParser().parseFromString(html, "text/html");
@@ -380,7 +379,6 @@ async function older(want) {
 }
 
 // ---------- what waits on the user
-function asksFor(name) { return S.asks.filter((a) => a.from === name && !sent.has(a.id)); }
 function hasDialog(r) { return r.state === "wait" && (r.asking || (stream?.pid === r.pid && S.screens[r.pid]?.dialog)); }
 function dueTodos() { const soon = Date.now() + 3600e3; return [...S.reminders, ...S.todo].filter((t) => t.due && t.due.getTime() <= soon && !sent.has("todo:" + t.full)); }
 // the pace is ccx's (api/usage, every host's log merged), so the page and `ccx usage` agree
@@ -402,12 +400,11 @@ function quiet(r) {
 function items() {
   const it = [];
   const n = nadyaRow();
-  const nAsks = S.asks.filter((a) => !sent.has(a.id) && !S.rows.some((r) => r.name === a.from && r.name !== "nadya"));
-  const nadyaHot = (n && hasDialog(n)) || nAsks.length;
+  const nadyaHot = n && hasDialog(n);
   const nLog = n && stream?.pid === n.pid ? S.log : [];
   const lastText = nLog.findLast((e) => e.type === "text" && !blank(e));
-  it.push({id: "nadya", d: nadyaHot ? (n && hasDialog(n) ? "red" : "blue") : n ? {busy: "green", wait: "", hold: "yel", free: "gray"}[n.state] : "gray", hot: nadyaHot, title: "nadya",
-    sub: n && hasDialog(n) ? `waits on a dialog: ${n.asking || "see pane"}` : nAsks[0] ? nAsks[0].text : n && quiet(n) ? "\u00a0" : lastText?.text.split("\n")[0] ?? (n ? n.summary : "not running"), t: n ? ago(n.since) : ""});
+  it.push({id: "nadya", d: nadyaHot ? "q" : n ? {busy: "green", wait: "", hold: "yel", free: "gray"}[n.state] : "gray", hot: nadyaHot, title: "nadya",
+    sub: nadyaHot ? `waits on a dialog: ${n.asking || "see pane"}` : n && quiet(n) ? "\u00a0" : lastText?.text.split("\n")[0] ?? (n ? n.summary : "not running"), t: n ? ago(n.since) : ""});
   if (!localStorage.cc_blog_seen && S.posts.length) localStorage.cc_blog_seen = Date.now();
   const seen = +localStorage.cc_blog_seen || 0, top = S.posts[0];
   const fresh = S.posts.filter((x) => Date.parse(x.time) > seen).length;
@@ -417,10 +414,10 @@ function items() {
   const ps = projects(), run = ps.filter((x) => x.running).length;
   it.push({id: "projects", d: run ? "green" : "", title: "projects", sub: ps.filter((x) => x.running).map((x) => `${x.file.replace(/\.md$/, "")} running`).join(" · "), t: ""});
   it.push({id: "files", d: "", title: "files", sub: "", t: ""});
-  const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, asks: asksFor(r.name), dialog: hasDialog(r)}));
-  ss.sort((a, b) => (b.dialog ? 2 : b.asks.length ? 1 : 0) - (a.dialog ? 2 : a.asks.length ? 1 : 0));
-  for (const {r, asks, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "red" : asks.length ? "blue" : {busy: "green", wait: "", hold: "yel", free: "gray"}[r.state] ?? "gray", hot: dialog || asks.length,
-    title: r.name, sub: dialog ? `waits on a dialog: ${r.asking || "see pane"}` : asks[0] ? asks[0].text : quiet(r) ? "\u00a0" : r.summary !== r.name ? r.summary : r.path, t: `${r.pid.split(".")[0] === "nadya" ? "" : r.pid.split(".")[0] + " · "}${ago(r.since)}`});
+  const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, dialog: !!hasDialog(r)}));
+  ss.sort((a, b) => b.dialog - a.dialog);
+  for (const {r, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "q" : {busy: "green", wait: "", hold: "yel", free: "gray"}[r.state] ?? "gray", hot: dialog,
+    title: r.name, sub: dialog ? `waits on a dialog: ${r.asking || "see pane"}` : quiet(r) ? "\u00a0" : r.summary !== r.name ? r.summary : r.path, t: `${r.pid.split(".")[0] === "nadya" ? "" : r.pid.split(".")[0] + " · "}${ago(r.since)}`});
   return it;
 }
 function draw() {
@@ -428,7 +425,7 @@ function draw() {
   let sec = null, html = "";
   for (const i of all) {
     if ((i.sec ?? "") !== sec) { sec = i.sec ?? ""; html += sec ? `<div class="sec">${sec}</div>` : `<div style="height:.4rem"></div>`; }
-    html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""}" data-id="${esc(i.id)}" aria-current="${i.id === (isDoc(cur) ? docParent(cur) : isFiles(cur) ? "files" : cur)}"><span class="d ${i.d}"></span><span class="tx"><div>${esc(i.title)}</div><small>${esc(i.sub)}</small></span><time>${esc(i.t)}</time></div>`;
+    html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""}" data-id="${esc(i.id)}" aria-current="${i.id === (isDoc(cur) ? docParent(cur) : isFiles(cur) ? "files" : cur)}"><span class="d ${i.d}">${i.d === "q" ? "?" : ""}</span><span class="tx"><div>${esc(i.title)}</div><small>${esc(i.sub)}</small></span><time>${esc(i.t)}</time></div>`;
   }
   if (S.offline) html += `<p class="meta" style="padding:0 1.1rem">${esc(S.offline)}</p>`;
   html += `<div class="addbar"><button class="add" id="add" aria-label="new session" title="start a new claude session" aria-current="${cur === "new"}">+</button></div>`;
@@ -636,11 +633,7 @@ function chat(r) {
 function nadyaView() {
   const n = nadyaRow();
   if (!n) return S.up?.includes("nadya") ? `<article><h1>nadya</h1><p class="meta">nadya isn't running.</p></article>` : "<article></article>";
-  const nAsks = S.asks.filter((a) => !S.rows.some((r) => r.name === a.from && r.name !== "nadya"));
-  return `<article>${metaLine(n)}${chat(n)}${dialogBox(n)}${nAsks.map(askBox).join("")}</article>`;
-}
-function askBox(a) {
-  return `<div class="need"><b>${esc(a.project)} · ${esc(a.from)} asks</b> <small class="meta">${esc(a.when)}</small><p>${esc(a.text)}</p>${a.suggest ? `<p class="suggest">nadya suggests: ${esc(a.suggest)}</p>` : ""}${sent.has(a.id) ? `<p class="done">✓ ${esc(sent.get(a.id))}</p>` : `<div class="opts" data-ask="${esc(a.id)}">${a.options.map((o) => `<button>${esc(o)}</button>`).join("")}</div><form class="free" data-ask="${esc(a.id)}"><input name="a" placeholder="Other answer" aria-label="Other answer" autocomplete="off"><button>Send</button></form>`}</div>`;
+  return `<article>${metaLine(n)}${chat(n)}${dialogBox(n)}</article>`;
 }
 function dialogBox(r) {
   const dg = r.state === "wait" && stream?.pid === r.pid ? S.screens[r.pid]?.dialog : null;
@@ -651,7 +644,7 @@ function dialogBox(r) {
   return `<div class="need red"><b>${esc(dg.title ?? dg.question ?? "Dialog")}</b>${dg.body ? `<p>${esc(dg.body)}</p>` : ""}<div class="opts${multi ? " multi" : ""}" data-pick="${esc(r.pid)}" data-labels="${esc(JSON.stringify(labels))}">${dg.options.map((o, k) => `<button data-i="${k}"${o.checked !== null ? ` aria-pressed="${o.checked}"` : ""}>${o.checked ? "✓ " : ""}${esc(o.label)}${o.detail ? `<small>${esc(o.detail)}</small>` : ""}</button>`).join("")}</div></div>`;
 }
 function sessionView(r) {
-  return `<article><h1>${esc(r.name)}</h1>${metaLine(r)}${chat(r)}${asksFor(r.name).map(askBox).join("")}${S.asks.filter((a) => a.from === r.name && sent.has(a.id)).map(askBox).join("")}${dialogBox(r)}</article>`;
+  return `<article><h1>${esc(r.name)}</h1>${metaLine(r)}${chat(r)}${dialogBox(r)}</article>`;
 }
 function todoRows(ts) {
   return ts.map((t) => `<li class="${t.mark === "!" ? "x" : ""}"><span>${esc(t.text)}</span>${t.date ? `<small>${t.date}${t.time ? " " + t.time : ""}${t.mark === "!" ? " · reminded" : ""}</small>` : ""}</li>`).join("") || "<li><span class=meta>nothing</span></li>";
@@ -724,19 +717,6 @@ async function dirHints(f) {
   $("#dirs").innerHTML = d.dirs.map((x) => `<option value="${esc(x.slice(x.indexOf(":") + 1))}/">`).join("");
 }
 document.addEventListener("input", (e) => { if (e.target.form?.id === "new" && e.target.name !== "name") dirHints(e.target.form); });
-// an ask's free-text answer goes the same way as its option buttons
-document.addEventListener("submit", async (e) => {
-  const f = e.target;
-  if (!f.matches?.("form.free[data-ask]")) return;
-  e.preventDefault();
-  const answer = f.a.value.trim(); if (!answer) return;
-  [...f.elements].forEach((x) => x.disabled = true);
-  try {
-    await post(`${BLOG}answer`, {id: f.dataset.ask, answer});
-    sent.set(f.dataset.ask, `answered: ${answer}`);
-    draw(); drawView(true);
-  } catch (err) { f.insertAdjacentHTML("afterend", `<p class="err">${esc(err.message)}</p>`); [...f.elements].forEach((x) => x.disabled = false); }
-});
 document.addEventListener("submit", async (e) => {
   if (e.target.id !== "new") return;
   e.preventDefault();
@@ -932,7 +912,6 @@ document.addEventListener("click", async (e) => {
   const box = b.parentElement; [...box.children].forEach((x) => x.disabled = true);
   try {
     if (box.dataset.pick) await post(`${CCX}/s/${box.dataset.pick}/pick`, {i: +b.dataset.i, labels: JSON.parse(box.dataset.labels)});
-    else if (box.dataset.ask) { await post(`${BLOG}answer`, {id: box.dataset.ask, answer: b.textContent}); sent.set(box.dataset.ask, `answered: ${b.textContent}`); }
     else if (box.dataset.todo) { setTimeout(loadTodo, 60e3); await toNadya(`[cc, ${box.dataset.file}] ${b.textContent === "done" ? "mark done" : "snooze 1 h"}: ${box.dataset.todo.slice(0, 200)}`); sent.set("todo:" + box.dataset.todo, b.textContent === "done" ? "sent to nadya: done" : "sent to nadya: snooze 1 h"); }
     // a multi-select toggle stays in the dialog: the next screen read shows the box checked
     if (!box.classList.contains("multi")) box.outerHTML = box.dataset.pick ? `<p class="done">✓ ${esc(JSON.parse(box.dataset.labels)[b.dataset.i])}</p>` : "";
@@ -982,10 +961,10 @@ function open() {
 
 // ---------- start
 listen();
-loadUsage(); loadAsks(); loadBlog(); loadTodo();
-setInterval(loadUsage, 5 * 60e3); setInterval(loadAsks, 60e3); setInterval(loadBlog, 60e3); setInterval(loadTodo, 30e3);
+loadUsage(); loadBlog(); loadTodo();
+setInterval(loadUsage, 5 * 60e3); setInterval(loadBlog, 60e3); setInterval(loadTodo, 30e3);
 // back on the tab (or the phone woke up): read everything again at once
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { loadUsage(); loadAsks(); loadBlog(); loadTodo(); if (isFiles(cur)) loadPath(cur.slice(6)); } });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { loadUsage(); loadBlog(); loadTodo(); if (isFiles(cur)) loadPath(cur.slice(6)); } });
 setInterval(draw, 30e3);  // ages
 // on start the input takes the focus (desktop only: on a phone it would open the keyboard)
 const wait = setInterval(() => {
