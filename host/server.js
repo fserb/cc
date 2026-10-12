@@ -662,7 +662,7 @@ export class Server {
     }
     if (verb === "pick") {
       if (!Array.isArray(body.labels)) return json({error: "no labels"}, 400);
-      return answer(await pick(inst, Number(body.i), body.labels));
+      return answer(await pick(inst, Number(body.i), body.labels, body.text ?? undefined));
     }
     if (verb === "esc") return answer(await sendKeys(inst, ["Escape"]));
     // Claude Code's chat:sendNow: with an empty input it stops the turn and sends the queued messages

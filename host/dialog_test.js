@@ -131,3 +131,12 @@ Deno.test("typeInto: refused on a pane showing a dialog, typed with force", asyn
     await run("tmux", "kill-session", "-t", sess);
   }
 });
+
+Deno.test("parseDialog: the question tool's free-text option", () => {
+  const d = parseDialog(fixture("question"));
+  eq(d.options.map((o) => !!o.free), [false, false, false, true, false], "Type something.");
+  eq(pickKeys(d, 3), ["4", "C-u"], "its digit, then clear");
+  d.options[3].current = true;
+  eq(pickKeys(d, 3), ["C-u"], "no digit once focused: it would be typed");
+  eq(parseDialog(fixture("question-multi")).options.some((o) => o.free), false, "not multi");
+});

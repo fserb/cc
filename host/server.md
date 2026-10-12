@@ -107,8 +107,9 @@ All JSON, all under `api/`.
                                    when the pid leaves the poll. No N: the tail, as a reset
     GET  api/s/<pid>/screen        {text, dialog}, once
     POST api/s/<pid>/type   {text}         typeInto()
-    POST api/s/<pid>/pick   {i, labels}    option i of the dialog, refused unless its
-                                           labels are still `labels`
+    POST api/s/<pid>/pick   {i, labels, text?}  option i of the dialog, refused unless its
+                                           labels are still `labels`; `text` answers the
+                                           question tool's free-text option (`free` on it)
     POST api/s/<pid>/esc                   Escape
     POST api/s/<pid>/now                   ctrl+x ctrl+s, Claude Code's "send now": with an
                                            empty input, stops the turn and sends the queue
@@ -205,8 +206,10 @@ findings are at the top of `dialog.js`; the ones that changed the design:
 - `pick` re-captures and refuses with "the dialog changed" unless the labels are the ones
   the client drew. Live: a stale list was refused, then `No` declined a Bash command
 
-Not tried yet: picking "Type something." and then typing, and dialogs other than these
-six. One that does not parse shows the screen view, where `esc` and the textarea work.
+Free text (2.1.296, 2026-10-12): the option above `Chat about this` is a field; its digit
+focuses it, after which a digit is text (cc sent `3` again and again into one). `pick` with
+`text` sends the digit unless the cursor is on it, then ctrl+u, a bracketed paste, Enter.
+Not tried yet: dialogs other than these six. One that does not parse shows the screen view, where `esc` and the textarea work.
 
 ## Transcript
 
@@ -320,7 +323,6 @@ are `ccx notify` (subs.js).
 
 Each is a guess the build has to check before relying on it:
 
-- picking the question tool's "Type something." and then typing the answer
 - spawning on Linux, `kitty --directory`, which nothing here has run
 
 ## Open questions

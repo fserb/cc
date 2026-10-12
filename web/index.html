@@ -60,6 +60,8 @@
   .opts button { font: inherit; text-align: left; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: 6px; padding: 0.35rem 0.9rem; cursor: pointer; }
   .opts:not(.multi) button:first-child, .opts button[aria-pressed=true] { background: var(--accent); color: var(--on-accent); }
   .opts button:disabled { opacity: 0.5; cursor: default; }
+  .opts form.free { display: flex; gap: 0.4rem; flex: 1 1 100%; } .free input { flex: 1; min-width: 0; font: inherit; border: 1px solid var(--accent); border-radius: 6px; padding: 0.35rem 0.6rem; }
+  .free input:focus { outline: 2px solid var(--accent); outline-offset: -1px; } .opts .free button { background: var(--accent); color: var(--on-accent); }
   .done { color: var(--green); font-weight: 600; } .err { color: var(--red); }
   .msgs { display: flex; flex-direction: column; gap: 0.5rem; }
   .m { align-self: flex-start; max-width: 78%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--bubble); overflow-wrap: anywhere; } .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); } .m.me small { text-align: right; } .m .q { display: block; font-size: 0.75rem; opacity: 0.75; }
@@ -135,7 +137,7 @@
     #left { border-right: 0; } .addbar { padding: 0; } .add { border-width: 1px 0 0; border-radius: 0; padding: 0.6rem 0 calc(0.6rem + env(safe-area-inset-bottom)); }
     .it { padding: 12px 14px; gap: 2px 10px; line-height: 1.4; } .it .tx div, .it .d { font-size: 17px; } .it .tx small { font-size: 15px; margin-top: 2px; } .it time { font-size: 14px; }
     .sec { font-size: 13px; padding: 1rem 14px 0.35rem; }
-    article { padding: 1rem; } .fl .sz { display: none; } #say { padding: 0.6rem 0.8rem calc(0.7rem + env(safe-area-inset-bottom)); } #say textarea { font-size: 16px; }
+    article { padding: 1rem; } .fl .sz { display: none; } #say { padding: 0.6rem 0.8rem calc(0.7rem + env(safe-area-inset-bottom)); } #say textarea, .free input { font-size: 16px; }
   }
 </style>
 </head>
@@ -503,7 +505,10 @@ function drawView(soft) {
   lastView = html;
   const t = same && view.querySelector(".msgs > .typing");
   if (t) dots = {cur, at: Date.now(), rect: t.getBoundingClientRect()};
+  const fi = view.querySelector(".free input") === document.activeElement && document.activeElement;
   view.innerHTML = html;
+  // a redraw keeps the free-text box focused, its caret where it was
+  if (fi) { const n = view.querySelector(".free input"); n?.focus(); n?.setSelectionRange(fi.selectionStart, fi.selectionEnd); }
   if (!soft) growing = 0;
   // keep the dots' bounce going across redraws; a reply that arrives grows out of the dots bubble
   view.querySelector(".typing")?.style.setProperty("--t", `-${Date.now() % 1200}ms`);
@@ -636,13 +641,19 @@ function nadyaView() {
   if (!n) return S.up?.includes("nadya") ? `<article><h1>nadya</h1><p class="meta">nadya isn't running.</p></article>` : "<article></article>";
   return `<article>${metaLine(n)}${chat(n)}${dialogBox(n)}</article>`;
 }
+// the question tool's free-text option, opened into a text box: {pid, i, labels, value}
+let freeText = null;
 function dialogBox(r) {
   const dg = r.state === "wait" && stream?.pid === r.pid ? S.screens[r.pid]?.dialog : null;
   if (!dg?.options?.length) return r.state === "wait" && r.asking ? `<div class="need red"><b>Waiting: ${esc(r.asking)}</b><p>Reading the dialog from the pane…</p></div>` : "";
   const labels = dg.options.map((o) => o.label);
   // a multi-select: its checked options are filled with a ✓, not the first one
   const multi = dg.options.some((o) => o.checked !== null);
-  return `<div class="need red"><b>${esc(dg.title ?? dg.question ?? "Dialog")}</b>${dg.body ? `<p>${esc(dg.body)}</p>` : ""}<div class="opts${multi ? " multi" : ""}" data-pick="${esc(r.pid)}" data-labels="${esc(JSON.stringify(labels))}">${dg.options.map((o, k) => `<button data-i="${k}"${o.checked !== null ? ` aria-pressed="${o.checked}"` : ""}>${o.checked ? "✓ " : ""}${esc(o.label)}${o.detail ? `<small>${esc(o.detail)}</small>` : ""}</button>`).join("")}</div></div>`;
+  const ft = freeText?.pid === r.pid && JSON.stringify(freeText.labels) === JSON.stringify(labels) ? freeText : null;
+  const opt = (o, k) => ft?.i === k
+    ? `<form class="free" data-i="${k}"><input name="a" value="${esc(ft.value)}" placeholder="Type something." autocomplete="off" enterkeyhint="send"><button>send</button></form>`
+    : `<button data-i="${k}"${o.free ? " data-free" : ""}${o.checked !== null ? ` aria-pressed="${o.checked}"` : ""}>${o.checked ? "✓ " : ""}${esc(o.free ? "Type something…" : o.label)}${o.detail ? `<small>${esc(o.detail)}</small>` : ""}</button>`;
+  return `<div class="need red"><b>${esc(dg.title ?? dg.question ?? "Dialog")}</b>${dg.body ? `<p>${esc(dg.body)}</p>` : ""}<div class="opts${multi ? " multi" : ""}" data-pick="${esc(r.pid)}" data-labels="${esc(JSON.stringify(labels))}">${dg.options.map(opt).join("")}</div></div>`;
 }
 function sessionView(r) {
   return `<article><h1>${esc(r.name)}</h1>${metaLine(r)}${chat(r)}${dialogBox(r)}</article>`;
@@ -952,7 +963,13 @@ document.addEventListener("click", async (e) => {
   const row = e.target.closest(".it"); if (row) { cur = row.dataset.id; push(); if (cur === "blog") localStorage.cc_blog_seen = Math.max(Date.now(), ...S.posts.map((x) => Date.parse(x.time) || 0)); if (cur === "plan" || cur === "projects") loadTodo(); open(); if ((cur === "nadya" || cur.includes(".")) && matchMedia("(hover: hover) and (pointer: fine)").matches) $("#say").q.focus(); return; }
   if (filesLink(e)) return;
   const go = e.target.closest("[data-go]"); if (go) { e.preventDefault(); cur = go.dataset.go; push(isDoc(cur) || isFiles(cur)); if (cur === "plan" || cur === "projects") loadTodo(); open(); return; }
-  const b = e.target.closest(".opts button"); if (!b) return;
+  const b = e.target.closest(".opts button"); if (!b || b.closest(".free")) return;
+  // the free-text option opens a text box; its answer goes with the pick (the form's submit)
+  if (b.dataset.free != null) {
+    const box = b.parentElement;
+    freeText = {pid: box.dataset.pick, i: +b.dataset.i, labels: JSON.parse(box.dataset.labels), value: ""};
+    lastView = null; drawView(true); $("#view .free input")?.focus(); return;
+  }
   const box = b.parentElement; [...box.children].forEach((x) => x.disabled = true);
   try {
     if (box.dataset.pick) await post(`${CCX}/s/${box.dataset.pick}/pick`, {i: +b.dataset.i, labels: JSON.parse(box.dataset.labels)});
@@ -961,6 +978,20 @@ document.addEventListener("click", async (e) => {
     if (!box.classList.contains("multi")) box.outerHTML = box.dataset.pick ? `<p class="done">✓ ${esc(JSON.parse(box.dataset.labels)[b.dataset.i])}</p>` : "";
     draw(); drawView(true);
   } catch (err) { box.insertAdjacentHTML("afterend", `<p class="err">${esc(err.message)}</p>`); [...box.children].forEach((x) => x.disabled = false); }
+});
+document.addEventListener("input", (e) => { if (e.target.matches(".free input") && freeText) freeText.value = e.target.value; });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && e.target.matches(".free input")) { freeText = null; lastView = null; drawView(true); } });
+document.addEventListener("submit", async (e) => {
+  const f = e.target.closest(".free"); if (!f) return;
+  e.preventDefault();
+  const box = f.parentElement, text = f.a.value.trim(); if (!text) return;
+  [...box.querySelectorAll("button, input")].forEach((x) => x.disabled = true);
+  try {
+    await post(`${CCX}/s/${box.dataset.pick}/pick`, {i: +f.dataset.i, labels: JSON.parse(box.dataset.labels), text});
+    freeText = null;
+    box.outerHTML = `<p class="done">✓ ${esc(text)}</p>`;
+    draw(); drawView(true);
+  } catch (err) { box.insertAdjacentHTML("afterend", `<p class="err">${esc(err.message)}</p>`); [...box.querySelectorAll("button, input")].forEach((x) => x.disabled = false); }
 });
 // a plain click on a link into ~/nadya (https://nadya.giraffe-yo.ts.net/nadya/..., http://nadya/nadya/..., /nadya/...) opens it
 // in the files tab; ctrl/cmd/shift/middle-click still open a tab, and data-out links (the files tab's "open ↗") always do

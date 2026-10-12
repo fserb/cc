@@ -26,6 +26,11 @@
 //   box. A bare option is reached with arrows from the cursor, then Enter
 // - the dialog is bounded above by a `─` rule; a `╌` rule is inside it, around a command
 //   or a diff
+// - **the question tool's free-text option is the one above `Chat about this`**, a field
+//   that reads `Type something.` until it holds text, then the text. Its digit moves the
+//   cursor onto it and focuses it; with the cursor there every key is text, so a second
+//   `3` types `3` (2.1.296). It is answered with its digit unless already focused, ctrl+u
+//   to clear it, a bracketed paste, Enter. Only single-select: a multi-select's is a box
 
 import {run} from "./sh.js";
 import {sendKeys} from "./jump.js";
@@ -65,6 +70,9 @@ export function parseDialog(text) {
     : bare(lines, cursor);
   if (options.length < 2) return null;
   if (lines.slice(to).filter((l) => l.trim()).length > BELOW) return null;
+  const chat = options.findIndex((o) => o.label === "Chat about this");
+  const free = options[chat - 1];
+  if (chat > 1 && free.n !== null && options.every((o) => o.checked === null)) free.free = true;
   let top = from - 1;
   while (top >= 0 && !RULE.test(lines[top])) top--;
   const card = lines.slice(Math.max(top + 1, from - 12), from)
@@ -140,9 +148,10 @@ export function dialogRefusal(text) {
 }
 
 // The tmux keys that pick option `i`: its digit if it has one, else arrows from the cursor
-// and Enter.
+// and Enter. The free-text option takes `text` after its keys, which pick() pastes.
 export function pickKeys(dialog, i) {
   const opt = dialog.options[i];
+  if (opt.free) return [...opt.current ? [] : [String(opt.n)], "C-u"];
   if (opt.n !== null && opt.n >= 1 && opt.n <= 9) return [String(opt.n)];
   const d = i - dialog.options.findIndex((o) => o.current);
   return [...Array(Math.abs(d)).fill(d < 0 ? "Up" : "Down"), "Enter"];
@@ -150,8 +159,9 @@ export function pickKeys(dialog, i) {
 
 // Pick option `i` of the dialog up on the instance's pane, if its labels are still
 // `labels`: the screen is read again first, so a tap never lands on a dialog other than the
-// one it was drawn from. An error message, or null when it worked.
-export async function pick(inst, i, labels) {
+// one it was drawn from. `answer` answers the free-text option and is refused on any other.
+// An error message, or null when it worked.
+export async function pick(inst, i, labels, answer) {
   if (!inst.pane) return `pid ${inst.pid} is not inside tmux`;
   const text = await screen(inst.pane);
   if (text === null) return `tmux: cannot capture ${inst.pane}`;
@@ -160,5 +170,22 @@ export async function pick(inst, i, labels) {
   const now = dialog.options.map((o) => o.label);
   if (JSON.stringify(now) !== JSON.stringify(labels)) return "the dialog changed";
   if (!Number.isInteger(i) || i < 0 || i >= now.length) return `no option ${i}`;
-  return sendKeys(inst, pickKeys(dialog, i));
+  if (answer === undefined) {
+    if (dialog.options[i].free) return "that option takes text";
+    return sendKeys(inst, pickKeys(dialog, i));
+  }
+  if (!dialog.options[i].free) return `option ${i} takes no text`;
+  if (!String(answer).trim()) return "no text";
+  // the digit first and on its own: the field takes keys once it has focus, a render later
+  const keys = pickKeys(dialog, i), clear = keys.pop();
+  if (keys.length) {
+    const err = await sendKeys(inst, keys);
+    if (err) return err;
+    await new Promise((res) => setTimeout(res, 300));
+  }
+  const buf = `ccx-${inst.pid}`, t = inst.pane;
+  const r = await run("tmux", "send-keys", "-t", t, clear, ";",
+    "set-buffer", "-b", buf, "--", String(answer), ";",
+    "paste-buffer", "-p", "-d", "-b", buf, "-t", t, ";", "send-keys", "-t", t, "Enter");
+  return r.code === 0 ? null : `tmux: ${r.err.trim() || `exit ${r.code}`}`;
 }
