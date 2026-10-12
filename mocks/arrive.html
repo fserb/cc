@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc arrive mocks</title>
+<style>
+  :root {
+    --bg: #fff; --text: #212529; --muted: #6c757d; --line: #e9ecef; --accent: #0b7bd3; --on-accent: #fff; --bubble: #f3f4f6;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #ddd; font: 15px/1.5 var(--font); color: var(--text); }
+  header { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0.6rem; position: sticky; top: 0; background: #ddd; z-index: 1; }
+  header button, section button { font: inherit; font-size: 0.85rem; border: 1px solid #bbb; background: #fff; border-radius: 999px; padding: 0.25rem 0.9rem; cursor: pointer; }
+  header button[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  main { display: flex; flex-wrap: wrap; gap: 0.6rem; padding: 0 0.6rem 0.6rem; }
+  section { width: min(390px, 100%); }
+  section > div:first-child { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.3rem; }
+  h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: #444; font-weight: 600; margin: 0; }
+  .view { height: min(680px, calc(100dvh - 7rem)); overflow: auto; background: var(--bg); border-radius: 10px; padding: 1rem; }
+  .msgs { display: flex; flex-direction: column; gap: 0.5rem; }
+  .m { align-self: flex-start; max-width: 78%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--bubble); overflow-wrap: anywhere; }
+  .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); } .m.me small { text-align: right; }
+  .m small { display: block; text-align: left; font-size: 0.6rem; opacity: 0.7; margin-top: 0.15rem; }
+  .m p { margin: 0 0 0.4rem; } .m p:last-of-type { margin: 0; } .m code { font: 0.88em var(--mono); }
+  .typing { align-self: flex-start; display: flex; gap: 4px; padding: 0.75rem 0.9rem; border-radius: 12px; background: var(--bubble); }
+  .typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: bob 1.2s ease-in-out infinite; }
+  .typing i:nth-child(2) { animation-delay: 0.15s; } .typing i:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes bob { 0%, 60%, 100% { opacity: 0.3; transform: none; } 30% { opacity: 1; transform: translateY(-3px); } }
+  .m .typing { position: absolute; left: 0; top: 0; background: none; }
+</style>
+<header>
+  <button data-len="short" aria-pressed="true">short</button><button data-len="long" aria-pressed="false">long</button>
+  <span style="width: 0.6rem"></span>
+  <button data-pin="bottom" aria-pressed="true">follow bottom</button><button data-pin="top" aria-pressed="false">stop at reply top</button>
+  <span style="width: 0.6rem"></span>
+  <button id="all">replay all</button>
+</header>
+<main>
+  <section data-v="now"><div><h2>now</h2><button>replay</button></div><div class="view"></div></section>
+  <section data-v="steps"><div><h2>1 width, height, text</h2><button>replay</button></div><div class="view"></div></section>
+  <section data-v="fade"><div><h2>2 grow, then text fades</h2><button>replay</button></div><div class="view"></div></section>
+  <section data-v="slide"><div><h2>3 no grow, slide up</h2><button>replay</button></div><div class="view"></div></section>
+</main>
+<script type="module">
+const $$ = (s, e = document) => [...e.querySelectorAll(s)];
+const BEFORE = `
+<div class="m me">start on the drafts thing<small>13:51</small></div>
+<div class="m"><p>On it. Drafts go in localStorage per session, dropped after 7 days untouched.</p><small>13:52</small></div>
+<div class="m me">and nadya's view too<small>13:53</small></div>
+<div class="m"><p>Yes, nadya's chat keeps its own draft.</p><small>13:53</small></div>
+<div class="m"><p>Pushed the drafts change. Unsent text now survives a reload.</p><small>14:02</small></div>
+<div class="m me">nice. what about the plan tab?<small>14:03</small></div>
+<div class="m"><p>It reads <code>reminders.md</code> as well as <code>todo.md</code> now, reminders sorted by date above the todo list.</p><small>14:04</small></div>
+<div class="m"><p>Due boxes come from both files.</p><small>14:04</small></div>
+<div class="m me">ok. can you check why the new message ui feels off?<small>14:06</small></div>`;
+const SHORT = `<p>Sure. Recording a reply arriving now, I'll report in a minute.</p><small>14:06</small>`;
+const LONG = `<p>Found it. When a reply arrives, cc swaps the chat's HTML and scrolls to the bottom in the same frame, by the reply's full height.</p>
+<p>Everything above moves up at once. Only after that does the bubble unclip downward, into space that is already there, so the scroll and the grow are two separate things.</p>
+<p>With a short reply the jump is about 75 px. With a long reply it is the whole reply height, so the top of the reply can be off screen before you see any of it.</p>
+<p>Options:</p>
+<p>1. Grow the dots bubble in width first, then in height, with the scroll following every frame, then show the text.</p>
+<p>2. Grow width and height together, then fade the text in.</p>
+<p>3. Don't grow: put the reply in place and scroll the chat up to it over the same 350 ms while the bubble fades in.</p>
+<p>For a reply taller than the screen, following the bottom means you land on its last lines. Stopping when the reply's top reaches the top of the screen means you start reading at its first line, and the "↓ new" button takes you the rest of the way.</p>
+<p>Mocks are in <code>mocks/arrive.html</code>, with a replay button per variant.</p><small>14:07</small>`;
+const DOTS = `<div class="typing"><i></i><i></i><i></i></div>`;
+let len = "short", pin = "bottom";
+
+const ease = (t) => 1 - (1 - t) ** 3;
+function tween(ms, f) {
+  return new Promise((done) => {
+    const t0 = performance.now();
+    const step = (now) => { const t = Math.min(1, (now - t0) / ms); f(ease(t)); t < 1 ? requestAnimationFrame(step) : done(); };
+    requestAnimationFrame(step);
+  });
+}
+// where the view should be scrolled: the bottom, or (stop at reply top) no further than the reply's top
+function target(view, reply) {
+  const bottom = view.scrollHeight - view.clientHeight;
+  if (pin !== "top") return bottom;
+  return Math.min(bottom, reply.offsetTop - view.offsetTop - 16);
+}
+
+function reset(sec) {
+  const view = sec.querySelector(".view");
+  sec.run = (sec.run ?? 0) + 1;
+  view.innerHTML = `<div class="msgs">${BEFORE}${DOTS}</div>`;
+  view.scrollTop = 1e9;
+  const run = sec.run;
+  setTimeout(() => run === sec.run && arrive[sec.dataset.v](view), 1200);
+}
+function swap(view) {
+  const dots = view.querySelector(".typing"), from = dots.getBoundingClientRect();
+  const reply = document.createElement("div");
+  reply.className = "m";
+  reply.innerHTML = len === "long" ? LONG : SHORT;
+  dots.replaceWith(reply);
+  const {width, height} = reply.getBoundingClientRect();
+  return {reply, from, width, height};
+}
+
+const arrive = {
+  // today's cc: swap, scroll to the bottom at once, unclip downward
+  now(view) {
+    const {reply, from, height} = swap(view);
+    const o = {duration: 350, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)"};
+    reply.animate([{clipPath: `inset(0 0 ${Math.max(0, height - from.height)}px 0 round 12px)`}, {clipPath: "inset(0 round 12px)"}], o);
+    for (const c of reply.children) c.animate([{opacity: 0}, {opacity: 0, offset: 0.4}, {opacity: 1}], o);
+    view.scrollTop = 1e9;
+  },
+  // the dots bubble widens to the reply's width, then grows down with the scroll following, then the text shows
+  async steps(view) {
+    const top = view.scrollTop;
+    const {reply, from, width, height} = swap(view);
+    const kids = [...reply.children];
+    for (const c of kids) c.style.visibility = "hidden";
+    Object.assign(reply.style, {position: "relative", height: `${from.height}px`, overflow: "hidden"});
+    reply.insertAdjacentHTML("beforeend", DOTS);
+    const dots = reply.lastChild;
+    view.scrollTop = top;
+    await tween(200, (k) => reply.style.clipPath = `inset(0 ${(width - from.width) * (1 - k)}px 0 0 round 12px)`);
+    dots.animate([{opacity: 1}, {opacity: 0}], {duration: 150, fill: "forwards"});
+    const s0 = view.scrollTop;
+    await tween(350, (k) => {
+      reply.style.height = `${from.height + (height - from.height) * k}px`;
+      view.scrollTop = pin === "top" ? s0 + (target(view, reply) - s0) * k : 1e9;
+    });
+    dots.remove();
+    reply.removeAttribute("style");
+    for (const c of kids) c.style.visibility = "";
+  },
+  // width and height together, then the text fades in
+  async fade(view) {
+    const top = view.scrollTop;
+    const {reply, from, width, height} = swap(view);
+    const kids = [...reply.children];
+    for (const c of kids) c.style.opacity = 0;
+    Object.assign(reply.style, {height: `${from.height}px`, overflow: "hidden"});
+    view.scrollTop = top;
+    const s0 = view.scrollTop;
+    await tween(350, (k) => {
+      reply.style.clipPath = `inset(0 ${(width - from.width) * (1 - k)}px 0 0 round 12px)`;
+      reply.style.height = `${from.height + (height - from.height) * k}px`;
+      view.scrollTop = pin === "top" ? s0 + (target(view, reply) - s0) * k : 1e9;
+    });
+    reply.removeAttribute("style");
+    for (const c of kids) { c.style.opacity = ""; c.animate([{opacity: 0}, {opacity: 1}], 200); }
+  },
+  // the reply is laid out in full; the chat scrolls up to it while it fades in
+  async slide(view) {
+    const top = view.scrollTop;
+    const {reply} = swap(view);
+    view.scrollTop = top;
+    const s0 = view.scrollTop, s1 = target(view, reply);
+    reply.animate([{opacity: 0, transform: "translateY(12px)"}, {opacity: 1, transform: "none"}], {duration: 350, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)"});
+    await tween(350, (k) => view.scrollTop = s0 + (s1 - s0) * k);
+  },
+};
+
+const secs = $$("section");
+for (const sec of secs) { sec.querySelector("button").onclick = () => reset(sec); reset(sec); }
+$("#all").onclick = () => secs.forEach(reset);
+function $(s) { return document.querySelector(s); }
+for (const b of $$("header button[data-len], header button[data-pin]")) b.onclick = () => {
+  const k = b.dataset.len ? "len" : "pin";
+  for (const o of $$(`header button[data-${k}]`)) o.setAttribute("aria-pressed", o === b);
+  if (k === "len") len = b.dataset.len; else pin = b.dataset.pin;
+  secs.forEach(reset);
+};
+</script>
