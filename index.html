@@ -63,7 +63,7 @@
   .done { color: var(--green); font-weight: 600; } .err { color: var(--red); }
   .msgs { display: flex; flex-direction: column; gap: 0.5rem; }
   .m { align-self: flex-start; max-width: 78%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--bubble); overflow-wrap: anywhere; } .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); } .m.me small { text-align: right; }
-  .m.me.pend { opacity: 0.5; } .m.me.fail { background: var(--red); opacity: 0.85; cursor: pointer; }
+  .m.me.pend { opacity: 0.5; } .m.me.stale { opacity: 0.5; cursor: pointer; } .m.me.fail { background: var(--red); opacity: 0.85; cursor: pointer; }
   .m small { display: block; text-align: left; font-size: 0.6rem; opacity: 0.7; margin-top: 0.15rem; }
   .m p { margin: 0 0 0.4rem; } .m p:last-of-type { margin: 0; } .m ul { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; } .m code { font: 0.88em var(--mono); }
   .typing { align-self: flex-start; display: flex; gap: 4px; padding: 0.75rem 0.9rem; border-radius: 12px; background: var(--bubble); }
@@ -441,8 +441,9 @@ function chat(r) {
   const out = msgs.map((m) => `<div class="m ${m.me ? "me" : ""}">${m.body}<small>${m.small}</small></div>`);
   // sent from here, not in the log yet: kept below everything until the log shows it
   for (const p of pending.filter((x) => x.pid === r.pid)) {
-    const note = p.err ? `not sent: ${esc(p.err)} · tap to dismiss` : Date.now() - p.at > 120e3 ? "not seen yet" : "sending…";
-    out.push(`<div class="m me ${p.err ? "fail" : "pend"}" data-pend="${p.id}">${esc(p.text.length > 600 ? p.text.slice(0, 600) + "…" : p.text)}<small>${note}</small></div>`);
+    const stale = !p.err && Date.now() - p.at > 120e3;
+    const note = p.err ? `not sent: ${esc(p.err)} · tap to dismiss` : stale ? "not seen yet · tap to dismiss" : "sending…";
+    out.push(`<div class="m me ${p.err ? "fail" : stale ? "stale" : "pend"}" data-pend="${p.id}">${esc(p.text.length > 600 ? p.text.slice(0, 600) + "…" : p.text)}<small>${note}</small></div>`);
   }
   // the state turns idle before the log has the reply: keep the dots up to 5 s until the reply shows, so it grows out of them
   const said = msgs.filter((m) => m.body && !m.me).length;
@@ -668,15 +669,18 @@ $("#say").onsubmit = async (e) => {
   const c = context(), text = r || !c ? q : `[cc, ${c}] ${q}`, to = r ?? nadyaRow();
   if (!to) return alert("Not sent: nadya isn't running");
   const p = {id: ++pendId, pid: to.pid, text, at: Date.now()};
-  pending.push(p); e.target.q.value = "";
+  // a dialog takes the paste and the Enter (which can pick its first option), so the text never reaches the session
+  if (hasDialog(to)) p.err = `${to.name} waits on a dialog; answer it first`;
+  pending.push(p); e.target.q.value = p.err ? q : "";
   setTimeout(() => drawView(true), 121e3);
   if (!r && cur !== "nadya") { cur = "nadya"; open(); } else drawView(true);
   toBottom();
+  if (p.err) return;
   try { await post(`${CCX}/s/${to.pid}/type`, {text}); }
   catch (err) { p.err = err.message; if (!e.target.q.value) e.target.q.value = q; drawView(true); }
 };
 document.addEventListener("click", async (e) => {
-  const pd = e.target.closest(".m.fail[data-pend]"); if (pd) { pending = pending.filter((p) => p.id !== +pd.dataset.pend); drawView(true); return; }
+  const pd = e.target.closest(".m.fail[data-pend], .m.stale[data-pend]"); if (pd) { pending = pending.filter((p) => p.id !== +pd.dataset.pend); drawView(true); return; }
   if (e.target.closest("#qbtn")) { cur = "quota"; push(); open(); loadBurn(); return; }
   const qt = e.target.closest("[data-qt]"); if (qt) { qTab = qt.dataset.qt; drawView(true); return; }
   if (e.target.closest("#add")) { cur = "new"; push(); open(); dirHints($("#new")); return; }
