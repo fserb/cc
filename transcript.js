@@ -68,15 +68,19 @@ function readRange(path, from, to) {
 // The events in the `size` bytes before `before`, or before the end of the log when it is
 // null. Only whole lines: the partial first one is left to the next page back, and with no
 // `before` the unfinished last one to readFrom(). `start` is where the next page back
-// ends, `end` where readFrom() picks up. A window goes on back until it holds `want`
-// events, the top or `budget` bytes: one Write's input is 40KB, a Read's result more, and
-// a 256KB tail of those was two lines on the screen.
-export const WANT = 40, BUDGET = 4 * 1024 * 1024;
+// ends, `end` where readFrom() picks up. A window goes on back until it holds `want` chat
+// messages (yours, its text, a peer's), the top or `budget` bytes. Tool calls and results
+// between them come along but do not count: launcher-a's last 40 events were 75 tools
+// and 3 texts, so a count of events left the page with almost no conversation. A page's
+// tool input and result text are cut to PAGE_CLIP, so a tool-heavy page stays small;
+// readFrom() keeps CLIP.
+export const WANT = 40, BUDGET = 4 * 1024 * 1024, PAGE_CLIP = 600;
+const CHAT = new Set(["user", "text", "peer"]);
 
 export function readPage(path, before = null, size = PAGE, want = WANT, budget = BUDGET) {
   const total = sizeOf(path);
   if (total < 0) return {events: [], start: 0, end: 0};
-  let stop = Math.min(before ?? total, total), end = null, events = [];
+  let stop = Math.min(before ?? total, total), end = null, events = [], chat = 0;
   const limit = stop - budget;
   for (let from = Math.max(0, stop - size); ;) {
     const buf = readRange(path, from, stop);
@@ -88,13 +92,21 @@ export function readPage(path, before = null, size = PAGE, want = WANT, budget =
       continue;
     }
     end ??= from + Math.max(a, b);
-    events = [...parse(buf.subarray(a, Math.max(a, b))), ...events];
-    if (events.length >= want || from === 0 || from <= limit) {
+    const got = parse(buf.subarray(a, Math.max(a, b))).map(short);
+    chat += got.filter((e) => CHAT.has(e.type)).length;
+    events = [...got, ...events];
+    if (chat >= want || from === 0 || from <= limit) {
       return {events, start: from + a, end};
     }
     stop = from + a;
     from = Math.max(0, stop - size);
   }
+}
+
+function short(e) {
+  if (e.type === "tool") return {...e, input: clip(e.input, PAGE_CLIP)};
+  if (e.type === "result") return {...e, text: clip(e.text, PAGE_CLIP)};
+  return e;
 }
 
 // What was appended after `offset`, up to the last newline. A log that shrank was
@@ -234,6 +246,6 @@ function argOf(input) {
   return line.length > 200 ? `${line.slice(0, 200)}…` : line;
 }
 
-function clip(s) {
-  return s.length > CLIP ? `${s.slice(0, CLIP)}…` : s;
+function clip(s, n = CLIP) {
+  return s.length > n ? `${s.slice(0, n)}…` : s;
 }

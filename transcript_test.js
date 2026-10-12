@@ -113,6 +113,48 @@ Deno.test("readPage: windows go on back until there are enough events, or the bu
   eq(readPage(path, null, 200, 1000, 400).events.length < 30, true, "but not past the budget");
 });
 
+// launcher-a's tail: tool calls and results between few texts
+function toolHeavy(texts, tools) {
+  const lines = [];
+  for (let n = 0; n < texts; n++) {
+    lines.push(n % 2 ? assistant({type: "text", text: `t${n}`}) : user(`u${n}`));
+    for (let k = 0; k < tools; k++) {
+      lines.push(assistant({type: "tool_use", id: `x${n}.${k}`, name: "Bash",
+        input: {command: `c${k}`, body: "z".repeat(2000)}}));
+      lines.push(user([{type: "tool_result", tool_use_id: `x${n}.${k}`, content: "r".repeat(2000)}]));
+    }
+  }
+  return lines;
+}
+const chat = (events) => events.filter((e) => e.type === "user" || e.type === "text").map((e) => e.text);
+
+Deno.test("readPage: a tail of many tools and few texts still holds `want` chat messages", () => {
+  const path = file(toolHeavy(60, 20));
+  const p = readPage(path, null, undefined, 40);
+  const got = chat(p.events);
+  eq(got.length >= 40, true, `40 or so chat messages, got ${got.length}`);
+  eq(got.at(-1), "t59", "ending at the last");
+  eq(p.events.some((e) => e.type === "tool"), true, "the tools between them come along");
+  const t = p.events.find((e) => e.type === "tool"), r = p.events.find((e) => e.type === "result");
+  eq([t.input.length <= 601, r.text.length <= 601, t.arg], [true, true, "c0"], "cut to PAGE_CLIP");
+});
+
+Deno.test("readPage: paging back by chat messages gives every event once, in order", () => {
+  const path = file(toolHeavy(60, 20));
+  const all = [];
+  let p = readPage(path, null, undefined, 10), pages = 1;
+  for (;;) {
+    eq(chat(p.events).length >= 10 || p.start === 0, true, "each page holds 10 or reaches the top");
+    all.unshift(...p.events);
+    if (p.start === 0) break;
+    p = readPage(path, p.start, undefined, 10);
+    pages++;
+  }
+  eq(chat(all), Array.from({length: 60}, (_, n) => n % 2 ? `t${n}` : `u${n}`), "nothing lost or repeated");
+  eq(all.filter((e) => e.type === "tool").length, 60 * 20, "every tool once");
+  eq(pages > 2, true, "it took several pages");
+});
+
 Deno.test("readPage: a page of nothing to draw goes on back", () => {
   const noise = Array.from({length: 50}, () => ({type: "attachment", timestamp: T,
     attachment: {type: "date", date: "x".repeat(40)}}));
