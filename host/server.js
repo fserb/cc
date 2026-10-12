@@ -1,19 +1,20 @@
-// ccx's API over HTTP, for cc (nadya:~/web/cc) through www/lemon.js: the listing, one
-// instance's conversation and screen, typing into it, answering its dialogs, and starting
-// new ones. No auth: `ccx serve` binds 127.0.0.1, `cchost` every interface with
-// tailnetOrLocal() as the boundary.
-// See server.md.
+// cchost's API over HTTP, for cc (nadya:~/web/cc): the listing, one instance's
+// conversation and screen, typing into it, answering its dialogs, and starting new ones.
+// With `all=1` the list is every host's, and `api/s/<host>.<pid>/...` reaches any host's
+// instance through this one. No auth: every interface, with tailnetOrLocal() as the
+// boundary. See server.md.
 //
-// - caddy's `handle_path /ccx*` strips the prefix: the server sees `/api/list` for
-//   `https://<host>/ccx/api/list`. There is no page; everything is under /api
+// - caddy's `handle_path /ccapi/*` strips the prefix: the server sees `/api/list` for
+//   `https://<host>/ccapi/api/list`, from loopback with the client in X-Forwarded-For.
+//   There is no page; everything is under /api
 // - one 1.5s tick drives every SSE stream. It reads `source()`, the instances the caller
 //   already polled, so there is one discover() per tick and not two
 // - `type` runs whatever it is given, so two checks come before any route. The Host has to
-//   be 127.0.0.1 or localhost on our port: a page that rebinds a name of its own onto
-//   127.0.0.1 arrives with that name, and caddy is told to send the upstream's
-//   (`header_up Host {upstream_hostport}`). And no cross-site request: `Sec-Fetch-Site`
-//   where the browser sends it, and a POST must be `application/json`, which a page on
-//   another origin cannot send without a CORS preflight this server never answers
+//   be an address, localhost or this machine's name: a page that rebinds a name of its own
+//   onto one of our addresses arrives with that name. And no cross-site request:
+//   `Sec-Fetch-Site` where the browser sends it, and a POST must be `application/json`,
+//   which a page on another origin cannot send without a CORS preflight this server never
+//   answers
 
 import {byCodePoint, HOME} from "./sh.js";
 import {logPath, readFrom, readPage} from "./transcript.js";
@@ -23,12 +24,13 @@ import {close, expandDir, paneIn, spawn} from "./spawn.js";
 import {sendPeer} from "./peer.js";
 import {byDay, pace, readUsage} from "./usage.js";
 import {localRows} from "./burn.js";
-import {burnReport, mergedUsage} from "./remote.js";
+import {base, burnReport, call, HOSTS, mergedUsage, SELF} from "./remote.js";
 import {STATES} from "./subs.js";
 
 export const PORT = 7681;
 const TICK = 1500;
 const KEEPALIVE = 15000;     // an SSE comment this often, so no proxy calls it idle
+const PASS = ["content-type", "sec-fetch-site", "last-event-id"];   // what a proxied call keeps
 
 const HOSTNAME = Deno.hostname().split(".")[0];
 
@@ -49,6 +51,12 @@ export function rowOf(i) {
     hasPane: Boolean(i.pane), pane: i.pane, session: i.session, window: i.window,
     paneIndex: i.paneIndex, tab: i.tab, sessionId: i.sessionId, sock: i.sock, ...i.peer};
 }
+
+// A row of `host` as the merged list has it: `<host>.<pid>`, `<host>/<pane>`,
+// `<host>:<session>`, `<host>:<path>`, so a client needs no idea of hosts
+export const tagRow = (host, r) => ({...r, pid: `${host}.${r.pid}`,
+  pane: r.pane ? `${host}/${r.pane}` : "", session: r.session ? `${host}:${r.session}` : "",
+  path: `${host}:${r.path}`});
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {status,
@@ -124,7 +132,30 @@ function stream(onClose) {
   });
   const send = (event, data, id = null) =>
     write(`${id === null ? "" : `id: ${id}\n`}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-  return {response: new Response(body, {headers: SSE_HEADERS}), send, close};
+  const end = () => {
+    try {
+      ctl.close();
+    } catch {
+      // closed already
+    }
+    close();
+  };
+  return {response: new Response(body, {headers: SSE_HEADERS}), send, close, end};
+}
+
+// Every SSE frame of a body as onFrame(event, data text, id or null)
+async function frames(body, onFrame) {
+  let buf = "";
+  for await (const chunk of body.pipeThrough(new TextDecoderStream())) {
+    buf += chunk;
+    let cut;
+    while ((cut = buf.indexOf("\n\n")) >= 0) {
+      const frame = buf.slice(0, cut);
+      buf = buf.slice(cut + 2);
+      const field = (k) => frame.match(new RegExp(`^${k}: (.*)$`, "m"))?.[1];
+      onFrame(field("event"), field("data"), field("id") ?? null);
+    }
+  }
 }
 
 const ip4 = (a) => a.split(".").reduce((n, o) => n * 256 + Number(o), 0);
@@ -143,12 +174,22 @@ function bridges() {
   }
 }
 
+const loopback = (a) => a === "::1" || /^(::ffff:)?127\./.test(a);
+
+// The address to judge a request by: the connection's, or with one from loopback carrying
+// X-Forwarded-For, the address in that header, which is caddy's client. Caddy with no
+// trusted_proxies overwrites the header, so its last entry is the one caddy wrote
+export function clientAddr(addr, xff) {
+  if (!xff || !loopback(addr.toLowerCase())) return addr;
+  return xff.split(",").at(-1).trim();
+}
+
 // Who may connect, by address: this machine, its docker bridges, or the tailnet
 // (100.64.0.0/10 and fd7a:115c:a1e0::/48). `cchost` listens on every interface, so this
 // is the boundary
 export function tailnetOrLocal(addr, nets = bridges()) {
   const a = addr.toLowerCase().replace(/^::ffff:/, "");
-  if (a === "::1" || a.startsWith("127.")) return true;
+  if (loopback(a)) return true;
   if (/^\d+\.\d+\.\d+\.\d+$/.test(a) &&
     nets.some(([net, mask]) => ((ip4(a) & mask) >>> 0) === (net >>> 0))) return true;
   if (a.startsWith("fd7a:115c:a1e0:")) return true;
@@ -157,15 +198,18 @@ export function tailnetOrLocal(addr, nets = bridges()) {
 }
 
 // The Host a request may name: an address, or this machine's own name, bare or as a
-// tailnet name. A page that rebinds a name of its own onto one of our addresses arrives
-// with that name, and that is what this refuses
+// tailnet name, on our port. The tailnet name also with no port, which is what caddy
+// passes on for `https://<host>.<tailnet>.ts.net/ccapi/...`. A page that rebinds a name of
+// its own onto one of our addresses arrives with that name, and that is what this refuses
 export function ownHost(host, port, self = HOSTNAME) {
-  const m = host.toLowerCase().match(/^(\[[0-9a-f:.]+\]|[^:]+):(\d+)$/);
-  if (!m || Number(m[2]) !== port) return false;
-  const name = m[1];
+  const m = host.toLowerCase().match(/^(\[[0-9a-f:.]+\]|[^:]+)(?::(\d+))?$/);
+  if (!m) return false;
+  const name = m[1], tsName = name.startsWith(`${self}.`) && name.endsWith(".ts.net");
+  if (m[2] === undefined) return tsName;
+  if (Number(m[2]) !== port) return false;
   if (name === "localhost" || name === self || name.startsWith("[")) return true;
   if (/^\d+\.\d+\.\d+\.\d+$/.test(name)) return true;
-  return name.startsWith(`${self}.`) && name.endsWith(".ts.net");
+  return tsName;
 }
 
 export class Server {
@@ -175,20 +219,30 @@ export class Server {
     this.relay = relay;                   // a Relay, under `cchost`
     this.subs = subs;                     // a Subs, under `cchost`
     this.lists = new Set();               // api/events clients
+    this.allLists = new Set();            // api/events?all=1 clients
     this.sessions = new Set();            // api/s/<pid>/events clients
+    this.proxied = new Set();             // api/s/<host>.<pid>/events of another host
     this.lastList = "";
+    this.lastAll = "";
+    this.self = SELF;                     // this host, as the merged list names it
+    this.hosts = HOSTS;                   // every host, in the merged list's order
+    this.base = base;                     // host -> its daemon's url
+    this.peers = new Map();               // host -> {body} or {error}, from its event stream
     this.timer = 0;
     this.cache = new Map();               // api/usage and api/burn answers, a minute each
   }
 
-  // `f()`, or what it gave under `key` in the last minute
-  async cached(key, f) {
+  // `f()`, or what it gave under `key` in the minute since it was ready. A call while
+  // one is in flight waits on that one
+  async cached(key, f, now = Date.now) {
     const hit = this.cache.get(key);
-    if (hit && Date.now() - hit.at < 60_000) return await hit.body;
-    const body = f();
-    this.cache.set(key, {at: Date.now(), body});
-    body.catch(() => this.cache.delete(key));
-    return await body;
+    if (hit && (hit.at === null || now() - hit.at < 60_000)) return await hit.body;
+    const entry = {at: null, body: f()};
+    this.cache.set(key, entry);
+    entry.body.then(() => entry.at = now(), () => {
+      if (this.cache.get(key) === entry) this.cache.delete(key);
+    });
+    return await entry.body;
   }
 
   // api/usage: this host's reading with `local=1`, which the others ask for; otherwise every
@@ -217,22 +271,65 @@ export class Server {
       host: HOSTNAME};
   }
 
+  // Another host's list, from the event stream `cchost` follows for the relay: its body
+  // (`{rows, offline, host}`), or null and why the stream dropped
+  peer(host, body, error = "") {
+    this.peers.set(host, body ? {body} : {error: error || "stream closed"});
+    this.pushList();
+  }
+
+  // every host, this one first when the host list leaves it out
+  allHosts() {
+    return this.hosts.includes(this.self) ? this.hosts : [this.self, ...this.hosts];
+  }
+
+  // Every host's rows, tagged (tagRow), in host-list order. `up` the hosts whose rows are
+  // in, `down` [host, why] for the rest; `host` says the same as text, for a client that
+  // reads it
+  mergedBody() {
+    const rows = [], up = [], down = [];
+    let offline = "";
+    for (const h of this.allHosts()) {
+      const p = this.peers.get(h);
+      const body = h === this.self ? this.listBody() : p?.body;
+      if (!body) {
+        down.push([h, p?.error ?? "no list yet"]);
+        continue;
+      }
+      up.push(h);
+      rows.push(...body.rows.map((r) => tagRow(h, r)));
+      offline ||= body.offline ?? "";
+    }
+    return {rows, offline, up, down,
+      host: up.join(" · ") + (down.length ? ` (${down.map(([h]) => h).join(", ")} down)` : "")};
+  }
+
   start() {
     this.timer = setInterval(() => this.tick().catch((e) => console.error(e)), TICK);
   }
 
   stop() {
     clearInterval(this.timer);
-    for (const c of [...this.lists, ...this.sessions]) c.close();
+    for (const c of [...this.lists, ...this.allLists, ...this.sessions, ...this.proxied]) c.close();
   }
 
-  // the list to its streams if it changed; `cchost` also calls it after each poll
+  // the list to its streams if it changed; `cchost` also calls it after each poll, and
+  // peer() when another host's list arrives
   pushList() {
-    if (!this.lists.size) return;
-    const body = this.listBody(), text = JSON.stringify(body);
-    if (text === this.lastList) return;
-    this.lastList = text;
-    for (const c of this.lists) c.send("list", body);
+    if (this.lists.size) {
+      const body = this.listBody(), text = JSON.stringify(body);
+      if (text !== this.lastList) {
+        this.lastList = text;
+        for (const c of this.lists) c.send("list", body);
+      }
+    }
+    if (this.allLists.size) {
+      const body = this.mergedBody(), text = JSON.stringify(body);
+      if (text !== this.lastAll) {
+        this.lastAll = text;
+        for (const c of this.allLists) c.send("list", body);
+      }
+    }
   }
 
   async tick() {
@@ -242,7 +339,7 @@ export class Server {
     for (const c of this.sessions) {
       const inst = this.find(c.pid);
       if (!inst) {
-        c.send("gone", {pid: c.pid});
+        c.send("gone", {pid: c.tag ? `${c.tag}.${c.pid}` : c.pid});
         c.close();
         continue;
       }
@@ -260,7 +357,7 @@ export class Server {
     const row = JSON.stringify(rowOf(inst));
     if (row !== c.row) {
       c.row = row;
-      c.send("state", rowOf(inst));
+      c.send("state", c.tag ? tagRow(c.tag, rowOf(inst)) : rowOf(inst));
     }
     // a /clear starts a new log under a new sessionId, so the path is checked every tick
     const path = inst.sessionId ? logPath(inst.cwd, inst.sessionId) : "";
@@ -295,29 +392,148 @@ export class Server {
     }
   }
 
-  listEvents() {
-    const c = stream(() => this.lists.delete(c));
-    this.lists.add(c);
-    c.send("list", this.listBody());
+  listEvents(all = false) {
+    const set = all ? this.allLists : this.lists;
+    const c = stream(() => set.delete(c));
+    set.add(c);
+    c.send("list", all ? this.mergedBody() : this.listBody());
     return c.response;
   }
 
   // `from` is the byte offset the page already has, from api/s/<pid>/log or Last-Event-ID
-  // on a reconnect. Without one the stream starts with the tail, as a reset.
-  sessionEvents(pid, from) {
+  // on a reconnect. Without one the stream starts with the tail, as a reset. `tag`, a host:
+  // the rows in it are tagged as the merged list's are
+  sessionEvents(pid, from, tag = "") {
     const c = stream(() => this.sessions.delete(c));
-    Object.assign(c, {pid, end: from, path: undefined, row: "", screen: null, dialog: ""});
+    Object.assign(c, {pid, tag, end: from, path: undefined, row: "", screen: null, dialog: ""});
     this.sessions.add(c);
     const inst = this.find(pid);
     if (inst) this.follow(c, inst, null).catch((e) => console.error(e));
     return c.response;
   }
 
+  // `<host>:rest` or `<host>/rest` with a known host, else [null, text]
+  split(text, sep) {
+    const at = text.indexOf(sep), host = at > 0 ? text.slice(0, at) : "";
+    return this.allHosts().includes(host) ? [host, text.slice(at + 1)] : [null, text];
+  }
+
+  // `req` to another host's daemon: same method, body and the headers its checks read
+  async pass(req, host, path, signal = AbortSignal.timeout(15_000)) {
+    const headers = new Headers();
+    for (const h of PASS) if (req.headers.has(h)) headers.set(h, req.headers.get(h));
+    const body = req.method === "POST" ? await req.text() : undefined;
+    return await fetch(`${this.base(host)}${path}`, {method: req.method, headers, body, signal});
+  }
+
+  // api/s/<host>.<pid>/<verb> of another host, as it answered
+  async proxy(req, host, pid, verb, search) {
+    if (verb === "events") return this.proxyEvents(req, host, pid, search);
+    try {
+      const r = await this.pass(req, host, `/api/s/${pid}/${verb}${search}`);
+      return new Response(r.body, {status: r.status, headers: r.headers});
+    } catch (e) {
+      return json({error: `${host}: ${e.message}`}, 502);
+    }
+  }
+
+  // Another host's session stream, its rows tagged as the merged list's are
+  proxyEvents(req, host, pid, search) {
+    const ctl = new AbortController();
+    const c = stream(() => {
+      this.proxied.delete(c);
+      ctl.abort();
+    });
+    this.proxied.add(c);
+    (async () => {
+      try {
+        const r = await this.pass(req, host, `/api/s/${pid}/events${search}`, ctl.signal);
+        if (!r.ok) {
+          c.send("gone", {pid: `${host}.${pid}`});
+        } else {
+          await frames(r.body, (event, data, id) => {
+            let d = JSON.parse(data);
+            if (event === "state") d = tagRow(host, d);
+            if (event === "gone") d = {pid: `${host}.${pid}`};
+            c.send(event, d, id);
+          });
+        }
+      } catch {
+        // the host went away or the client did
+      }
+      c.end();
+    })();
+    return c.response;
+  }
+
+  // api/dirs: `host:prefix` asks that host, and its dirs come back `host:`-tagged. A bare
+  // prefix is this host's, or with `all` every host's
+  async dirs(prefix, all) {
+    const [host, rest] = this.split(prefix, ":");
+    if (!host && !all) return dirsUnder(prefix);
+    const got = await Promise.all((host ? [host] : this.allHosts()).map(async (h) => {
+      const body = h === this.self ? dirsUnder(rest)
+        : (await call(h, `/api/dirs?prefix=${encodeURIComponent(rest)}`))[0];
+      return {dirs: (body?.dirs ?? []).map((d) => `${h}:${d}`), exists: Boolean(body?.exists)};
+    }));
+    return {dirs: got.flatMap((g) => g.dirs), exists: Boolean(host) && got[0].exists};
+  }
+
+  // api/spawn: on the host its `after` pane (`host/<pane>`) or its dir (`host:dir`) names,
+  // with its pid and pane tagged as the list's; with neither, here as before
+  async spawnRoute(req) {
+    const body = await req.json().catch(() => ({}));
+    let host = null;
+    if (body.after) [host, body.after] = this.split(String(body.after), "/");
+    const [dirHost, dir] = this.split(String(body.dir ?? ""), ":");
+    host ??= dirHost;
+    body.dir = dir;
+    let status, out;
+    if (!host || host === this.self) {
+      out = await this.spawnHere(body);
+      status = out.error ? (out.pane ? 502 : 409) : 200;
+      if (!host) return json(out, status);
+    } else {
+      try {
+        const r = await fetch(`${this.base(host)}/api/spawn`, {method: "POST",
+          headers: {"content-type": "application/json",
+            "sec-fetch-site": req.headers.get("sec-fetch-site") ?? "same-origin"},
+          body: JSON.stringify(body), signal: AbortSignal.timeout(30_000)});
+        [status, out] = [r.status, await r.json()];
+      } catch (e) {
+        return json({error: `${host}: ${e.message}`}, 502);
+      }
+    }
+    if (out.pid) out.pid = `${host}.${out.pid}`;
+    if (out.pane) out.pane = `${host}/${out.pane}`;
+    return json(out, status);
+  }
+
+  // a detached tmux session unless `focus`; then `after` a pane, or with `beside` after
+  // the last claude already in dir, else a new kitty window
+  async spawnHere(body) {
+    const focus = body.focus === true;
+    let after = focus ? String(body.after ?? "") : "";
+    if (!after && focus && body.beside === true) {
+      try {
+        after = await paneIn(Deno.realPathSync(expandDir(String(body.dir ?? ""))));
+      } catch {
+        // no such dir: spawn() says so
+      }
+    }
+    const r = await spawn({dir: String(body.dir ?? ""), after,
+      mkdir: body.mkdir === true, name: String(body.name ?? ""), focus});
+    return r.error ? r : {...r, after};
+  }
+
   async handle(req, info = null) {
     const url = new URL(req.url);
-    const path = url.pathname.replace(/\/+$/, "") || "/";
+    let path = url.pathname.replace(/\/+$/, "") || "/";
     const get = req.method === "GET", post = req.method === "POST";
-    if (info && !tailnetOrLocal(info.remoteAddr.hostname)) return json({error: "not tailnet"}, 403);
+    if (info && !tailnetOrLocal(clientAddr(info.remoteAddr.hostname,
+      req.headers.get("x-forwarded-for")))) {
+      return json({error: "not tailnet"}, 403);
+    }
     if (!ownHost(req.headers.get("host") ?? "", this.port)) return json({error: "bad host"}, 403);
     if (req.headers.get("sec-fetch-site") === "cross-site") {
       return json({error: "cross-site"}, 403);
@@ -325,8 +541,9 @@ export class Server {
     if (post && !(req.headers.get("content-type") ?? "").startsWith("application/json")) {
       return json({error: "a POST is application/json"}, 415);
     }
-    if (get && path === "/api/list") return json(this.listBody());
-    if (get && path === "/api/events") return this.listEvents();
+    const all = url.searchParams.get("all") === "1";
+    if (get && path === "/api/list") return json(all ? this.mergedBody() : this.listBody());
+    if (get && path === "/api/events") return this.listEvents(all);
     if (get && path === "/api/usage") return json({usage: await this.usage(url)});
     if (get && path === "/api/burn/rows") {
       const n = (k) => Number(url.searchParams.get(k));
@@ -363,23 +580,21 @@ export class Server {
         name: String(who.name ?? "")}, target: {pid, name: inst.name}, state, secs});
       return json({id, state: inst.state});
     }
-    if (get && path === "/api/dirs") return json(dirsUnder(url.searchParams.get("prefix") ?? ""));
-    if (post && path === "/api/spawn") {
-      const body = await req.json().catch(() => ({}));
-      // a detached tmux session unless `focus`; then `after` a pane, or with `beside` after
-      // the last claude already in dir, else a new kitty window
-      const focus = body.focus === true;
-      let after = focus ? String(body.after ?? "") : "";
-      if (!after && focus && body.beside === true) {
-        try {
-          after = await paneIn(Deno.realPathSync(expandDir(String(body.dir ?? ""))));
-        } catch {
-          // no such dir: spawn() says so
-        }
+    if (get && path === "/api/dirs") {
+      return json(await this.dirs(url.searchParams.get("prefix") ?? "", all));
+    }
+    if (post && path === "/api/spawn") return await this.spawnRoute(req);
+    // `<host>.<pid>`, the merged list's id: another host's goes there, this host's is `<pid>`
+    let tag = "";
+    const hm = path.match(/^\/api\/s\/([a-z][\w-]*)\.(\d+)\/(\w+)$/i);
+    if (hm) {
+      const [, host, pid, verb] = hm;
+      if (host !== this.self) {
+        if (!this.hosts.includes(host)) return json({error: `no host ${host}`}, 404);
+        return await this.proxy(req, host, pid, verb, url.search);
       }
-      const r = await spawn({dir: String(body.dir ?? ""), after,
-        mkdir: body.mkdir === true, name: String(body.name ?? ""), focus});
-      return r.error ? json(r, r.pane ? 502 : 409) : json({...r, after});
+      tag = host;
+      path = `/api/s/${pid}/${verb}`;
     }
     const m = path.match(/^\/api\/s\/(\d+)\/(log|events|type|pick|esc|now|unqueue|screen|send|select|close)$/);
     if (!m) return json({error: "not found"}, 404);
@@ -395,7 +610,7 @@ export class Server {
     }
     if (get && verb === "events") {
       const id = req.headers.get("last-event-id") ?? url.searchParams.get("from");
-      return this.sessionEvents(pid, id === null || id === "" ? null : Number(id));
+      return this.sessionEvents(pid, id === null || id === "" ? null : Number(id), tag);
     }
     if (get && verb === "screen") {
       if (!inst.pane) return json({error: `pid ${pid} is not inside tmux`}, 409);

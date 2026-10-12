@@ -83,7 +83,12 @@ async function serve(args) {
     Deno.exit(1);
   }
   server = r.server;
-  const stops = remote.others().map((h) => remote.follow(h, (rows) => relay.sync(h, rows)));
+  // each other host's list stream feeds the relay's stand-ins and the merged list
+  // (api/list?all=1) both
+  const stops = remote.others().map((h) => remote.follow(h, (rows, body, why) => {
+    relay.sync(h, rows);
+    server.peer(h, body, why);
+  }));
   const quit = () => {
     for (const stop of stops) stop();
     relay.close();

@@ -63,8 +63,15 @@ refused, and `/boxerz` still answered. `handle_path` strips the prefix. On nadya
 
 ## Who may use it
 
-Anyone who can reach it. The tailnet is the boundary: caddy only listens for the tailnet
-name, and the server only on 127.0.0.1. No auth in ccx.
+Anyone who can reach it. The tailnet is the boundary: cchost answers only a tailnet
+address, loopback or a docker bridge (`tailnetOrLocal`). No auth.
+
+Behind caddy (`handle_path /ccapi/* { reverse_proxy localhost:7681 }`) the connection
+comes from loopback with the client in `X-Forwarded-For`, which caddy with no
+`trusted_proxies` overwrites, so a loopback connection carrying that header is judged by
+the header's last address (`clientAddr`). The Host is then `<host>.<tailnet>.ts.net` with
+no port, which `ownHost` accepts for this machine's own name only; any other Host needs
+our port.
 
 That boundary does not cover your own browser. `type` runs whatever it is given, so any
 web page you visit could otherwise reach it two ways, and both are refused before routing:
@@ -110,6 +117,39 @@ All JSON, all under `api/`.
                                    window. Answers {pid, pane}
     GET  api/dirs?prefix=~/ai/c    {dirs, exists}: subdirectories under prefix, for the
                                    dir field, and whether prefix itself is one
+
+### Every host through one daemon (2026-10-12)
+
+Any cchost answers for every host, which is what `www/lemon.js` did and will stop doing.
+Without `all=1` and with a bare pid every route is this host's alone, as above: the other
+daemons' relay streams and ccx call them that way, and marx may run older code.
+
+    GET  api/list?all=1            {rows, offline, up, down, host}: every host's rows in
+                                   CCX_HOSTS order, tagged: pid `<host>.<pid>`, pane
+                                   `<host>/<pane>` (or ""), session `<host>:<session>`
+                                   (or ""), path `<host>:<path>`; every other field as the
+                                   host gave it. `up` [host], `down` [[host, why]],
+                                   `offline` the first host's non-empty one, `host` the
+                                   old display text `marx · nadya (x down)`
+    GET  api/events?all=1          SSE; `list` with that body at once and on any change
+    *    api/s/<host>.<pid>/<verb> this host: `api/s/<pid>/<verb>`, with `state` rows and
+                                   `gone` in its stream tagged the same. Another host:
+                                   proxied to its daemon, method, body, status and the
+                                   headers content-type, sec-fetch-site and last-event-id
+                                   passed; its stream re-sent with rows tagged. 404 for a
+                                   host not in CCX_HOSTS, 502 for one that does not answer
+    POST api/spawn                 `after` `<host>/<pane>` or dir `<host>:dir` runs it on
+                                   that host, the answer's pid and pane tagged; neither,
+                                   here as before
+    GET  api/dirs?prefix=<host>:p  that host's dirs, each `<host>:`-tagged; a bare prefix
+                                   with `all=1` asks every host
+
+- the other hosts' rows are the event streams cchost already follows for the relay
+  (`remote.follow`), cached per host as their last `list` body, so `all=1` opens no
+  connection. A host whose stream dropped is in `down` with the fetch error, one not yet
+  heard from with `no list yet`; it retries every 5s
+- tried on nadya against the live daemons: rows from both hosts, `log`, `screen` and the
+  session stream of a marx instance through nadya, `dirs` with `marx:` and with `all=1`
 
 Errors use the existing convention: the functions return a message or null, and the
 server answers `{error}` with 502 when the message starts `tmux:` and 409 otherwise (not

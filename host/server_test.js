@@ -2,7 +2,8 @@
 // no tmux: the routing, the pid check, the ordering and the list stream. The actions that
 // do reach tmux were run by hand against a scratch session (see server.md).
 
-import {dirsUnder, runServer, Server, tmuxOrder} from "./server.js";
+import {clientAddr, dirsUnder, ownHost, runServer, Server, tagRow, tailnetOrLocal,
+  tmuxOrder} from "./server.js";
 import {Instance} from "./claudes.js";
 import {HOME} from "./sh.js";
 
@@ -94,4 +95,125 @@ Deno.test("runServer: the list stream, and a taken port is an error, not a throw
   eq(JSON.parse(first.split("data: ")[1]).rows[0].pid, 5, "with the rows");
   await reader.cancel();
   await a.stop();
+});
+
+// a Server as host `a` of a, b, c, with b reached at `bBase`
+function hosts(instances, bBase = "http://127.0.0.1:1") {
+  const s = server(instances);
+  Object.assign(s, {self: "a", hosts: ["a", "b", "c"], base: (h) => h === "b" ? bBase : "http://127.0.0.1:1"});
+  return s;
+}
+
+// The first SSE frame of a response as [event, data]
+async function firstFrame(r) {
+  const reader = r.body.getReader();
+  let text = "";
+  while (!text.includes("\n\n")) text += new TextDecoder().decode((await reader.read()).value);
+  await reader.cancel();
+  const frame = text.slice(0, text.indexOf("\n\n"));
+  return [frame.match(/^event: (.*)$/m)[1], JSON.parse(frame.match(/^data: (.*)$/m)[1])];
+}
+
+Deno.test("Server: all=1 merges every host's rows, tagged, with up and down", async () => {
+  const s = hosts([inst(5, "kitty-1", "1", "0")]);
+  const plain = await (await call(s, "/api/list")).json();
+  eq([plain.rows[0].pid, plain.up], [5, undefined], "without all=1, this host as before");
+  s.peer("b", {rows: [{pid: 7, pane: "%3", session: "kitty-2", path: "~/x"}], offline: "offline",
+    host: "b"});
+  s.peer("c", null, "connection refused");
+  const all = await (await call(s, "/api/list?all=1")).json();
+  eq(all.rows.map((r) => [r.pid, r.pane, r.session, r.path]),
+    [["a.5", "a/%5", "a:kitty-1", "a:~/p5"], ["b.7", "b/%3", "b:kitty-2", "b:~/x"]], "rows");
+  eq([all.up, all.down, all.host, all.offline], [["a", "b"], [["c", "connection refused"]],
+    "a · b (c down)", "offline"], "up, down, host, offline");
+  s.peers.delete("c");
+  eq((await (await call(s, "/api/list?all=1")).json()).down, [["c", "no list yet"]],
+    "a host not heard from yet");
+  eq(tagRow("b", {pid: 1, pane: "", session: "", path: "~"}),
+    {pid: "b.1", pane: "", session: "", path: "b:~"}, "no pane, no session");
+  const [event, body] = await firstFrame(await call(s, "/api/events?all=1"));
+  eq([event, body.rows.length, body.up], ["list", 2, ["a", "b"]], "the merged stream");
+  s.stop();
+});
+
+Deno.test("Server: api/s/<host>.<pid> is local for this host, proxied for another", async () => {
+  const b = runServer({source: () => ({instances: [inst(7, "", "", "")], net: null}), port: 7698});
+  const s = hosts([inst(5, "", "", "")], "http://127.0.0.1:7698");
+  eq(await (await call(s, "/api/s/a.5/log")).json(), {events: [], start: 0, end: 0}, "local");
+  eq((await call(s, "/api/s/a.7/log")).status, 404, "local, not in the poll");
+  eq(await (await call(s, "/api/s/b.7/log")).json(), {events: [], start: 0, end: 0}, "proxied");
+  const r = await post(s, "/api/s/b.7/type", '{"text":"hi"}');
+  eq([r.status, (await r.json()).error], [409, "pid 7 is not inside tmux; nothing to type into"],
+    "a proxied POST keeps body and status");
+  eq((await call(s, "/api/s/b.5/log")).status, 404, "the other host's 404");
+  eq((await call(s, "/api/s/zz.5/log")).status, 404, "an unknown host");
+  eq((await call(s, "/api/s/c.5/log")).status, 502, "a host that is down");
+  eq(await firstFrame(await call(s, "/api/s/a.5/events")), ["state",
+    tagRow("a", JSON.parse(JSON.stringify(s.listBody().rows[0])))], "local stream, rows tagged");
+  const [event, row] = await firstFrame(await call(s, "/api/s/b.7/events"));
+  eq([event, row.pid, row.path], ["state", "b.7", "b:~/p7"], "proxied stream, rows tagged");
+  eq((await firstFrame(await call(s, "/api/s/5/events")))[1].pid, 5, "a bare pid, untagged");
+  s.stop();
+  await b.stop();
+});
+
+Deno.test("Server: dirs and spawn route by their host: prefix", async () => {
+  const s = hosts([]);
+  eq(s.split("b/%3", "/"), ["b", "%3"], "a pane on b");
+  eq(s.split("a:~/x", ":"), ["a", "~/x"], "a dir here");
+  eq(s.split("~/x:y", ":"), [null, "~/x:y"], "no host");
+  const dir = Deno.makeTempDirSync();
+  Deno.mkdirSync(`${dir}/one`);
+  eq(await (await call(s, `/api/dirs?prefix=a:${dir}/o`)).json(),
+    {dirs: [`a:${dir}/one`], exists: false}, "this host's, tagged");
+  eq(await (await call(s, `/api/dirs?prefix=${dir}/o`)).json(),
+    {dirs: [`${dir}/one`], exists: false}, "a bare prefix, as before");
+  eq((await (await call(s, `/api/dirs?prefix=${dir}/o&all=1`)).json()).dirs, [`a:${dir}/one`],
+    "all=1: every host, the down ones empty");
+  const r = await post(s, "/api/spawn", '{"dir":"c:~/x"}');
+  eq([r.status, (await r.json()).error.startsWith("c: ")], [502, true], "spawn on a down host");
+});
+
+Deno.test("access: X-Forwarded-For from loopback, a tailnet name with no port", async () => {
+  eq(clientAddr("127.0.0.1", "100.101.1.2"), "100.101.1.2", "caddy's client");
+  eq(clientAddr("100.64.0.9", "8.8.8.8"), "100.64.0.9", "only from loopback");
+  eq(clientAddr("::1", "1.1.1.1, 100.64.0.1"), "100.64.0.1", "the last entry");
+  eq(clientAddr("127.0.0.1", null), "127.0.0.1", "no header");
+  eq(tailnetOrLocal(clientAddr("127.0.0.1", "8.8.8.8"), []), false, "outside, through caddy");
+  eq(ownHost("nadya.giraffe-yo.ts.net", 7681, "nadya"), true, "tailnet name, no port");
+  eq(ownHost("nadya.giraffe-yo.ts.net:7681", 7681, "nadya"), true, "tailnet name, our port");
+  eq(ownHost("nadya.giraffe-yo.ts.net:8080", 7681, "nadya"), false, "another port");
+  eq(ownHost("evil.example", 7681, "nadya"), false, "another name, no port");
+  eq(ownHost("127.0.0.1", 7681, "nadya"), false, "an address, no port");
+  const s = server([]);
+  const via = (xff) => s.handle(new Request("http://x/api/list", {headers: {
+    host: "127.0.0.1:7681", ...(xff ? {"x-forwarded-for": xff} : {})}}),
+  {remoteAddr: {hostname: "127.0.0.1"}});
+  eq((await via("100.100.1.1")).status, 200, "a tailnet client");
+  eq((await via("203.0.113.5")).status, 403, "a client off the tailnet");
+  eq((await via(null)).status, 200, "loopback itself");
+});
+
+Deno.test("cached: shares the call in flight, and the minute starts when it is ready", async () => {
+  const s = server([]);
+  let t = 0, runs = 0, done;
+  const now = () => t;
+  const slow = () => {
+    runs++;
+    return new Promise((ok) => done = ok);
+  };
+  const a = s.cached("k", slow, now), b = s.cached("k", slow, now);
+  t = 100_000;                            // built for 100s
+  done("x");
+  eq([await a, await b, runs], ["x", "x", 1], "one call for both");
+  t = 130_000;
+  eq([await s.cached("k", slow, now), runs], ["x", 1], "30s after it was ready: cached");
+  t = 161_000;
+  const c = s.cached("k", slow, now);
+  done("y");
+  eq([await c, runs], ["y", 2], "61s after: built again");
+  let fails = 0;
+  await s.cached("e", () => (fails++, Promise.reject(new Error("no"))), now).catch(() => {});
+  await s.cached("e", () => (fails++, Promise.resolve(1)), now);
+  eq(fails, 2, "a failure is not cached");
 });

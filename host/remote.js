@@ -89,7 +89,7 @@ export async function mergedUsage() {
 export async function allRows(from, to, local) {
   const q = `/api/burn/rows?from=${from}&to=${to}`;
   const [mine, ...rest] = await Promise.all([local(from, to),
-    ...others().map((h) => call(h, q, undefined, 60_000))]);
+    ...others().map((h) => call(h, q, undefined, 10_000))]);
   const rows = mine.map((r) => ({...r, host: SELF})), down = [];
   others().forEach((h, n) => {
     const [body, err] = rest[n];
@@ -120,16 +120,16 @@ export async function burnReport(hours, local, now = Date.now()) {
 // `host:name` for a remote instance, the name alone for a local one
 export const label = (i) => `${i.host ? `${i.host}:` : ""}${i.name || i.pid}`;
 
-// Follow `host`'s api/events: onList(rows) on each list, onList(null) when the stream
-// drops, then retry every `retry` ms until stop()
+// Follow `host`'s api/events: onList(rows, body) on each list, onList(null, null, why)
+// when the stream drops, then retry every `retry` ms until stop()
 export function follow(host, onList, retry = 5000) {
-  let alive = true, ctl = null;
+  let alive = true, ctl = null, why = "";
   (async () => {
     while (alive) {
       ctl = new AbortController();
       try {
         const r = await fetch(`${base(host)}/api/events`, {signal: ctl.signal});
-        if (!r.ok) throw new Error(`${r.status}`);
+        if (!r.ok) throw new Error(`answered ${r.status}`);
         let buf = "";
         for await (const chunk of r.body.pipeThrough(new TextDecoderStream())) {
           buf += chunk;
@@ -139,13 +139,17 @@ export function follow(host, onList, retry = 5000) {
             buf = buf.slice(cut + 2);
             const event = frame.match(/^event: (.*)$/m)?.[1];
             const data = frame.match(/^data: (.*)$/m)?.[1];
-            if (event === "list" && data) onList(JSON.parse(data).rows);
+            if (event !== "list" || !data) continue;
+            const body = JSON.parse(data);
+            onList(body.rows, body);
           }
         }
-      } catch {
+        why = "stream ended";
+      } catch (e) {
         // down, refused or aborted: the same to the caller
+        why = e.message;
       }
-      onList(null);
+      onList(null, null, why);
       if (alive) await new Promise((ok) => setTimeout(ok, retry));
     }
   })();
