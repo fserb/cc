@@ -146,11 +146,12 @@ function shQuote(s) {
   return `'${s.replaceAll("'", "'\\''")}'`;
 }
 
-// Start a claude in `dir`: after pane `after` when given, else in a new kitty window.
+// Start a claude in `dir`: in a detached tmux session when `bg`, after pane `after` when
+// given, else in a new kitty window.
 // `name` is its `claude -n`. {pid, pane}, or {error} with the pane when one was made,
 // since the screen still works off it. A claude by that name already in dir is the one
 // asked for: nothing starts, and {pid, pane, existing: true} names it.
-export async function spawn({dir, after = "", mkdir = false, name = ""}) {
+export async function spawn({dir, after = "", mkdir = false, name = "", bg = false}) {
   dir = expandDir(dir ?? "");
   if (!dir.startsWith("/")) return {error: `not an absolute path: ${dir}`};
   if (!isDir(dir)) {
@@ -167,7 +168,8 @@ export async function spawn({dir, after = "", mkdir = false, name = ""}) {
       [dir, real].includes(i.cwd || i.path));
     if (same) return {pid: same.pid, pane: same.pane, existing: true};
   }
-  const made = after ? await newWindowAfter(after, dir) : await newKittyWindow(dir, undefined, name);
+  const made = bg ? await detachedSession(dir, name)
+    : after ? await newWindowAfter(after, dir) : await newKittyWindow(dir, undefined, name);
   if (made.error) return made;
   const err = await typeInto({pid: 0, pane: made.pane},
     name ? `claude -n ${shQuote(name)}` : "claude");

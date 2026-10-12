@@ -402,9 +402,11 @@ export class Server {
     if (get && path === "/api/dirs") return json(dirsUnder(url.searchParams.get("prefix") ?? ""));
     if (post && path === "/api/spawn") {
       const body = await req.json().catch(() => ({}));
-      // `beside`: after the last claude already in dir, what `ccx new` does on its own host
-      let after = String(body.after ?? "");
-      if (!after && body.beside === true) {
+      // `beside`: after the last claude already in dir, what `ccx new` does on its own host;
+      // `bg`: a detached tmux session, never beside one
+      const bg = body.bg === true;
+      let after = bg ? "" : String(body.after ?? "");
+      if (!after && !bg && body.beside === true) {
         try {
           after = await paneIn(Deno.realPathSync(expandDir(String(body.dir ?? ""))));
         } catch {
@@ -412,7 +414,7 @@ export class Server {
         }
       }
       const r = await spawn({dir: String(body.dir ?? ""), after,
-        mkdir: body.mkdir === true, name: String(body.name ?? "")});
+        mkdir: body.mkdir === true, name: String(body.name ?? ""), bg});
       return r.error ? json(r, r.pane ? 502 : 409) : json({...r, after});
     }
     const m = path.match(/^\/api\/s\/(\d+)\/(log|events|type|pick|esc|screen|send|select|close)$/);
