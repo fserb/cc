@@ -37,6 +37,39 @@ const PASS = ["content-type", "sec-fetch-site", "last-event-id"];   // what a pr
 
 const HOSTNAME = Deno.hostname().split(".")[0];
 
+// Images sent with `type`, [{type, data}] with data base64: written to IMAGES, where
+// Claude Code reads them when their path is pasted (typeInto), so they are only needed
+// for a moment; a file older than a day goes on the next upload. The paths, or why not.
+const IMAGES = "/tmp/cc-img";
+const IMAGE_MAX = 10 << 20, IMAGE_COUNT = 4;
+const IMAGE_EXT = {"image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp"};
+async function saveImages(images) {
+  if (!images.length) return [];
+  if (images.length > IMAGE_COUNT) return `at most ${IMAGE_COUNT} images`;
+  await Deno.mkdir(IMAGES, {recursive: true, mode: 0o700});
+  const old = Date.now() - 864e5;
+  for await (const f of Deno.readDir(IMAGES)) {
+    const p = `${IMAGES}/${f.name}`;
+    if ((await Deno.stat(p).catch(() => null))?.mtime < old) await Deno.remove(p).catch(() => {});
+  }
+  const paths = [];
+  for (const img of images) {
+    const ext = IMAGE_EXT[img?.type];
+    if (!ext || typeof img.data !== "string") return `an image is png, jpeg, gif or webp, base64`;
+    if (img.data.length * 3 / 4 > IMAGE_MAX) return `an image is at most ${IMAGE_MAX >> 20} MB`;
+    let bytes;
+    try {
+      bytes = Uint8Array.from(atob(img.data), (c) => c.charCodeAt(0));
+    } catch {
+      return "an image's data is not base64";
+    }
+    const p = `${IMAGES}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+    await Deno.writeFile(p, bytes, {mode: 0o600});
+    paths.push(p);
+  }
+  return paths;
+}
+
 const tilde = (p) => p && p.startsWith(HOME) ? `~${p.slice(HOME.length)}` : p;
 
 // tmux order: session, window, pane, numerically, since tmux gives them as strings. Nothing
@@ -625,6 +658,9 @@ export class Server {
     if (post && !(req.headers.get("content-type") ?? "").startsWith("application/json")) {
       return json({error: "a POST is application/json"}, 415);
     }
+    if (Number(req.headers.get("content-length")) > IMAGE_COUNT * IMAGE_MAX * 1.4) {
+      return json({error: "too large"}, 413);
+    }
     const all = url.searchParams.get("all") === "1";
     if (get && path === "/api/list") return json(all ? this.mergedBody() : this.listBody());
     if (get && path === "/api/events") return this.listEvents(all);
@@ -726,8 +762,13 @@ export class Server {
       return answer(await sendPeer(inst, body.text, body.from ?? undefined));
     }
     if (verb === "type") {
-      if (typeof body.text !== "string" || !body.text.trim()) return json({error: "no text"}, 400);
-      return answer(await typeInto(inst, body.text, {force: body.force === true}));
+      const images = Array.isArray(body.images) ? body.images : [];
+      if (typeof body.text !== "string" || (!body.text.trim() && !images.length)) {
+        return json({error: "no text"}, 400);
+      }
+      const paths = await saveImages(images);
+      if (typeof paths === "string") return json({error: paths}, 400);
+      return answer(await typeInto(inst, body.text, {force: body.force === true, images: paths}));
     }
     if (verb === "pick") {
       if (!Array.isArray(body.labels)) return json({error: "no labels"}, 400);

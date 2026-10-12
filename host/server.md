@@ -103,7 +103,12 @@ All JSON, all under `api/`.
                                    `screen` {text}, `dialog` (parsed, or null), `gone`
                                    when the pid leaves the poll. No N: the tail, as a reset
     GET  api/s/<pid>/screen        {text, dialog}, once
-    POST api/s/<pid>/type   {text}         typeInto()
+    POST api/s/<pid>/type   {text, images?}  typeInto(). `images` [{type, data}], data base64,
+                                           png/jpeg/gif/webp, at most 4 of 10 MB: written
+                                           to /tmp/cc-img (gone after a day), each path
+                                           pasted alone where the text's nth 🖼 (U+1F5BC)
+                                           is, else first, and Claude Code takes it as
+                                           `[Image #N]`; text may then be empty
     POST api/s/<pid>/pick   {i, labels, text?}  option i of the dialog, refused unless its
                                            labels are still `labels`; `text` answers the
                                            question tool's free-text option (`free` on it)

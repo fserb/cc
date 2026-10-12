@@ -88,6 +88,13 @@
   #say #focus { background: none; border: 1px solid var(--line); color: var(--muted); padding: 0 0.75rem; display: grid; place-items: center; }
   #say #focus svg { width: 1rem; height: 1rem; }
   #say .note.err { color: var(--red); }
+  #say { flex-wrap: wrap; }
+  #att { flex-basis: 100%; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  #att[hidden] { display: none; }
+  #att figure { position: relative; margin: 0; }
+  #att img, .m img.att { height: 4rem; max-width: 8rem; object-fit: cover; border-radius: 0.4rem; border: 1px solid var(--line); display: block; }
+  #say #att button { position: absolute; top: -0.4rem; right: -0.4rem; height: 1.3rem; width: 1.3rem; padding: 0; font-size: 0.8rem; line-height: 1; background: var(--muted); }
+  .m .atts { display: flex; gap: 0.3rem; flex-wrap: wrap; margin-bottom: 0.3rem; }
   @media (pointer: coarse), (max-width: 760px) { #say #focus { display: none; } }  /* a kitty window opens on marx, where the desktop is */
   article:has(> pre.term) { max-width: none; }
   pre.term { white-space: pre; overflow-x: auto; overflow-wrap: normal; margin: 0 0 1rem; width: max-content; max-width: 100%; box-sizing: border-box; }
@@ -151,7 +158,7 @@
 <header><button id="back" aria-label="back">‹</button><b id="title">nadya</b><span class="sum" id="sum"></span></header>
 <section id="home">
   <nav id="left"></nav>
-  <section id="center"><div id="view"></div><button id="newer" hidden>↓ new</button><form id="say"><button type="button" id="focus" title="focus in kitty" aria-label="focus in kitty"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button><button type="button" id="mode" aria-pressed="false" title="terminal view" aria-label="terminal view">&gt;_</button><textarea name="q" rows="1" autocomplete="off"></textarea><button>send</button></form></section>
+  <section id="center"><div id="view"></div><button id="newer" hidden>↓ new</button><form id="say"><div id="att" hidden></div><button type="button" id="focus" title="focus in kitty" aria-label="focus in kitty"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button><button type="button" id="mode" aria-pressed="false" title="terminal view" aria-label="terminal view">&gt;_</button><textarea name="q" rows="1" autocomplete="off"></textarea><button>send</button></form></section>
 </section>
 <script type="module">
 // A static page (no box): everything it shows comes from these, all same origin:
@@ -655,6 +662,10 @@ function grow(els, from, after, scroll) {
 }
 // Claude Code wraps pasted text in <pasted_content id="..."> ... </pasted_content id="...">: show only the text
 const unpaste = (t) => t.replace(/<\/?pasted_content(?: id="[^"]*")?>\n?/g, "");
+// an image Claude Code took is [Image #N] in the text: drawn as the 🖼 it was typed as
+const clip = (t) => t.length > 600 ? `${t.slice(0, 600)}…` : t;
+const IMAGE = "\u{1F5BC}", unpic = (t) => t.replace(/\[Image #\d+\]/g, IMAGE);
+const atts = {}, IMG_MAX = 10 << 20, attsOf = (k = draftKey) => atts[k] ??= [], marks = (t) => t.split(IMAGE).length - 1;
 // messages sent from this page, shown at once and dropped when the session's log has them
 let pending = [], pendId = 0;
 const norm = (t) => unpaste(t).replace(/\s+/g, " ").trim();
@@ -663,9 +674,12 @@ function ackPending() {
   const seen = S.log.filter((e) => e.type === "user").map((e) => ({at: e.at * 1000, t: norm(e.text)}));
   pending = pending.filter((p) => {
     if (p.err || p.pid !== stream.pid) return true;
-    const t = norm(p.text);
+    const t = norm(p.text), segs = t.split(IMAGE).map((x) => x.trim()).filter(Boolean);
+    // with images, each piece of text between them; the log has [Image #N] where a 🖼 was
+    const has = (e) => p.imgs?.length ? e.t.includes("[Image #") && segs.every((x) => e.t.includes(x))
+      : e.t.includes(t) || (e.t.length >= 40 && t.startsWith(e.t.slice(0, 200)));
     // a log entry acks one bubble only (the same text sent twice); 10 s for clock skew between hosts
-    const k = seen.findIndex((e) => e.at > p.at - 10e3 && (e.t.includes(t) || (e.t.length >= 40 && t.startsWith(e.t.slice(0, 200)))));
+    const k = seen.findIndex((e) => e.at > p.at - 10e3 && has(e));
     if (k >= 0) seen.splice(k, 1);
     return k < 0;
   });
@@ -687,14 +701,14 @@ function chat(r) {
       if (qa.length) msgs.push({at: e.at, me: true, body: qa.map(([q, a]) => `<span class="q">${esc(q.length > 80 ? q.slice(0, 80) + "…" : q)}</span>${autolink(esc(a))}`).join("<br>"), small: hhmm(e.at)});
     }
     if ((e.type !== "user" && e.type !== "text") || blank(e)) continue;
-    msgs.push({at: e.at, me: e.type === "user", body: e.type === "user" ? autolink(esc(unpaste(e.text).length > 600 ? unpaste(e.text).slice(0, 600) + "…" : unpaste(e.text))) : md(e.text), small: hhmm(e.at)});
+    msgs.push({at: e.at, me: e.type === "user", body: e.type === "user" ? autolink(esc(clip(unpic(unpaste(e.text))))) : md(e.text), small: hhmm(e.at)});
   }
   const out = msgs.map((m) => `<div class="m ${m.me ? "me" : ""}" data-at="${m.at}">${m.body}<small>${m.small}</small></div>`);
   // sent from here, not in the log yet: kept below everything until the log shows it
   for (const p of pending.filter((x) => x.pid === r.pid)) {
     const stale = !p.err && Date.now() - p.at > 120e3;
     const note = p.err ? `not sent: ${esc(p.err)} · hold to take back` : stale ? "not seen yet · hold to take back" : esc(p.note ?? "sending…");
-    out.push(`<div class="m me ${p.err ? "fail" : stale ? "stale" : "pend"}" data-pend="${p.id}">${esc(p.text.length > 600 ? p.text.slice(0, 600) + "…" : p.text)}<small>${note}</small></div>`);
+    out.push(`<div class="m me ${p.err ? "fail" : stale ? "stale" : "pend"}" data-pend="${p.id}">${p.imgs?.length ? `<span class="atts">${p.imgs.map((i) => `<img class="att" src="${i.url}" alt="">`).join("")}</span>` : ""}${esc(clip(p.text))}<small>${note}</small></div>`);
   }
   // the state turns idle before the log has the reply: keep the dots up to 5 s until the reply shows, so it grows out of them
   const said = msgs.filter((m) => m.body && !m.me).length;
@@ -921,8 +935,62 @@ function setDraft(k, t) {
 }
 function loadDraft() {
   const k = cur ?? "nadya"; if (k === draftKey) return;
-  draftKey = k; $("#say").q.value = drafts[k]?.t ?? ""; fit();
+  const t = drafts[k]?.t ?? "";
+  draftKey = k; $("#say").q.value = attsOf(k).length ? t : t.replaceAll(IMAGE, ""); drawAtts(); fit();
 }
+// images pasted or dropped into the box, per session like the drafts but not kept: {type, data (base64), url, ready}.
+// Each is a 🖼 in the text, at the cursor when it came, in the same order: cchost pastes the image's path where its 🖼 is,
+// which Claude Code reads as [Image #N]. Deleting a 🖼 drops its image; × drops both
+function drawAtts() {
+  const a = attsOf(), box = $("#att");
+  box.hidden = !a.length;
+  box.innerHTML = a.map((x, i) => `<figure><img src="${x.url}" alt=""><button type="button" data-unatt="${i}" aria-label="remove image">×</button></figure>`).join("");
+}
+function attach(files) {
+  const q = $("#say").q, k = draftKey;
+  files = [...files].filter((f) => /^image\/(png|jpeg|gif|webp)$/.test(f.type));
+  if (attsOf(k).length + files.length > 4) return alert("At most 4 images");
+  if (files.some((f) => f.size > IMG_MAX)) return alert("An image is at most 10 MB");
+  if (!files.length) return;
+  const at = marks(q.value.slice(0, q.selectionStart));
+  attsOf(k).splice(at, 0, ...files.map((f) => {
+    const x = {type: f.type, url: URL.createObjectURL(f)};
+    x.ready = new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(x.data = r.result.split(",")[1]); r.onerror = no; r.readAsDataURL(f); });
+    return x;
+  }));
+  q.setRangeText(IMAGE.repeat(files.length), q.selectionStart, q.selectionEnd, "end");
+  setDraft(k, q.value); drawAtts(); fit();
+}
+// a 🖼 taken out of the text by an edit takes its image: the edit is the part of the old text that differs from the new
+let before = null;
+$("#say").q.addEventListener("beforeinput", (e) => { before = e.target.value; });
+$("#say").q.addEventListener("input", (e) => {
+  const old = before, now = e.target.value; before = null;
+  if (old === null || !attsOf().length) return;
+  let p = 0, s = 0;
+  while (p < old.length && old[p] === now[p]) p++;
+  if (p && old.charCodeAt(p - 1) >= 0xd800 && old.charCodeAt(p - 1) < 0xdc00) p--;  // not inside a surrogate pair
+  while (s < old.length - p && s < now.length - p && old[old.length - 1 - s] === now[now.length - 1 - s]) s++;
+  const gone = marks(old.slice(p, old.length - s)); if (!gone) return;
+  for (const x of attsOf().splice(marks(old.slice(0, p)), gone)) URL.revokeObjectURL(x.url);
+  drawAtts(); fit();
+});
+$("#att").onclick = (e) => {
+  const b = e.target.closest("[data-unatt]"); if (!b) return;
+  const i = +b.dataset.unatt, q = $("#say").q, [x] = attsOf().splice(i, 1); URL.revokeObjectURL(x.url);
+  const cut = q.value.split(IMAGE);
+  if (cut.length > i + 1) { cut[i] += cut[i + 1]; cut.splice(i + 1, 1); q.value = cut.join(IMAGE); setDraft(draftKey, q.value); }
+  drawAtts(); fit(); q.focus();
+};
+// an image on the clipboard is attached; text beside it (a copied image can carry its html) still pastes
+$("#say").q.addEventListener("paste", (e) => {
+  const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+  if (!files.length) return;
+  if (!e.clipboardData.getData("text/plain")) e.preventDefault();
+  attach(files);
+});
+$("#center").addEventListener("dragover", (e) => { if ($("#say").hidden || ![...e.dataTransfer.types].includes("Files")) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
+$("#center").addEventListener("drop", (e) => { if ($("#say").hidden || !e.dataTransfer.files.length) return; e.preventDefault(); $("#say").q.focus(); attach(e.dataTransfer.files); });
 // the box grows up with its text, to 40% of the visible height (the part above the phone's keyboard), then scrolls
 function fit() {
   const q = $("#say").q, v = $("#view"), low = !pausedAt || atBottom(v);
@@ -941,34 +1009,45 @@ $("#say").q.onkeydown = (e) => {
 };
 $("#say").onsubmit = async (e) => {
   e.preventDefault();
-  const q = e.target.q.value.trim(); if (!q) return;
+  const q = e.target.q.value.trim(), dk = draftKey, imgs = attsOf(dk); if (!q && !imgs.length) return;
   const r = isPid(cur) ? S.rows.find((x) => x.pid === cur) : null;
   const c = context(), text = r || !c ? q : `[cc, ${c}] ${q}`, to = r ?? nadyaRow();
   if (!to) return alert("Not sent: nadya isn't running");
-  const p = {id: ++pendId, pid: to.pid, q, text, at: Date.now()};
+  const p = {id: ++pendId, pid: to.pid, q, text, imgs, at: Date.now()};
   // a dialog takes the paste and the Enter (which can pick its first option), so the text never reaches the session
   if (hasDialog(to)) p.err = `${to.name} waits on a dialog; answer it first`;
-  const dk = draftKey;
-  pending.push(p); e.target.q.value = p.err ? q : ""; setDraft(dk, e.target.q.value); fit();
+  pending.push(p); e.target.q.value = p.err ? q : ""; setDraft(dk, e.target.q.value);
+  if (!p.err) { atts[dk] = []; drawAtts(); }
+  fit();
   setTimeout(() => drawView(true), 121e3);
   if (!r && cur !== "nadya") { cur = "nadya"; open(); } else drawView(true);
   toBottom();
   if (p.err) return;
-  try { await post(`${CCX}/s/${to.pid}/type`, {text}); }
-  catch (err) { p.err = err.message; if (!drafts[dk]) { setDraft(dk, q); if (draftKey === dk) { e.target.q.value = q; fit(); } } drawView(true); }
+  try { await post(`${CCX}/s/${to.pid}/type`, await typed(p)); }
+  catch (err) {
+    p.err = err.message;
+    if (!drafts[dk] && !attsOf(dk).length) { setDraft(dk, q); atts[dk] = imgs; if (draftKey === dk) { e.target.q.value = q; drawAtts(); fit(); } }
+    drawView(true);
+  }
 };
 // a bubble not in the log yet: double-tap/double-click sends it now (Claude Code's ctrl+x ctrl+s: stops the turn, sends
 // the queue); hold 500 ms takes it back into the box (cchost's unqueue with {text} takes that one message out and answers
 // {kept}; an older cchost drops the whole queue and answers without it, so the other bubbles are typed again)
 const say = $("#say").q;
 const queued = (p) => !p.err;
+async function typed(p) {
+  if (!p.imgs?.length) return {text: p.text};
+  await Promise.all(p.imgs.map((x) => x.ready));
+  return {text: p.text, images: p.imgs.map(({type, data}) => ({type, data}))};
+}
 async function sendNow(p) {
   try {
     if (!queued(p)) {
       if (hasDialog(S.rows.find((r) => r.pid === p.pid) ?? {})) return;  // the Enter would answer the dialog
       p.err = null; p.at = Date.now(); drawView(true);
       if (say.value.trim() === p.q) { say.value = ""; setDraft(draftKey, ""); fit(); }
-      await post(`${CCX}/s/${p.pid}/type`, {text: p.text});
+      if (p.imgs?.length && attsOf().every((x) => p.imgs.includes(x))) { atts[draftKey] = []; drawAtts(); fit(); }
+      await post(`${CCX}/s/${p.pid}/type`, await typed(p));
     }
     p.note = "sending now…"; drawView(true);
     await post(`${CCX}/s/${p.pid}/now`, {});
@@ -977,12 +1056,13 @@ async function sendNow(p) {
 async function unsend(p) {
   pending = pending.filter((x) => x !== p);
   if (!say.value.includes(p.q)) { say.value = say.value.trim() ? `${say.value.trimEnd()}\n${p.q}` : p.q; setDraft(draftKey, say.value); fit(); }
+  if (p.imgs?.length) { atts[draftKey] = [...new Set([...attsOf(), ...p.imgs])]; drawAtts(); fit(); }
   drawView(true); say.focus();
   if (!queued(p)) return;
   try {
     const r = await post(`${CCX}/s/${p.pid}/unqueue`, {text: p.text});
     if (typeof r?.kept === "number") return;
-    for (const o of pending.filter((x) => x.pid === p.pid && queued(x))) { o.at = Date.now(); await post(`${CCX}/s/${o.pid}/type`, {text: o.text}); }
+    for (const o of pending.filter((x) => x.pid === p.pid && queued(x))) { o.at = Date.now(); await post(`${CCX}/s/${o.pid}/type`, await typed(o)); }
   } catch (err) { p.err = `not taken back: ${err.message}`; pending.push(p); drawView(true); }
 }
 let hold = null, lastTap = null;

@@ -52,3 +52,8 @@ Deno.test("remaining: the first equal message comes out, the rest stay in order"
   eq(remaining(["a", "b\nc"], " b  c "), {found: true, rest: ["a"]}, "whitespace runs");
   eq(remaining([popped[2]], unwrap(popped[2])).found, true, "a paste matches its text");
 });
+
+Deno.test("remaining: an image is [Image #N] in the queue and the mark in the text", () => {
+  const got = remaining(["queued [Image #7] colours?", "b"], "queued \u{1F5BC} colours?");
+  if (!got.found || JSON.stringify(got.rest) !== '["b"]') throw new Error(JSON.stringify(got));
+});

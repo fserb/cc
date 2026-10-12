@@ -64,6 +64,9 @@ Deno.test("Server: an instance outside tmux is read-only", async () => {
   eq((await post(s, "/api/s/6/unqueue", '{"text":"hi"}')).status, 409, "unqueue one");
   eq((await post(s, "/api/s/6/unqueue", '{"text":7}')).status, 400, "unqueue a non-string");
   eq((await post(s, "/api/s/6/type")).status, 400, "no text");
+  const img = (t, d) => JSON.stringify({text: "", images: [{type: t, data: d}]});
+  eq((await post(s, "/api/s/6/type", img("image/svg+xml", "AAAA"))).status, 400, "not a raster image");
+  eq((await post(s, "/api/s/6/type", img("image/png", "**"))).status, 400, "not base64");
   eq(await (await call(s, "/api/s/6/log")).json(), {events: [], start: 0, end: 0},
     "no sessionId, no history");
 });

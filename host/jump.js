@@ -195,7 +195,23 @@ export async function kittyWindowTitle(name) {
 // Refused while the pane shows a dialog, since the Enter would answer it (dialogRefusal);
 // `force` types anyway. The screen is read just before the paste, so a dialog drawn in
 // between still takes it.
-export async function typeInto(inst, text, {force = false} = {}) {
+//
+// `images` are file paths, one per IMAGE mark in the text, in order, each pasted where its
+// mark is: Claude Code reads a paste that is only an image's path as that image,
+// `[Image #N]` in the box, and a path inside other text stays text (2.1.296). It reads the
+// file after the paste returns and inserts the tag at the cursor then, so a text pasted
+// right behind it lands before it: each image waits until one more `[Image #` is on the
+// screen, 5s at most. An image with no mark left goes first.
+export const IMAGE = "\u{1F5BC}";
+// `text` cut at its marks around `images`, as [string | {path}], in paste order, no ""
+export function imageParts(text, images) {
+  const cut = text.split(IMAGE), n = Math.min(images.length, cut.length - 1);
+  const parts = [...images.slice(n).map((path) => ({path})), cut[0]];
+  for (let i = 0; i < n; i++) parts.push({path: images[i]}, cut[i + 1]);
+  if (cut.length > n + 1) parts[parts.length - 1] += IMAGE + cut.slice(n + 1).join(IMAGE);
+  return parts.filter((p) => p !== "");
+}
+export async function typeInto(inst, text, {force = false, images = []} = {}) {
   if (!inst.pane) return `pid ${inst.pid} is not inside tmux; nothing to type into`;
   if (!force) {
     const shown = await screen(inst.pane);
@@ -204,11 +220,43 @@ export async function typeInto(inst, text, {force = false} = {}) {
     if (refused) return refused;
   }
   const buf = `ccx-${inst.pid}`;
-  const r = await run("tmux", "set-buffer", "-b", buf, "--", text, ";",
-    "paste-buffer", "-p", "-d", "-b", buf, "-t", inst.pane, ";",
-    "send-keys", "-t", inst.pane, "Enter");
+  if (!images.length) {
+    const r = await run("tmux", "set-buffer", "-b", buf, "--", text, ";",
+      "paste-buffer", "-p", "-d", "-b", buf, "-t", inst.pane, ";", "send-keys", "-t", inst.pane, "Enter");
+    return r.code === 0 ? null : `tmux: ${r.err.trim() || `exit ${r.code}`}`;
+  }
+  const parts = imageParts(text, images);
+  const err = await pasteParts(inst.pane, parts);
+  if (err) return err;
+  typedImages.set(imageKey(parts), parts);
+  if (typedImages.size > 100) typedImages.delete(typedImages.keys().next().value);
+  const r = await run("tmux", "send-keys", "-t", inst.pane, "Enter");
   return r.code === 0 ? null : `tmux: ${r.err.trim() || `exit ${r.code}`}`;
 }
+
+// imageParts() each a paste of its own, an image waiting for its tag. null, or why not.
+export async function pasteParts(pane, parts) {
+  const buf = `ccx-parts-${pane}`;
+  const tags = async () => ((await screen(pane)) ?? "").split("[Image #").length;
+  for (const part of parts) {
+    const before = part.path ? await tags() : 0;
+    const r = await run("tmux", "set-buffer", "-b", buf, "--", part.path ?? part, ";",
+      "paste-buffer", "-p", "-d", "-b", buf, "-t", pane);
+    if (r.code !== 0) return `tmux: ${r.err.trim() || `exit ${r.code}`}`;
+    for (let t = 0; part.path && t < 100 && (await tags()) <= before; t++) {
+      await new Promise((ok) => setTimeout(ok, 50));
+    }
+  }
+  return null;
+}
+
+// The last 100 messages typed with images, by imageKey(): a queued one taken back by
+// unqueue() comes out as text, `[Image #N]` where each image was, and has to be typed
+// again with the same files (queue.js)
+export const typedImages = new Map();
+export const imageKey = (parts) => parts.map((p) => p.path ? IMAGE : p).join("")
+  .replace(/\s+/g, " ").trim();
+export const unpic = (t) => t.replace(/\[Image #\d+\]/g, IMAGE);
 
 // Press `keys`, tmux key names, on the instance's pane, in one call. An error message, or
 // null when it worked. Same caveat as typeInto(): a pane whose claude exited since takes

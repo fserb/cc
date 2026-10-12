@@ -3,7 +3,7 @@
 // from another project with its words replaced and its layout kept.
 
 import {dialogRefusal, parseDialog, pickKeys} from "./dialog.js";
-import {typeInto} from "./jump.js";
+import {IMAGE, imageParts, typeInto} from "./jump.js";
 import {run} from "./sh.js";
 
 function eq(got, want, what) {
@@ -139,4 +139,10 @@ Deno.test("parseDialog: the question tool's free-text option", () => {
   d.options[3].current = true;
   eq(pickKeys(d, 3), ["C-u"], "no digit once focused: it would be typed");
   eq(parseDialog(fixture("question-multi")).options.some((o) => o.free), false, "not multi");
+});
+
+Deno.test("imageParts: each image where its mark is, the unmarked first", () => {
+  eq(imageParts(`a ${IMAGE} b ${IMAGE}`, ["/1", "/2"]), ["a ", {path: "/1"}, " b ", {path: "/2"}], "marked");
+  eq(imageParts("hi", ["/1"]), [{path: "/1"}, "hi"], "no mark");
+  eq(imageParts(`${IMAGE}x${IMAGE}`, ["/1"]), [{path: "/1"}, `x${IMAGE}`], "a mark too many stays");
 });

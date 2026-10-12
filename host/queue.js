@@ -25,7 +25,7 @@
 
 import { run } from "./sh.js";
 import { dialogRefusal } from "./dialog.js";
-import { sendKeys } from "./jump.js";
+import { imageKey, pasteParts, sendKeys, typedImages, unpic } from "./jump.js";
 import { logPath } from "./transcript.js";
 
 const SGR = /\x1b\[[\d;]*m/g;
@@ -97,7 +97,8 @@ export function unwrap(content) {
     .replace(/\n?<\/pasted_content id="[^"]*">/g, "");
 }
 
-const norm = (t) => unwrap(t).replace(/\s+/g, " ").trim();
+// an image is `[Image #N]` in the queue and IMAGE in what typeInto() was given
+const norm = (t) => unpic(unwrap(t)).replace(/\s+/g, " ").trim();
 
 // What goes back into the queue: every popped message but the first equal to `text`,
 // unwrapped, and whether one was. Equal ignores how whitespace runs.
@@ -177,12 +178,13 @@ async function clearBox(pane) {
 
 // Each text pasted and submitted, one tmux call each, so it queues again behind the turn.
 // Two pastes and Enters in one call arrive as one chunk, and the first Enter is lost: "A"
-// and "C" queued as "AC". So each waits, up to 1s, for the session to log its `enqueue`
+// and "C" queued as "AC". A text with images is typed again with their files, when
+// typeInto() typed it; else as text, `[Image #N]` and all. So each waits, up to 1s, for the session to log its `enqueue`
 // (or a `user` record, if the turn ended and it went in as a prompt) before the next.
 async function retype(pane, texts, path) {
   for (const t of texts) {
     const offset = sizeOf(path);
-    const err = await paste(pane, t, true);
+    const err = await typeAgain(pane, t);
     if (err) return err;
     for (let w = 0; w < 1000; w += 50) {
       await sleep(50);
@@ -191,6 +193,15 @@ async function retype(pane, texts, path) {
     }
   }
   return null;
+}
+
+async function typeAgain(pane, text) {
+  const parts = typedImages.get(imageKey([unpic(text)]));
+  if (!parts) return await paste(pane, text, true);
+  const err = await pasteParts(pane, parts);
+  if (err) return err;
+  const r = await run("tmux", "send-keys", "-t", pane, "Enter");
+  return r.code === 0 ? null : `tmux: ${r.err.trim() || `exit ${r.code}`}`;
 }
 
 // A bracketed paste, then Enter when `enter`. null, or why not.
