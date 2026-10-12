@@ -33,7 +33,7 @@ async function serve(args) {
   // A poll runs when a session record is written, and otherwise once a minute for titles
   // and tmux moves, which no record shows. A write during a poll runs one more after it.
   // With no watch, or an instance with no record (its state is read off the pane), every
-  // 1.5s as before
+  // 1.5s as before. Also every 1.5s while a subagent runs: one stopping writes no record
   let instances = [], polling = false, again = false, timer = 0, server = null;
   const poll = async () => {
     if (polling) {
@@ -50,7 +50,7 @@ async function serve(args) {
     } finally {
       polling = false;
       clearTimeout(timer);
-      timer = setTimeout(repoll, !watching || instances.some((i) => !i.peer) ? 1500 : 60000);
+      timer = setTimeout(repoll, !watching || instances.some((i) => !i.peer || i.agents) ? 1500 : 60000);
     }
   };
   // a failed poll keeps the instances it had, and says when

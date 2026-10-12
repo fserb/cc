@@ -16,6 +16,7 @@ export class Instance {
     this.state = "";          // "" until StateClock fills it in
     this.asking = "";         // the record's waitingFor: a dialog is up, and which one
     this.waitsOn = "";        // hold on a peer: the name of the session it waits for
+    this.agents = 0;          // subagents running now (subagentsRunning)
     this.name = "";           // the session's own name, what a peer addresses it by
     this.sock = "";           // the record's messagingSocketPath, where peer.js delivers
     this.sessionId = "";      // the record's; with cwd, what names the session log
@@ -191,13 +192,13 @@ function sessionTitle(cwd, sessionId) {
   return title;
 }
 
-// The last TITLE_TAIL of a session log, or "" if it cannot be read. The first line of it
+// The last TITLE_TAIL (or tail) of a session log, or "" if it cannot be read. The first line of it
 // is a fragment.
-function readTail(path, size) {
+function readTail(path, size, tail = TITLE_TAIL) {
   try {
     const f = Deno.openSync(path, {read: true});
     try {
-      const start = Math.max(0, size - TITLE_TAIL);
+      const start = Math.max(0, size - tail);
       f.seekSync(start, Deno.SeekMode.Start);
       const buf = new Uint8Array(size - start);
       let read = 0;
@@ -229,6 +230,63 @@ function readTitle(path, size) {
     }
   }
   return found["custom-title"] ?? found["ai-title"] ?? "";
+}
+
+// How many of this session's subagents are running now. Each has its own log,
+// `<sessionId>/subagents/agent-<id>.jsonl` beside the session's; one has stopped when its
+// last entry is an `end_turn`, the answer to its `SubagentHandback`, or an interrupt. One
+// that stopped waiting on its own background shell is not running, as Claude Code has it,
+// and runs again when the shell wakes it. Only while the record says busy, which is what a
+// live subagent makes it (2.1.283): a log left open by a killed agent counts for nothing
+// once the session is idle. Cached against each log's size.
+const AGENT_TAIL = 64 * 1024;
+const AGENTS = new Map();          // subagent log -> [size when read, running]
+
+function subagentsRunning(rec) {
+  if (rec.status !== "busy" || !rec.cwd || !rec.sessionId) return 0;
+  const dir = `${projectDir(rec.cwd)}/${rec.sessionId}/subagents`;
+  let n = 0;
+  try {
+    for (const e of Deno.readDirSync(dir)) {
+      if (!/^agent-.*\.jsonl$/.test(e.name)) continue;
+      const path = `${dir}/${e.name}`;
+      const st = Deno.statSync(path);
+      if ((st.mtime?.getTime() ?? 0) < (rec.startedAt ?? 0)) continue;  // an earlier run's
+      let [size, running] = AGENTS.get(path) ?? [-1, false];
+      if (size !== st.size) {
+        running = agentRunning(readTail(path, st.size, AGENT_TAIL));
+        AGENTS.set(path, [st.size, running]);
+      }
+      if (running) n++;
+    }
+  } catch {
+    return n;
+  }
+  return n;
+}
+
+export function agentRunning(text) {
+  let handback = false;
+  for (const line of text.trimEnd().split("\n").reverse()) {
+    let e;
+    try {
+      e = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (e.type !== "user" && e.type !== "assistant") continue;
+    const content = e.message?.content;
+    const parts = Array.isArray(content) ? content : [{type: "text", text: content ?? ""}];
+    if (e.type === "assistant") {
+      if (e.message?.stop_reason === "end_turn") return false;
+      return !(handback && parts.some((p) => p.type === "tool_use" && p.name === "SubagentHandback"));
+    }
+    if (parts.some((p) => p.type === "text" && p.text?.startsWith("[Request interrupted"))) return false;
+    // the answer to a tool_use: whether it stopped is in the call it answers
+    if (!parts.every((p) => p.type === "tool_result")) return true;
+    handback = true;
+  }
+  return false;
 }
 
 // A SendMessage with `notify_when_idle` answers with this, naming the session as it
@@ -556,9 +614,10 @@ export async function discover() {
       cur = procs.get(cur)[0];
     }
     const title = sessionTitle(rec.cwd ?? "", rec.sessionId ?? "");
+    const agents = subagentsRunning(rec);
     if (!pane) {                                   // nothing to focus, but the record knows
       found.push(new Instance({pid, summary: title || cmd, path: rec.cwd ?? "",
-        state, asking: rec.status === "waiting" ? (rec.waitingFor ?? "") : "", waitsOn: holdFor,
+        state, agents, asking: rec.status === "waiting" ? (rec.waitingFor ?? "") : "", waitsOn: holdFor,
         name: rec.name ?? "", sock: rec.messagingSocketPath ?? "", statusSince: since,
         sessionId: rec.sessionId ?? "", cwd: rec.cwd ?? "", peer: peerOf(rec)}));
       continue;
@@ -579,6 +638,7 @@ export async function discover() {
       state,                       // "" with no record; the scrape below fills it in
       asking: rec.status === "waiting" ? (rec.waitingFor ?? "") : "",
       waitsOn: holdFor,
+      agents,
       name: rec.name ?? "",
       sock: rec.messagingSocketPath ?? "",
       sessionId: rec.sessionId ?? "",

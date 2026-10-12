@@ -139,7 +139,8 @@ Every row has these fields and no others (`ROW` in server.js, pinned by a test; 
 
 - `pid`, `name`, `path` (`~`-relative), `cwd`, `sessionId`, `sock` (the messaging socket)
 - `state` wait | busy | hold | free, `since` (epoch s), `summary`, `asking` (the dialog a
-  wait is on), `waitsOn` (the peer a hold is on)
+  wait is on), `waitsOn` (the peer a hold is on), `agents` (its subagents running now,
+  0 unless busy; claudes.js `subagentsRunning`)
 - `hasPane`, `pane`, `session`, `window`, `paneIndex`, `tab`: where it is in tmux
 - the session record's own, `""`/`0`/`[]` when there is none (a session read off the
   pane): `status` busy | waiting | idle | shell, `statusUpdatedAt` (epoch ms),

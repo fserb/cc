@@ -55,7 +55,7 @@
   .meta { color: var(--muted); margin-bottom: 1rem; font-size: 0.88rem; }
   article img, article video { max-width: 100%; height: auto; border-radius: 6px; display: block; margin-bottom: 1rem; }
   pre { background: var(--pre-bg); color: var(--pre-fg); padding: 0.8rem 1rem; border-radius: 6px; font: 12.5px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
-  .need { border-left: 4px solid var(--accent); background: var(--need); border-radius: 0 6px 6px 0; padding: 0.7rem 0.9rem; margin: 1rem 0; } .need.red { border-color: var(--red); background: var(--need-red); } .need p { margin: 0.2rem 0 0; white-space: pre-line; overflow-wrap: anywhere; } .opts button small { display: block; opacity: 0.75; white-space: pre-line; }
+  .need { border-left: 4px solid var(--accent); background: var(--need); border-radius: 0 6px 6px 0; padding: 0.7rem 0.9rem; margin: 1rem 0; } .need.red { border-color: var(--red); background: var(--need-red); } .need p { margin: 0.2rem 0 0; white-space: pre-line; overflow-wrap: anywhere; } .need pre { margin: 0.4rem 0; } .need code { font: 0.88em var(--mono); } .opts button small { display: block; opacity: 0.75; white-space: pre-line; }
   .opts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0 0; }
   .opts button { font: inherit; text-align: left; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: 6px; padding: 0.35rem 0.9rem; cursor: pointer; }
   /* no option is filled until you point at one: Claude Code's cursor on option 1 read as a pick (user, 2026-10-12) */
@@ -68,7 +68,7 @@
   .msgs { display: flex; flex-direction: column; gap: 0.5rem; }
   .m { align-self: flex-start; max-width: 78%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--bubble); overflow-wrap: anywhere; } .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); } .m.me small { text-align: right; } .m .q { display: block; font-size: 0.75rem; opacity: 0.75; }
   .m a { color: var(--accent); } .m.me a { color: inherit; }
-  .m.me.pend { opacity: 0.5; } .m.me[data-pend] { white-space: pre-wrap; } .m.me.stale { opacity: 0.5; cursor: pointer; } .m.me.fail { background: var(--red); opacity: 0.85; cursor: pointer; }
+  .m.me.pend { opacity: 0.5; } .m.me { white-space: pre-wrap; } .m.me.stale { opacity: 0.5; cursor: pointer; } .m.me.fail { background: var(--red); opacity: 0.85; cursor: pointer; }
   @media (pointer: coarse) { .m[data-pend] { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; } }  /* a long press takes it back, not selects */
   .m small { display: block; text-align: left; font-size: 0.6rem; opacity: 0.7; margin-top: 0.15rem; }
   .m p { margin: 0 0 0.4rem; } .m p:last-of-type { margin: 0; } .m ul { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; } .m code { font: 0.88em var(--mono); }
@@ -209,7 +209,7 @@ function md(text, doc) {
   const inline = (s) => {
     const keep = [], hold = (h) => `\0${keep.push(h) - 1}\0`;  // code spans and links wait outside, so ** and _ inside them stay as typed
     return autolink(esc(s).replace(/`([^`]+)`/g, (m, c) => hold(`<code>${/^https?:\/\/\S+$/.test(c) ? linkHtml(c, c) : c}</code>`)).replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (...x) => hold(img(...x))).replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (...x) => hold(link(...x))), hold)
-      .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/(^|[^\w*])\*(?=\S)(.+?)\*(?!\w)/g, "$1<i>$2</i>").replace(/(^|\W)_(?=\S)(.+?)_(?!\w)/g, "$1<i>$2</i>")
+      .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/(^|[\s(])\*(?=\S)(.+?)\*(?!\w)/g, "$1<i>$2</i>").replace(/(^|[\s(])_(?=\S)(.+?)_(?!\w)/g, "$1<i>$2</i>")
       .replace(/\0(\d+)\0/g, (m, k) => keep[k]);
   };
   const cells = (row) => row.trim().replace(/^\||\|$/g, "").split("|").map((c) => inline(c.trim()));
@@ -227,10 +227,12 @@ function md(text, doc) {
   for (let k = 0; k < lines.length; k++) {
     const line = lines[k];
     if (!line.trim()) { endPara(); if (!/^\s+\S/.test(lines[k + 1] ?? "")) endLists(); continue; }
-    if (line.startsWith("```")) {
+    // a fence may be indented (inside a list item) and closes on the same mark, at least as long; the code shows as written
+    const fence = line.match(/^(\s*)(`{3,}|~{3,})/);
+    if (fence) {
       endPara(); endLists();
-      const code = [];
-      while (++k < lines.length && !lines[k].startsWith("```")) code.push(lines[k]);
+      const code = [], [, ind, mark] = fence;
+      while (++k < lines.length && !(lines[k].trim().startsWith(mark) && /^[`~]+$/.test(lines[k].trim()) && lines[k].trim()[0] === mark[0])) code.push(lines[k].startsWith(ind) ? lines[k].slice(ind.length) : lines[k].trimStart());
       out.push(`<pre><code>${esc(code.join("\n"))}</code></pre>`); continue;
     }
     if (/^ {0,3}([-*_])( *\1){2,} *$/.test(line)) { endPara(); endLists(); out.push("<hr>"); continue; }
@@ -461,7 +463,7 @@ function items() {
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, dialog: !!hasDialog(r)}));
   ss.sort((a, b) => b.dialog - a.dialog);
   for (const {r, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "q" : DOT[r.state] ?? "gray", hot: dialog, unread: unseen(r.pid, r),
-    title: r.name, sub: dialog ? `waits on a dialog: ${r.asking || "see pane"}` : quiet(r) ? "\u00a0" : r.summary !== r.name ? r.summary : r.path, t: `${r.pid.split(".")[0] === "nadya" ? "" : r.pid.split(".")[0] + " · "}${ago(r.since)}`});
+    title: r.name, sub: dialog ? `waits on a dialog: ${r.asking || "see pane"}` : quiet(r) ? "\u00a0" : r.summary !== r.name ? r.summary : r.path, t: `${r.agents ? `+${r.agents} · ` : ""}${r.pid.split(".")[0] === "nadya" ? "" : r.pid.split(".")[0] + " · "}${ago(r.since)}`});
   return it;
 }
 function draw() {
@@ -735,7 +737,7 @@ function dialogBox(r) {
   const opt = (o, k) => ft?.i === k
     ? `<form class="free" data-i="${k}"><input name="a" value="${esc(ft.value)}" placeholder="Type something." autocomplete="off" enterkeyhint="send"><button>send</button></form>`
     : `<button data-i="${k}"${o.free ? " data-free" : ""}${o.checked !== null ? ` aria-pressed="${o.checked}"` : ""}>${o.checked ? "✓ " : ""}${esc(o.free ? "Type something…" : o.label)}${o.detail ? `<small>${esc(o.detail)}</small>` : ""}</button>`;
-  return `<div class="need red"><b>${esc(dg.title ?? dg.question ?? "Dialog")}</b>${dg.body ? `<p>${esc(dg.body)}</p>` : ""}<div class="opts${multi ? " multi" : ""}" data-pick="${esc(r.pid)}" data-labels="${esc(JSON.stringify(labels))}">${dg.options.map(opt).join("")}</div></div>`;
+  return `<div class="need red"><b>${esc(dg.title ?? dg.question ?? "Dialog")}</b>${dg.body ? `<div class="body">${md(dg.body)}</div>` : ""}<div class="opts${multi ? " multi" : ""}" data-pick="${esc(r.pid)}" data-labels="${esc(JSON.stringify(labels))}">${dg.options.map(opt).join("")}</div></div>`;
 }
 function sessionView(r) {
   return `<article><h1>${esc(r.name)}</h1>${metaLine(r)}${chat(r)}${dialogBox(r)}</article>`;
