@@ -2,6 +2,7 @@
 
 import {BYTES, MAC, ON_EXIT, run, sh, shSync} from "./sh.js";
 import {kittyOwner, processes} from "./claudes.js";
+import {dialogRefusal, screen} from "./dialog.js";
 
 // `kitten @` writes a bare `ESC P @kitty-cmd {...} ESC \`, and tmux forwards only
 // `ESC P tmux; ... ESC \`, so the command never reaches kitty and --no-response still
@@ -181,8 +182,18 @@ export async function kittyWindowTitle(name) {
 // and the Enter submits, in the same tmux call: 10KB, two lines and `/clear` all measured.
 // A newline in the text stays a newline. The pane hosted a claude when discover() ran; a
 // session that exited since leaves the text in whatever shell took the pane, and runs it.
-export async function typeInto(inst, text) {
+//
+// Refused while the pane shows a dialog, since the Enter would answer it (dialogRefusal);
+// `force` types anyway. The screen is read just before the paste, so a dialog drawn in
+// between still takes it.
+export async function typeInto(inst, text, {force = false} = {}) {
   if (!inst.pane) return `pid ${inst.pid} is not inside tmux; nothing to type into`;
+  if (!force) {
+    const shown = await screen(inst.pane);
+    if (shown === null) return `tmux: cannot capture ${inst.pane}`;
+    const refused = dialogRefusal(shown);
+    if (refused) return refused;
+  }
   const buf = `ccx-${inst.pid}`;
   const r = await run("tmux", "set-buffer", "-b", buf, "--", text, ";",
     "paste-buffer", "-p", "-d", "-b", buf, "-t", inst.pane, ";",

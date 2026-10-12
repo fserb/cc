@@ -130,6 +130,15 @@ function bare(lines, cursor) {
   return [from, to, options];
 }
 
+// Why text typed onto this screen must not go in, or null. A dialog takes the Enter that
+// follows the text as picking its highlighted option, usually "Yes": an approval nobody
+// read. typeInto() refuses on it, unless forced.
+export function dialogRefusal(text) {
+  const dialog = parseDialog(text);
+  if (!dialog) return null;
+  return dialog.title ? `waits on a dialog: ${dialog.title}` : "waits on a dialog";
+}
+
 // The tmux keys that pick option `i`: its digit if it has one, else arrows from the cursor
 // and Enter.
 export function pickKeys(dialog, i) {

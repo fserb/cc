@@ -2,7 +2,9 @@
 // dialogs on 2.1.289, one session in a scratch directory; question-wide.txt is a capture
 // from another project with its words replaced and its layout kept.
 
-import {parseDialog, pickKeys} from "./dialog.js";
+import {dialogRefusal, parseDialog, pickKeys} from "./dialog.js";
+import {typeInto} from "./jump.js";
+import {run} from "./sh.js";
 
 function eq(got, want, what) {
   const g = JSON.stringify(got), w = JSON.stringify(want);
@@ -87,4 +89,45 @@ Deno.test("parseDialog: an idle input box is no dialog", () => {
   eq(echoed.includes("❯ 1. first\n  2. second"), true, "the fixture edit applied");
   eq(parseDialog(echoed), null, "an echoed prompt that is itself a numbered list");
   eq(parseDialog(""), null, "an empty capture");
+});
+
+Deno.test("dialogRefusal: every dialog refuses typing, an idle input box does not", () => {
+  eq(dialogRefusal(fixture("trust")), "waits on a dialog: Accessing workspace:", "trust");
+  for (const name of ["bash", "write", "write-narrow", "plan", "question", "question-multi"]) {
+    eq(dialogRefusal(fixture(name)), `waits on a dialog: ${parseDialog(fixture(name)).title}`,
+      name);
+  }
+  eq(dialogRefusal(fixture("idle")), null, "idle");
+  eq(dialogRefusal(""), null, "an empty capture");
+});
+
+// A pane in a throwaway tmux session showing a captured dialog: typeInto() refuses and
+// types nothing, and with force it types.
+Deno.test("typeInto: refused on a pane showing a dialog, typed with force", async () => {
+  const sess = `ccx-test-${Deno.pid}`;
+  const file = new URL("fixtures/dialog/bash.txt", import.meta.url).pathname;
+  const made = await run("tmux", "new-session", "-d", "-s", sess, "-x", "200", "-y", "50",
+    `cat '${file}'; cat > /dev/null`);
+  if (made.code !== 0) return console.log(`no tmux: ${made.err.trim()}`);
+  try {
+    const pane = `${sess}:0.0`;
+    let shown = "";
+    for (let n = 0; n < 50 && !dialogRefusal(shown); n++) {
+      await new Promise((ok) => setTimeout(ok, 50));
+      shown = (await run("tmux", "capture-pane", "-p", "-t", pane)).out;
+    }
+    const inst = {pid: 0, pane};
+    eq(await typeInto(inst, "zzmark"), "waits on a dialog: Bash command", "refused");
+    await new Promise((ok) => setTimeout(ok, 200));
+    let now = (await run("tmux", "capture-pane", "-p", "-t", pane)).out;
+    eq(now.includes("zzmark"), false, "nothing was typed");
+    eq(await typeInto(inst, "zzmark", {force: true}), null, "forced");
+    for (let n = 0; n < 40 && !now.includes("zzmark"); n++) {
+      await new Promise((ok) => setTimeout(ok, 50));
+      now = (await run("tmux", "capture-pane", "-p", "-t", pane)).out;
+    }
+    eq(now.includes("zzmark"), true, "typed");
+  } finally {
+    await run("tmux", "kill-session", "-t", sess);
+  }
 });

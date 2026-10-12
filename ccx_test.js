@@ -995,6 +995,8 @@ const BAD = [
   ["user"],                     // the same three, for the same reason
   ["user", "ccx-e8"],
   ["user", "ccx-e8", "   "],
+  ["user", "--force"],          // --force is not a target
+  ["user", "--force", "ccx-e8"],
   ["chat", "foo"],              // chat takes --no-follow, or nothing
   ["--resolve"],                // no target
   ["--snapshot", "bogus"],

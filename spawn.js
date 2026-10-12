@@ -171,8 +171,9 @@ export async function spawn({dir, after = "", mkdir = false, name = "", focus = 
   const made = !focus ? await detachedSession(dir, name)
     : after ? await newWindowAfter(after, dir) : await newKittyWindow(dir, undefined, name);
   if (made.error) return made;
+  // a shell, not a claude: no dialog to guard against
   const err = await typeInto({pid: 0, pane: made.pane},
-    name ? `claude -n ${shQuote(name)}` : "claude");
+    name ? `claude -n ${shQuote(name)}` : "claude", {force: true});
   if (err) return {error: err, pane: made.pane};
   const pid = await claudeIn(made.pane);
   if (!pid) return {error: "claude did not start", pane: made.pane};

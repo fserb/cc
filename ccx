@@ -1239,8 +1239,8 @@ function report(verb, found, missed, errs) {
 }
 
 // a send or type on the host the instance runs on, by its api. An error, or null
-async function onHost(i, verb, text) {
-  return (await call(i.host, `/api/s/${i.pid}/${verb}`, {text}))[1];
+async function onHost(i, verb, text, extra = {}) {
+  return (await call(i.host, `/api/s/${i.pid}/${verb}`, {text, ...extra}))[1];
 }
 
 // ccx send <target>[,<target>...] <message...>
@@ -1258,14 +1258,17 @@ async function cmdSend(spec, ...words) {
     i.host ? onHost(i, "send", text) : sendPeer(i, text))));
 }
 
-// ccx user <target>[,<target>...] <text...>
+// ccx user [--force] <target>[,<target>...] <text...>
 // Typed into the instance's prompt as its own user and submitted, so `/clear` clears it;
-// `send` puts a message from a peer on its queue, which no slash command survives
-async function cmdUser(spec, ...words) {
+// `send` puts a message from a peer on its queue, which no slash command survives. Refused
+// on a pane showing a dialog, which the Enter would answer, unless --force
+async function cmdUser(...args) {
+  const force = args[0] === "--force";
+  const [spec, ...words] = force ? args.slice(1) : args;
   const text = words.join(" ");
   const {found, missed} = await targets("user", spec, text);
   report("typed", found, missed, await Promise.all(found.map((i) =>
-    i.host ? onHost(i, "type", text) : typeInto(i, text))));
+    i.host ? onHost(i, "type", text, {force}) : typeInto(i, text, {force}))));
 }
 
 // ccx chat [--no-follow]
@@ -1441,7 +1444,8 @@ const HELP = [
   ["    --focus", "instead a tmux window beside one already in dir, else a kitty window, and focus it"],
   ["  delete [host:]<name|pid>", "end one instance and close its tmux pane"],
   ["  send <target> <message...>", "a chat message to one or more instances"],
-  ["  user <target> <text...>", "typed into an instance as its user, /commands included"],
+  ["  user [--force] <target> <text...>", "typed into an instance as its user, /commands included;"],
+  ["", "refused while it shows a dialog, which the Enter would answer, unless --force"],
   ["  chat [--no-follow]", "what the agents here have said to each other"],
   ["  notify <who> when <target>", "message who (`me` inside a claude) from `ccx` when target's"],
   ["  [is <state>] [for <time>]", "state changes, or goes to wait|busy|hold|free|gone; once,"],

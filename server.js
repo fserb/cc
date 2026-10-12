@@ -447,7 +447,7 @@ export class Server {
     }
     if (verb === "type") {
       if (typeof body.text !== "string" || !body.text.trim()) return json({error: "no text"}, 400);
-      return answer(await typeInto(inst, body.text));
+      return answer(await typeInto(inst, body.text, {force: body.force === true}));
     }
     if (verb === "pick") {
       if (!Array.isArray(body.labels)) return json({error: "no labels"}, 400);
