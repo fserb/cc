@@ -915,7 +915,8 @@ $("#say").onsubmit = async (e) => {
   catch (err) { p.err = err.message; if (!drafts[dk]) { setDraft(dk, q); if (draftKey === dk) { e.target.q.value = q; fit(); } } drawView(true); }
 };
 // a bubble not in the log yet: double-tap/double-click sends it now (Claude Code's ctrl+x ctrl+s: stops the turn, sends
-// the queue); hold 500 ms takes it back into the box (ccx unqueue drops the whole queue, so the others are typed again)
+// the queue); hold 500 ms takes it back into the box (cchost's unqueue with {text} takes that one message out and answers
+// {kept}; an older cchost drops the whole queue and answers without it, so the other bubbles are typed again)
 const say = $("#say").q;
 const queued = (p) => !p.err;
 async function sendNow(p) {
@@ -936,7 +937,8 @@ async function unsend(p) {
   drawView(true); say.focus();
   if (!queued(p)) return;
   try {
-    await post(`${CCX}/s/${p.pid}/unqueue`, {});
+    const r = await post(`${CCX}/s/${p.pid}/unqueue`, {text: p.text});
+    if (typeof r?.kept === "number") return;
     for (const o of pending.filter((x) => x.pid === p.pid && queued(x))) { o.at = Date.now(); await post(`${CCX}/s/${o.pid}/type`, {text: o.text}); }
   } catch (err) { p.err = `not taken back: ${err.message}`; pending.push(p); drawView(true); }
 }
