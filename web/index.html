@@ -411,13 +411,30 @@ function quiet(r) {
 }
 // a session's dot: green when it waits on you, none while it works (user, 2026-10-12: it was green for busy)
 const DOT = {busy: "", wait: "green", hold: "yel", free: "gray"};
+// a session is bold when it has replied since you last had it open (user, 2026-10-12). Its reply ends
+// its turn, so the row's own since (when it left busy, the host's clock) stands for its newest output:
+// cc_seen keeps pid -> the since you saw, and the open session's is kept current
+let seenAt = JSON.parse(localStorage.cc_seen ?? "null");
+function unseen(id, r) {
+  if (!r || !seenAt || r.state === "busy" || r.state === "free") return false;
+  if (cur === id && !document.hidden && !(narrow() && !document.body.classList.contains("view"))) markSeen(r);
+  return r.since > (seenAt[r.pid] ?? 0);
+}
+function markSeen(r) {
+  if (seenAt[r.pid] >= r.since) return;
+  seenAt[r.pid] = r.since;
+  for (const [k, v] of Object.entries(seenAt)) if (v < Date.now() / 1000 - 30 * 86400 && !S.rows.some((x) => x.pid === k)) delete seenAt[k];
+  localStorage.cc_seen = JSON.stringify(seenAt);
+}
 function items() {
+  // the first visit counts what is there as seen, as the blog's does
+  if (!seenAt && S.rows.length) { seenAt = Object.fromEntries(S.rows.map((r) => [r.pid, r.since])); localStorage.cc_seen = JSON.stringify(seenAt); }
   const it = [];
   const n = nadyaRow();
   const nadyaHot = n && hasDialog(n);
   const nLog = n && stream?.pid === n.pid ? S.log : [];
   const lastText = nLog.findLast((e) => e.type === "text" && !blank(e));
-  it.push({id: "nadya", d: nadyaHot ? "q" : n ? DOT[n.state] : "gray", hot: nadyaHot, title: "nadya",
+  it.push({id: "nadya", d: nadyaHot ? "q" : n ? DOT[n.state] : "gray", hot: nadyaHot, unread: unseen("nadya", n), title: "nadya",
     sub: nadyaHot ? `waits on a dialog: ${n.asking || "see pane"}` : n && quiet(n) ? "\u00a0" : lastText?.text.split("\n")[0] ?? (n ? n.summary : "not running"), t: n ? ago(n.since) : ""});
   if (!localStorage.cc_blog_seen && S.posts.length) localStorage.cc_blog_seen = Date.now();
   const seen = +localStorage.cc_blog_seen || 0, top = S.posts[0];
@@ -434,7 +451,7 @@ function items() {
   it.push({id: "files", d: "", title: "files", sub: "", t: ""});
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, dialog: !!hasDialog(r)}));
   ss.sort((a, b) => b.dialog - a.dialog);
-  for (const {r, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "q" : DOT[r.state] ?? "gray", hot: dialog,
+  for (const {r, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "q" : DOT[r.state] ?? "gray", hot: dialog, unread: unseen(r.pid, r),
     title: r.name, sub: dialog ? `waits on a dialog: ${r.asking || "see pane"}` : quiet(r) ? "\u00a0" : r.summary !== r.name ? r.summary : r.path, t: `${r.pid.split(".")[0] === "nadya" ? "" : r.pid.split(".")[0] + " · "}${ago(r.since)}`});
   return it;
 }
