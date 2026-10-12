@@ -1,7 +1,7 @@
 // Who used the seven-day limit: the token use of every assistant message in
 // ~/.claude/projects/**/*.jsonl (subagent transcripts count for their parent session),
 // weighted into an estimated quota share and summed per hour, project and session. This
-// host's only: remote.js merges the hosts, `ccx host` serves it (/api/burn).
+// host's only: remote.js merges the hosts, `cchost` serves it (/api/burn).
 //
 // Weights: API list-price ratios, Opus input = 1: input 1, cache write 1.25 (5m) or 2
 // (1h), cache read 0.1, output 5; Sonnet 0.6x, Haiku 0.2x of that. The plan's quota
@@ -26,7 +26,7 @@
 //
 // STORE keeps settled hours, one JSON line per hour, project and session, and a
 // `{"from","done"}` line per scan, so a week still shows after its transcripts go and a
-// request reads only the hour in progress. Only `ccx host` writes it.
+// request reads only the hour in progress. Only `cchost` writes it.
 
 import { HOME } from "./sh.js";
 import { usedAt, weekSamples } from "./usage.js";
@@ -303,7 +303,7 @@ async function update(s, now) {
   }
 }
 
-// Brings the store up to the last settled hour; `ccx host` runs it on start and every 10
+// Brings the store up to the last settled hour; `cchost` runs it on start and every 10
 // minutes, so a request seldom waits on it
 export async function settle(now = Date.now()) {
   const s = load();

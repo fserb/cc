@@ -2,7 +2,7 @@
 // or "... when any session is new" (`any is new`), which each host's daemon holds a copy of.
 // They live in the daemon of the host the watched agent runs on, matched against the
 // state-change events of that host's StateClock, and are answered with a chat message to
-// the subscriber, on any host. Memory only: a `ccx host` restart drops them.
+// the subscriber, on any host. Memory only: a `cchost` restart drops them.
 
 export const STATES = ["wait", "busy", "hold", "free", "gone"];
 const UNITS = { s: 1, m: 60, h: 3600, d: 86400 };

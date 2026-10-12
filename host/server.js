@@ -1,6 +1,6 @@
 // ccx's API over HTTP, for cc (nadya:~/web/cc) through www/lemon.js: the listing, one
 // instance's conversation and screen, typing into it, answering its dialogs, and starting
-// new ones. No auth: `ccx serve` binds 127.0.0.1, `ccx host` every interface with
+// new ones. No auth: `ccx serve` binds 127.0.0.1, `cchost` every interface with
 // tailnetOrLocal() as the boundary.
 // See server.md.
 //
@@ -144,7 +144,7 @@ function bridges() {
 }
 
 // Who may connect, by address: this machine, its docker bridges, or the tailnet
-// (100.64.0.0/10 and fd7a:115c:a1e0::/48). `ccx host` listens on every interface, so this
+// (100.64.0.0/10 and fd7a:115c:a1e0::/48). `cchost` listens on every interface, so this
 // is the boundary
 export function tailnetOrLocal(addr, nets = bridges()) {
   const a = addr.toLowerCase().replace(/^::ffff:/, "");
@@ -172,8 +172,8 @@ export class Server {
   constructor(source, port = PORT, relay = null, subs = null) {
     this.source = source;                 // () => {instances, net}
     this.port = port;
-    this.relay = relay;                   // a Relay, under `ccx host`
-    this.subs = subs;                     // a Subs, under `ccx host`
+    this.relay = relay;                   // a Relay, under `cchost`
+    this.subs = subs;                     // a Subs, under `cchost`
     this.lists = new Set();               // api/events clients
     this.sessions = new Set();            // api/s/<pid>/events clients
     this.lastList = "";
@@ -226,7 +226,7 @@ export class Server {
     for (const c of [...this.lists, ...this.sessions]) c.close();
   }
 
-  // the list to its streams if it changed; `ccx host` also calls it after each poll
+  // the list to its streams if it changed; `cchost` also calls it after each poll
   pushList() {
     if (!this.lists.size) return;
     const body = this.listBody(), text = JSON.stringify(body);
@@ -335,11 +335,11 @@ export class Server {
     }
     if (get && path === "/api/burn") return json(await this.burn(Number(url.searchParams.get("hours")) || 0));
     if (post && path === "/api/relay") {
-      if (!this.relay) return json({error: "no relay here; it runs under ccx host"}, 409);
+      if (!this.relay) return json({error: "no relay here; it runs under cchost"}, 409);
       return answer(await this.relay.deliver(await req.json().catch(() => ({}))));
     }
     if (path === "/api/subs" || path === "/api/unsub") {
-      if (!this.subs) return json({error: "no subscriptions here; they run under ccx host"}, 409);
+      if (!this.subs) return json({error: "no subscriptions here; they run under cchost"}, 409);
       if (get && path === "/api/subs") return json({subs: this.subs.list()});
       if (!post) return json({error: "not found"}, 404);
       const body = await req.json().catch(() => ({}));

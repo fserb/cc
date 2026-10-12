@@ -1,9 +1,8 @@
-# ccx serve: remote control over HTTP
+# cchost's API: remote control over HTTP
 
-An HTTP API inside ccx that lists every running Claude Code instance, shows each one's
+An HTTP API, served by cchost, that lists every running Claude Code instance, shows each one's
 conversation, lets you type into it, answer its dialogs, interrupt it, and start new
-ones. Runs inside `ccx host`, or alone as `ccx serve`. Its client is cc
-(`nadya:~/web/cc`), through the lemon app in `www/lemon.js`.
+ones. Its client is cc (`web/`), through the lemon app in `host/www/lemon.js`.
 
 **There is no page any more** (user, 2026-10-12: "I'm not using it at all since cc is much
 better"). `page.html`, its manifest, icons and font went; every route is under `/api`, and
@@ -42,10 +41,8 @@ the first version: attaching files or images.
 empty with no record, and then there is no history.
 
 `server.js` exports `runServer({port, source})`. `source` is a function returning the
-current instance list; under `ccx host` it is the daemon's own poll result, so there is one
-`discover()` per poll and not two. Alone, `ccx serve` runs its own `discover()` +
-`StateClock` loop, the same thing the TUI does. `doctor` asks the port over HTTP, since the
-server lives in whichever process started it.
+current instance list, the daemon's own poll result, so there is one `discover()` per
+poll. `doctor` asks the port over HTTP, since the server is cchost's process.
 
 ## Reaching it through caddy
 
@@ -118,7 +115,8 @@ Errors use the existing convention: the functions return a message or null, and 
 server answers `{error}` with 502 when the message starts `tmux:` and 409 otherwise (not
 in tmux, no dialog, the dialog changed), 400 for a malformed body.
 
-Built: `server.js` and `ccx serve [--port N]`. Run against a scratch session through every
+Built: `server.js` and `ccx serve [--port N]` (`ccx serve` went 2026-10-12; `host/cchost
+--port N` with `CCX_SELF`/`CCX_HOSTS` set to a scratch host does the same). Run against a scratch session through every
 route: spawn into a new directory, `pick` refusing stale labels with 409 and then
 answering folder trust, `type` starting a turn, `esc` interrupting it (busy to wait), the
 log showing the prompt and the partial reply. The session stream follows a /clear, which

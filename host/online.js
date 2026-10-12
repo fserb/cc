@@ -44,7 +44,7 @@ export function pickBase(managed, user, env) {
 // The order is claude's own: a managed policy outranks the user's settings, which outrank
 // the environment. THE ENVIRONMENT IS THE ONE THE DAEMON CANNOT SEE: `./task install` hands
 // it a plist or unit holding PATH and HOME and nothing else, so a var exported in a shell
-// reaches `ccx` and never reaches `ccx host`. A settings file reaches both.
+// reaches `ccx` and never reaches `cchost`. A settings file reaches both.
 export function apiBase() {
   return pickBase(baseFromSettings(MANAGED), baseFromSettings(USER),
     (Deno.env.get(VAR) ?? "").trim());

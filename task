@@ -21,7 +21,7 @@ HOST_LABEL=net.fserb.cchost
 OLD_LABEL=net.fserb.ccx-host
 HOST_PLIST="$HOME/Library/LaunchAgents/$HOST_LABEL.plist"
 HOST_UNIT="$HOME/.config/systemd/user/cchost.service"
-OLD_UNIT="$HOME/.config/systemd/user/cchost.service"
+OLD_UNIT="$HOME/.config/systemd/user/ccx-host.service"
 HOST_PATH="$(dirname "$(command -v deno)"):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 install() {

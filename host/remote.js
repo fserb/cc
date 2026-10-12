@@ -1,4 +1,4 @@
-// The other machines' claudes, through the `ccx host` daemon each one runs. Names read
+// The other machines' claudes, through the `cchost` daemon each one runs. Names read
 // `host:name` and paths `host:~/path`; the local host is discover() as it always was, so
 // the CLI works with no daemon here.
 
