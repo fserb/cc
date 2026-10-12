@@ -16,7 +16,7 @@
 //   until the session writes its record (a trusted dir, ~600ms) or the dialog shows
 
 import {HOME, MAC, run, sh} from "./sh.js";
-import {sendKeys, sendKitty, typeInto} from "./jump.js";
+import {jump, sendKeys, sendKitty, typeInto} from "./jump.js";
 import {discover} from "./claudes.js";
 import {parseDialog, pickKeys, screen} from "./dialog.js";
 
@@ -146,12 +146,12 @@ function shQuote(s) {
   return `'${s.replaceAll("'", "'\\''")}'`;
 }
 
-// Start a claude in `dir`: in a detached tmux session when `bg`, after pane `after` when
-// given, else in a new kitty window.
+// Start a claude in `dir`: in a detached tmux session, unless `focus`, which puts it in a
+// new tmux window after pane `after` when given, else in a new kitty window, and focuses it.
 // `name` is its `claude -n`. {pid, pane}, or {error} with the pane when one was made,
 // since the screen still works off it. A claude by that name already in dir is the one
 // asked for: nothing starts, and {pid, pane, existing: true} names it.
-export async function spawn({dir, after = "", mkdir = false, name = "", bg = false}) {
+export async function spawn({dir, after = "", mkdir = false, name = "", focus = false}) {
   dir = expandDir(dir ?? "");
   if (!dir.startsWith("/")) return {error: `not an absolute path: ${dir}`};
   if (!isDir(dir)) {
@@ -168,7 +168,7 @@ export async function spawn({dir, after = "", mkdir = false, name = "", bg = fal
       [dir, real].includes(i.cwd || i.path));
     if (same) return {pid: same.pid, pane: same.pane, existing: true};
   }
-  const made = bg ? await detachedSession(dir, name)
+  const made = !focus ? await detachedSession(dir, name)
     : after ? await newWindowAfter(after, dir) : await newKittyWindow(dir, undefined, name);
   if (made.error) return made;
   const err = await typeInto({pid: 0, pane: made.pane},
@@ -176,8 +176,13 @@ export async function spawn({dir, after = "", mkdir = false, name = "", bg = fal
   if (err) return {error: err, pane: made.pane};
   const pid = await claudeIn(made.pane);
   if (!pid) return {error: "claude did not start", pane: made.pane};
-  const trust = await trustFolder(pid, made.pane);
-  return trust ? {pid, pane: made.pane, warning: trust} : {pid, pane: made.pane};
+  const warnings = [await trustFolder(pid, made.pane)];
+  if (focus) {
+    const inst = (await discover()).find((i) => i.pid === pid);
+    warnings.push(inst ? await jump(inst) : `${pid} not found to focus`);
+  }
+  const warning = warnings.filter(Boolean).join("; ");
+  return warning ? {pid, pane: made.pane, warning} : {pid, pane: made.pane};
 }
 
 function alive(pid) {

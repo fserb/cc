@@ -456,7 +456,7 @@ function sessionView(pid, tab) {
     return `<button class="icon" data-go="#">‹</button>
       <div class="title" data-go="#">${glyph(r)} <b>${esc(nameOf(r))}</b><small>${esc(r.path)}</small></div>
       ${pane ? `<button class="icon sw${s.tab === "screen" ? " on" : ""}" data-tab title="${s.tab === "screen" ? "show the history" : "show the pane"}">${s.tab === "screen" ? "≡" : "&gt;_"}</button>
-      <button class="icon" data-spawn="${esc(r.path)}" data-after="${esc(r.pane)}" title="new claude beside this one">+</button>` : ""}`;
+      <button class="icon" data-spawn="${esc(r.path)}" data-after="${esc(r.pane)}" title="new claude in ${esc(r.path)}">+</button>` : ""}`;
   };
 
   const dialogHtml = () => {
@@ -615,7 +615,7 @@ function newView() {
   const draw = () => {
     mount(`<div class="app">
       <header><button class="icon" data-go="#">‹</button>
-        <div class="title"><b>new claude</b><small>in a new kitty window</small></div></header>
+        <div class="title"><b>new claude</b><small>in a detached tmux session</small></div></header>
       <main><div class="form">
         <label>directory<input type="text" value="${esc(typed)}" autocapitalize="off" autocorrect="off" spellcheck="false" data-dir-input></label>
         <ul class="sugg"></ul>
@@ -667,13 +667,13 @@ function newView() {
       input.focus();
     },
     start: () => startClaude({dir: typed.replace(/\/+$/, "") || "/",
-      mkdir: $("[data-mkdir]").checked}, "in a new kitty window"),
+      mkdir: $("[data-mkdir]").checked}, "in a detached tmux session"),
   };
 }
 
 // #starting
 
-// A spawn takes from half a second to several: a new kitty window, a shell, claude, and
+// A spawn takes from half a second to several: a tmux session, a shell, claude, and
 // the server's poll finding it. So the page moves at once, and this one is replaced by the
 // session's when it is known, `replace` so that back is the list and not this.
 let starting = null;
@@ -725,8 +725,8 @@ function route() {
 }
 
 function spawnBeside(button) {
-  const {spawn: dir, after} = button.dataset;
-  startClaude(after ? {dir, after} : {dir}, after ? "in a new tab beside" : "in a new kitty window");
+  const {spawn: dir} = button.dataset;
+  startClaude({dir}, "in a detached tmux session");
 }
 
 async function send() {

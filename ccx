@@ -949,13 +949,13 @@ async function cmdFocus(spec) {
   Deno.exit(1);
 }
 
-// ccx new [--bg] [host:]<dir> [name]
-// The same spawn() as the page's +: a new tmux window after an instance already in `dir`,
-// else a new kitty window, or a detached tmux session on a host with no kitty attached.
-// --bg is always the detached session, for a claude that does not work with the user
+// ccx new [--focus] [host:]<dir> [name]
+// The same spawn() as the page's +: a detached tmux session. --focus puts it in a new tmux
+// window after an instance already in `dir`, else a new kitty window, and focuses it.
+// --bg, once the way to ask for the detached session, is accepted and does nothing
 async function cmdNew(...args) {
-  const bg = args.includes("--bg");
-  const [dir, ...words] = args.filter((a) => a !== "--bg");
+  const focus = args.includes("--focus");
+  const [dir, ...words] = args.filter((a) => a !== "--bg" && a !== "--focus");
   if (!dir) usage();
   const name = words.join(" ");
   const colon = dir.indexOf(":");
@@ -968,7 +968,7 @@ async function cmdNew(...args) {
       Deno.exit(1);
     }
     // spawn() waits up to 5s for a window, 10s for claude and 10s for its trust dialog
-    const [r, err] = await call(host, "/api/spawn", {dir: rest, name, beside: true, bg}, 30000);
+    const [r, err] = await call(host, "/api/spawn", {dir: rest, name, beside: true, focus}, 30000);
     if (err) {
       console.error(`new: ${host}: ${err}`);
       Deno.exit(1);
@@ -976,8 +976,8 @@ async function cmdNew(...args) {
     if (r.warning) console.error(`new: ${host}: ${r.warning}`);
     console.log(r.existing ? `${host}:${r.pid} already running in ${host}:${rest}`
       : `started ${host}:${r.pid} in ${host}:${rest}, ` +
-        (r.after ? `tmux window after ${r.after}` : bg ? `detached tmux pane ${r.pane}`
-          : `tmux pane ${r.pane}`));
+        (r.after ? `tmux window after ${r.after}` : focus ? `tmux pane ${r.pane}`
+          : `detached tmux pane ${r.pane}`));
     return;
   }
   let path = expandDir(dir);
@@ -987,8 +987,8 @@ async function cmdNew(...args) {
   } catch {
     // spawn() names the missing directory
   }
-  const after = bg ? "" : await paneIn(path);
-  const r = await spawn({dir: path, after, name, bg});
+  const after = focus ? await paneIn(path) : "";
+  const r = await spawn({dir: path, after, name, focus});
   if (r.error) {
     console.error(`new: ${r.error}`);
     Deno.exit(1);
@@ -996,8 +996,8 @@ async function cmdNew(...args) {
   if (r.warning) console.error(`new: ${r.warning}`);
   console.log(r.existing ? `${r.pid} already running in ${path.replace(HOME, "~")}`
     : `started ${r.pid} in ${path.replace(HOME, "~")}, ` +
-      (after ? `tmux window after ${after}` : bg ? `detached tmux pane ${r.pane}`
-        : "new kitty window"));
+      (after ? `tmux window after ${after}` : focus ? "new kitty window"
+        : `detached tmux pane ${r.pane}`));
 }
 
 // ccx delete [host:]<name|pid>
@@ -1438,8 +1438,8 @@ const HELP = [
   ["", "last N hours by project and session. --json for the data"],
   ["  doctor", "what resolves, and the kitty match it would use"],
   ["  focus <target>", "jump to one instance without the UI, on any host"],
-  ["  new [--bg] [host:]<dir> [name...]", "a claude in dir: beside one already there, else a kitty window; none if name is there"],
-  ["    --bg", "in a detached tmux session (named name, else ccx-<dir>), no window"],
+  ["  new [--focus] [host:]<dir> [name...]", "a claude in dir, in a detached tmux session named name (else ccx-<dir>); none if name is there"],
+  ["    --focus", "instead a tmux window beside one already in dir, else a kitty window, and focus it"],
   ["  delete [host:]<name|pid>", "end one instance and close its tmux pane"],
   ["  send <target> <message...>", "a chat message to one or more instances"],
   ["  user <target> <text...>", "typed into an instance as its user, /commands included"],
