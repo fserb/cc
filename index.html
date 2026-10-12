@@ -414,7 +414,7 @@ function items() {
   it.push({id: "plan", d: due.length ? "blue" : "", hot: due.length, title: "plan", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : "", t: ""});
   const ps = projects(), run = ps.filter((x) => x.running).length;
   it.push({id: "projects", d: run ? "green" : "", title: "projects", sub: ps.filter((x) => x.running).map((x) => `${x.file.replace(/\.md$/, "")} running`).join(" · "), t: ""});
-  it.push({id: "files", d: "", title: "files", sub: "~/nadya", t: ""});
+  it.push({id: "files", d: "", title: "files", sub: "", t: ""});
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, asks: asksFor(r.name), dialog: hasDialog(r)}));
   ss.sort((a, b) => (b.dialog ? 2 : b.asks.length ? 1 : 0) - (a.dialog ? 2 : a.asks.length ? 1 : 0));
   for (const {r, asks, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "red" : asks.length ? "blue" : {busy: "green", wait: "", hold: "yel", free: "gray"}[r.state] ?? "gray", hot: dialog || asks.length,
