@@ -46,6 +46,7 @@
   .it.hot .tx div, .it.unread .tx div { font-weight: 600; }
   .it time { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
   #center { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+  #center.nadya { --accent: #d81212; }  /* nadya's chat in the red of the star icon */
   #view { overflow: auto; grid-area: 1 / 1; }
   #newer { grid-area: 1 / 1; align-self: end; justify-self: center; margin-bottom: 0.8rem; border: 0; background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 0.35rem 1rem; font: inherit; font-size: 0.85rem; cursor: pointer; box-shadow: 0 1px 4px #0003; }
   article { max-width: 46rem; margin: 0 auto; padding: 1.6rem 2rem 2rem; }
@@ -72,6 +73,7 @@
   #say[hidden] { display: none; }
   #say { display: flex; gap: 0.5rem; padding: 0.7rem 2rem 0.9rem; border-top: 1px solid var(--line); }
   #say input { flex: 1; font: inherit; border: 1px solid var(--line); border-radius: 999px; padding: 0.55rem 1rem; }
+  #say input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
   #say button { border: 0; background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 0 1.1rem; cursor: pointer; font: inherit; }
   #say #mode { background: none; border: 1px solid var(--line); color: var(--muted); padding: 0 0.75rem; font: 0.85rem var(--mono); }
   #say #mode[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
@@ -391,6 +393,7 @@ function drawView(soft) {
   $("#say").q.placeholder = ph;
   $("#say").hidden = !(!cur || cur === "nadya" || i?.r);  // the prompt only where it talks to nadya or a session
   const chatty = !cur || cur === "nadya" || isPid(cur);
+  $("#center").classList.toggle("nadya", !cur || cur === "nadya");
   $("#mode").hidden = !chatty;
   $("#mode").setAttribute("aria-pressed", term);
   if (!soft) { pausedAt = 0; $("#newer").hidden = true; }
