@@ -234,13 +234,17 @@ function readTitle(path, size) {
 
 // How many of this session's subagents are running now. Each has its own log,
 // `<sessionId>/subagents/agent-<id>.jsonl` beside the session's; one has stopped when its
-// last entry is an `end_turn`, the answer to its `SubagentHandback`, or an interrupt. One
+// last entry is an `end_turn`, the answer to its `SubagentHandback`, or an interrupt. A last
+// reply can also be written with `stop_reason: null` (seen on 2.1.296), the same as a reply
+// mid-turn with a tool call still to come, so a last entry with no tool call is running
+// only while the log was written in the last QUIET_MS. One
 // that stopped waiting on its own background shell is not running, as Claude Code has it,
 // and runs again when the shell wakes it. Only while the record says busy, which is what a
 // live subagent makes it (2.1.283): a log left open by a killed agent counts for nothing
 // once the session is idle. Cached against each log's size.
 const AGENT_TAIL = 64 * 1024;
-const AGENTS = new Map();          // subagent log -> [size when read, running]
+const QUIET_MS = 30_000;
+const AGENTS = new Map();          // subagent log -> [size when read, running or null]
 
 function subagentsRunning(rec) {
   if (rec.status !== "busy" || !rec.cwd || !rec.sessionId) return 0;
@@ -257,7 +261,7 @@ function subagentsRunning(rec) {
         running = agentRunning(readTail(path, st.size, AGENT_TAIL));
         AGENTS.set(path, [st.size, running]);
       }
-      if (running) n++;
+      if (running ?? Date.now() - (st.mtime?.getTime() ?? 0) < QUIET_MS) n++;
     }
   } catch {
     return n;
@@ -265,6 +269,7 @@ function subagentsRunning(rec) {
   return n;
 }
 
+// true, false, or null for a last reply with no tool call and no stop_reason
 export function agentRunning(text) {
   let handback = false;
   for (const line of text.trimEnd().split("\n").reverse()) {
@@ -279,7 +284,9 @@ export function agentRunning(text) {
     const parts = Array.isArray(content) ? content : [{type: "text", text: content ?? ""}];
     if (e.type === "assistant") {
       if (e.message?.stop_reason === "end_turn") return false;
-      return !(handback && parts.some((p) => p.type === "tool_use" && p.name === "SubagentHandback"));
+      const calls = parts.filter((p) => p.type === "tool_use");
+      if (!calls.length) return null;
+      return !(handback && calls.some((p) => p.name === "SubagentHandback"));
     }
     if (parts.some((p) => p.type === "text" && p.text?.startsWith("[Request interrupted"))) return false;
     // the answer to a tool_use: whether it stopped is in the call it answers
