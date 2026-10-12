@@ -198,10 +198,16 @@ function stringEvents(s, at) {
   return s ? [{type: "user", at, text: s, images: 0}] : [];
 }
 
+// A thinking block with text in it is drawn in the terminal as a reply, a `●` line like
+// any text block (seen on 2.1.296, claude-opus-5-5, on cc-a's pane). The reasoning itself
+// is the empty signed block written before it, which stays out.
 function assistantEvents(rec, at) {
   const events = [];
   for (const b of rec.message?.content ?? []) {
     if (b?.type === "text" && b.text?.trim()) events.push({type: "text", at, text: b.text});
+    if (b?.type === "thinking" && b.thinking?.trim()) {
+      events.push({type: "text", at, text: b.thinking.trim()});
+    }
     if (b?.type === "tool_use") {
       events.push({type: "tool", at, id: b.id ?? "", name: b.name ?? "?",
         arg: argOf(b.input ?? {}), input: clip(JSON.stringify(b.input ?? {}, null, 2))});
