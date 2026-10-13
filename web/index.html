@@ -468,7 +468,7 @@ function items() {
   const nadyaHot = n && hasDialog(n);
   const nLog = n && stream?.pid === n.pid ? S.log : [];
   const lastText = nLog.findLast((e) => e.type === "text" && !blank(e));
-  it.push({id: "nadya", d: nadyaHot ? "q" : n ? DOT[n.state] : "gray", hot: nadyaHot, unread: unseen("nadya", n), title: "nadya",
+  it.push({id: "nadya", d: nadyaHot ? "q" : n ? DOT[n.state] : "gray", hot: false, unread: unseen("nadya", n), title: "nadya",
     sub: nadyaHot ? `waits on a dialog: ${n.asking || "see pane"}` : n && quiet(n) ? "\u00a0" : lastText?.text.split("\n")[0] ?? (n ? n.summary : "not running"), t: n ? ago(n.since) : ""});
   if (!localStorage.cc_blog_seen && S.posts.length) localStorage.cc_blog_seen = Date.now();
   const seen = +localStorage.cc_blog_seen || 0, top = S.posts[0];
@@ -485,7 +485,7 @@ function items() {
   it.push({id: "files", d: "", title: "files", sub: "", t: ""});
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, dialog: !!hasDialog(r)}));
   ss.sort((a, b) => b.dialog - a.dialog);
-  for (const {r, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "q" : DOT[r.state] ?? "gray", hot: dialog, unread: unseen(r.pid, r),
+  for (const {r, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "q" : DOT[r.state] ?? "gray", hot: false, unread: unseen(r.pid, r),
     title: r.name, sub: dialog ? `waits on a dialog: ${r.asking || "see pane"}` : quiet(r) ? "\u00a0" : r.summary !== r.name ? r.summary : r.path, t: `${r.agents ? `+${r.agents} · ` : ""}${r.pid.split(".")[0] === "nadya" ? "" : r.pid.split(".")[0] + " · "}${ago(r.since)}`});
   return it;
 }
