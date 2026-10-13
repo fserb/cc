@@ -23,7 +23,14 @@ import {parseDialog, pickKeys, screen} from "./dialog.js";
 const TMUX_ERR = (r) => `tmux: ${r.err.trim() || `exit ${r.code}`}`;
 
 export function expandDir(dir) {
+  dir = homeRel(dir);
   return dir === "~" || dir.startsWith("~/") ? `${HOME}${dir.slice(1)}` : dir;
+}
+
+// a dir not starting with / or ~ is under home: `ai/cc` is `~/ai/cc`. Sent to
+// another host in this form, since its home is another path. "" is `~/`
+export function homeRel(dir) {
+  return /^[~/]/.test(dir) ? dir : `~/${dir}`;
 }
 
 function isDir(dir) {

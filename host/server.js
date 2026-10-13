@@ -21,7 +21,7 @@ import {imageAt, logPath, readFrom, readPage} from "./transcript.js";
 import {parseDialog, pendingAsk, pick, screen, withAsk} from "./dialog.js";
 import {attachSession, select, sendKeys, show, tmuxBackground, typeInto} from "./jump.js";
 import {unqueue} from "./queue.js";
-import {close, expandDir, paneIn, spawn} from "./spawn.js";
+import {close, expandDir, homeRel, paneIn, spawn} from "./spawn.js";
 import {sendPeer} from "./peer.js";
 import {byDay, LONGER, pace, readUsage} from "./usage.js";
 import {localRows} from "./burn.js";
@@ -647,7 +647,7 @@ export class Server {
     if (!host && !all) return dirsUnder(prefix);
     const got = await Promise.all((host ? [host] : this.allHosts()).map(async (h) => {
       const body = h === this.self ? dirsUnder(rest)
-        : (await call(h, `/api/dirs?prefix=${encodeURIComponent(rest)}`))[0];
+        : (await call(h, `/api/dirs?prefix=${encodeURIComponent(homeRel(rest))}`))[0];
       return {dirs: (body?.dirs ?? []).map((d) => `${h}:${d}`), exists: Boolean(body?.exists)};
     }));
     return {dirs: got.flatMap((g) => g.dirs), exists: Boolean(host) && got[0].exists};
@@ -661,7 +661,7 @@ export class Server {
     if (body.after) [host, body.after] = this.split(String(body.after), "/");
     const [dirHost, dir] = this.split(String(body.dir ?? ""), ":");
     host ??= dirHost;
-    body.dir = dir;
+    body.dir = dir && homeRel(dir);
     let status, out;
     if (!host || host === this.self) {
       out = await this.spawnHere(body);

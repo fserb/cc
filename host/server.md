@@ -134,7 +134,9 @@ All JSON, all under `api/`.
                                    that pane's, in its session. Without: a new kitty
                                    window. Answers {pid, pane}
     GET  api/dirs?prefix=~/ai/c    {dirs, exists}: subdirectories under prefix, for the
-                                   dir field, and whether prefix itself is one
+                                   dir field, and whether prefix itself is one. Here and
+                                   in spawn a dir not starting with ~ or / is under ~
+                                   (`ai/c` is `~/ai/c`; 2026-10-13, user)
 
 ### Rows
 

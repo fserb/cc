@@ -15,10 +15,12 @@ Deno.test("expandDir: ~ is HOME, and only at the start", () => {
   eq(expandDir("~/ai/ccx"), `${HOME}/ai/ccx`, "as a prefix");
   eq(expandDir("~x/ai"), "~x/ai", "another user's home is left alone");
   eq(expandDir("/tmp/~"), "/tmp/~", "not in the middle");
+  eq(expandDir("ai/cc"), `${HOME}/ai/cc`, "relative is under home");
+  eq(expandDir(""), `${HOME}/`, "empty is home");
 });
 
 Deno.test("spawn: a bad directory is refused before tmux is touched", async () => {
-  eq(await spawn({dir: "ai/ccx"}), {error: "not an absolute path: ai/ccx"}, "relative");
+  eq(await spawn({dir: "~x/ai"}), {error: "not an absolute path: ~x/ai"}, "another user's home");
   const gone = `${Deno.makeTempDirSync()}/not/here`;
   eq(await spawn({dir: gone}), {error: `no such directory: ${gone}`}, "missing, no mkdir");
   const file = Deno.makeTempFileSync();
