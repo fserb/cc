@@ -34,6 +34,10 @@
 // - **several questions draw a tab row** (2.1.296), `←  ☐ Design  ☐ Storage  ✔ Submit  →`, ✔
 //   ☒ once answered (Submit's ✔ is its icon). Which tab is current is only a background colour, which `capture-pane -p`
 //   drops, so `tabs` says only which are answered; a pick moves to the next question
+// - **a dialog taller than the screen loses its top**, the `─` rule and the question's first
+//   lines with it; the pane keeps no scrollback of it. What shows is the body, with no title,
+//   and the dialog says `cut`. The question tool's input is in the transcript only once it
+//   is answered (2.1.296), so nothing on disk has the rest while the dialog is up
 // - **options with a preview draw it to their right**, a ┌─┐ box at a fixed column whose
 //   rows end the option lines, with `Notes: press n to add notes` under it at that column;
 //   that dialog has no free-text option and a bare `Chat about this` under a rule. The box
@@ -106,15 +110,17 @@ export function parseDialog(text) {
   else if (chat > 1 && free.n !== null && options.every((o) => o.checked === null)) free.free = true;
   let top = from - 1;
   while (top >= 0 && !RULE.test(lines[top])) top--;
-  const card = cardLines(lines.slice(top < 0 ? Math.max(0, from - 12) : top + 1, from));
+  // no rule above: the dialog is taller than the screen, its top cut off, so all of what shows
+  const cut = top < 0;
+  const card = cardLines(lines.slice(top + 1, from));
   while (card.length && !card[0]) card.shift();
   const tabs = TABS.test(card[0] ?? "") ? [...card.shift().matchAll(/([☐✔☒])\s+(.+?)(?=\s{2,}|\s*→)/g)].map(([, box, label]) => ({label, done: box === "☒"})) : null;
   while (card.length && !card[0]) card.shift();
   // a tab's question can wrap: it is the title up to the first blank line
-  const qEnd = tabs ? Math.max(1, card.indexOf("") < 0 ? card.length : card.indexOf("")) : 1;
+  const qEnd = cut ? 0 : tabs ? Math.max(1, card.indexOf("") < 0 ? card.length : card.indexOf("")) : 1;
   const title = card.slice(0, qEnd).join(" ");
   const body = card.slice(qEnd).join("\n").replace(/\n{3,}/g, "\n\n").trim();
-  return {title, body, options, ...tabs && {tabs}, ...bareChat && {digitMoves: true}};
+  return {title, body, options, ...tabs && {tabs}, ...bareChat && {digitMoves: true}, ...cut && {cut}};
 }
 
 // The preview box right of the options: found on the lines from the dialog's top rule down, cut

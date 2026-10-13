@@ -1,0 +1,25 @@
+│ LOR emi Psum dolo rsit-am etcon sect et URA (dipisc-ingel-i 22:09, 22:10).
+│ ~/tl or emipsu md ol Orsi Tametco ns ecte turadip isc ingelit lore (22:30).
+│ 4. mipsumd 'Olo': rsit amet: CON sect etu radi Pis-Cin geli (tlor-em, 08:14;
+│ ips).
+│ 5. umdolor 'Sitamet': cons ect etura dipisci ngel 'itl oremipsumd olorsitam
+│ (1.1.0)'; et co 1.4.0 nse (cte 19:05).
+│ 6. turadip 'Iscingel': itlo rem 'Ip sum dolors it' amet cons (e ctetu radipisc
+│ inge litl oremi; psu mdolo rsit amet conse ct etura dipi sci).
+│ 7. ngelit: lorem ipsu-mdolor-sita.me tcon secte-turadipis.ci: ngel it
+│ lore-mipsum-dolo rsit 'amet con sect eturad ipisci ng e litlor em ipsu', mdol
+│ ors itametc onsec tetu radip-iscingeli tloremi psumdolo.
+│
+│ rsita metconse: ctetu rad.
+
+❯ 1. apply all
+     Apply all 7 edits
+  2. apply none
+     Change nothing
+  3. Type something.
+────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel
+──────────────────────────────────────────────────────────────────────── qtest ─
+

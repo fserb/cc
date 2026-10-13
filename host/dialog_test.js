@@ -182,3 +182,10 @@ Deno.test("parseDialog: several questions with previews, tabs and a bare Chat ab
   eq([review.title, review.options.map((o) => o.label), pickKeys(review, 0)], ["Review your answers", ["Submit answers", "Cancel"], ["1"]], "review");
   eq(review.body.includes("→ SQLite"), true, "the answers in the body");
 });
+
+// a 24-row pane (ccx new's detached default) under a question longer than that; the words replaced
+Deno.test("parseDialog: a question taller than the screen is cut, all of what shows is its body", () => {
+  const d = parseDialog(fixture("question-cut"));
+  eq([d.cut, d.title, d.options.map((o) => o.label)], [true, "", ["apply all", "apply none", "Type something.", "Chat about this"]], "cut, no title");
+  eq([d.body.split("\n")[0].slice(0, 10), d.body.split("\n").at(-1)], ["LOR emi Ps", "rsita metconse: ctetu rad."], "every line on screen");
+});
