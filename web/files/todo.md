@@ -1,1 +1,1 @@
-/home/fserb/nadya/todo.md
+/home/fserb/nadya/todo/todo.md

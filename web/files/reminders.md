@@ -1,1 +1,1 @@
-/home/fserb/nadya/reminders.md
+/home/fserb/nadya/todo/reminders.md
