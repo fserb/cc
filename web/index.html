@@ -493,7 +493,7 @@ function draw() {
   const all = items();
   let sec = null, html = "";
   for (const i of all) {
-    if ((i.sec ?? "") !== sec) { sec = i.sec ?? ""; html += sec ? `<div class="sec">${sec}</div>` : `<div style="height:.4rem"></div>`; }
+    if ((i.sec ?? "") !== sec) { sec = i.sec ?? ""; if (sec) html += `<div class="sec">${sec}</div>`; }
     html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""}" data-id="${esc(i.id)}" aria-current="${i.id === (isDoc(cur) ? docParent(cur) : isFiles(cur) ? "files" : cur)}"><span class="d ${i.d}">${i.d === "q" ? "?" : ""}</span><span class="tx"><div>${esc(i.title)}</div><small>${esc(i.sub)}</small></span><time>${esc(i.t)}</time></div>`;
   }
   if (S.offline) html += `<p class="meta" style="padding:0 1.1rem">${esc(S.offline)}</p>`;
