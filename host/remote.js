@@ -1,7 +1,7 @@
 // The other machines' daemons, as cchost reaches them: the host list, a call, the merged
 // usage and burn, and the list stream it follows for the relay and api/list?all=1.
 
-import {readUsage, usedAt, weekSamples} from "./usage.js";
+import {readUsage, usedAt, usedNow, weekSamples} from "./usage.js";
 import {breakdown, group} from "./burn.js";
 
 export const PORT = 7681;
@@ -51,7 +51,10 @@ export async function mergedUsage() {
   if (!best) return null;
   const lines = new Map();
   for (const h of all.flatMap((u) => u.history ?? [])) lines.set(`${h.at} ${h.used} ${h.resetsAt}`, h);
-  return {...best, history: [...lines.values()].sort((a, b) => a.at - b.at)};
+  const u = {...best, history: [...lines.values()].sort((a, b) => a.at - b.at)};
+  // a host's file can hold an older figure than the log, past a mid-week reset
+  if (Date.now() < u.resetsAt) u.used = usedNow(weekSamples(u, Date.now()));
+  return u;
 }
 
 // Every host's burn rows in [from, to), each with its host, and the hosts that did not

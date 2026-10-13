@@ -1,5 +1,5 @@
 import {assertEquals} from "jsr:@std/assert";
-import {pace, readHistory, readUsage, usageLine} from "./usage.js";
+import {byDay, pace, readHistory, readUsage, usageLine, usedNow, weekSamples} from "./usage.js";
 
 const H = 3600_000, WEEK = 168 * H;
 const at = (used, hours) => ({used, resetsAt: 1_000 * WEEK + WEEK - hours * H, at: 0});
@@ -96,4 +96,66 @@ Deno.test("readHistory: one sample per line, five_hour dropped, junk skipped", a
     {at: 1791400418000, used: 48, resetsAt: 1791824400000},
     {at: 1791400500000, used: 50.5, resetsAt: 1791824400000}]);
   await Deno.remove(dir, {recursive: true});
+});
+
+// nadya's ccx-usage.log, 2026-10-12 to 13: 10% until 00:28, the counter reset to 0 under the
+// same resets_at, and at 07:12 one instance writing its older 10 with no five_hour
+const RESET_LOG = `1791858581 8 1792429200 8 1791865200
+1791859290 8 1792429200 9 1791865200
+1791859587 9 1792429200 9 1791865200
+1791861075 9 1792429200 10 1791865200
+1791861401 9 1792429200 11 1791865200
+1791861577 9 1792429200 12 1791865200
+1791861758 10 1792429200 12 1791865200
+1791861781 10 1792429200 13 1791865200
+1791863606 10 1792429200 14 1791865200
+1791865709 10 1792429200 0 1791883200
+1791877504 0 1792429200 0 1791895200
+1791889976 10 1792429200
+1791889985 0 1792429200 0 1791895200
+1791889986 0 1792429200 1 1791895200
+1791890149 0 1792429200 2 1791895200
+`;
+
+async function resetUsage(used, lines = RESET_LOG) {
+  const dir = await Deno.makeTempDir();
+  await Deno.writeTextFile(`${dir}/log`, lines);
+  const history = readHistory(`${dir}/log`);
+  await Deno.remove(dir, {recursive: true});
+  return {used, resetsAt: 1792429200_000, at: 0, history};
+}
+
+Deno.test("weekSamples: a confirmed drop is a reset, the lone stale 10 after it is not", async () => {
+  const now = 1791890400_000, u = await resetUsage(0);
+  const s = weekSamples(u, now);
+  assertEquals(s.drops, [{at: 1791877504_000, by: 10}]);
+  assertEquals(s.some((x) => x.at === 1791889976_000), false);
+  assertEquals(usedNow(s), 0);
+  const p = pace(u, now);
+  assertEquals([p.used, p.rate, p.end], [0, null, null]);
+  assertEquals(usageLine(u, now).text, "usage 0%");
+  // the days still add up what was used before the reset
+  const days = byDay(u, now);
+  assertEquals(days.at(-1).used, 0);
+  assertEquals(Math.round(days.reduce((n, d) => n + d.added, 0)), 10);
+});
+
+Deno.test("weekSamples: a file still saying 10 after the reset does not put it back", async () => {
+  const now = 1791890400_000;
+  assertEquals(pace(await resetUsage(10), now).used, 0);
+  // and usage after the reset counts from 0, with a rate
+  const u = await resetUsage(3, `${RESET_LOG}1791890200 3 1792429200 2 1791895200\n`);
+  const p = pace(u, now);
+  assertEquals(p.used, 3);
+  assertEquals(p.rate > 0, true);
+});
+
+Deno.test("weekSamples: one low reading between highs is an older number, not a reset", async () => {
+  const lines = `1791858581 8 1792429200 8 1791865200
+1791859290 9 1792429200 9 1791865200
+1791859587 8 1792429200 9 1791865200
+1791861075 9 1792429200 10 1791865200
+`;
+  const s = weekSamples(await resetUsage(9, lines), 1791862000_000);
+  assertEquals([s.drops, usedNow(s)], [[], 9]);
 });

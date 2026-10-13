@@ -67,18 +67,59 @@ export function usedAt(samples, t) {
 
 // This week's samples to `now`: 0 at its start, the history's lines in it, then `u` itself
 // at `now`, sorted, with a running max applied, since an instance holding older numbers can
-// write them after newer ones and within a week the figure only goes up.
+// write them after newer ones and within a week the figure only goes up. Except when the
+// counter is reset mid-week (seen 2026-10-13: 10% to 0% under the same resets_at): a drop
+// counts once two readings in a row sit below the max, and starts back at the first low
+// reading after the last high one, a lone high between lows being an instance with older
+// numbers. Each drop is kept in `samples.drops` as {at, by} and the samples run on as if it
+// had not happened, `by` higher, so what a span added is still a difference; usedNow()
+// takes them back off. `u` is left out when it is at or above the last drop's max: that is
+// an older reading, and anything real since is in the history.
 export function weekSamples(u, now) {
-  const start = u.resetsAt - WEEK, samples = [{at: start, used: 0}];
+  const start = u.resetsAt - WEEK, raw = [];
   for (const h of u.history ?? []) {
     if (h.resetsAt !== u.resetsAt || h.at <= start || h.at >= now) continue;
-    samples.push({at: h.at, used: h.used});
+    raw.push({at: h.at, used: h.used});
   }
-  samples.push({at: now, used: u.used});
-  samples.sort((a, b) => a.at - b.at);
+  raw.sort((a, b) => a.at - b.at);
+  const drops = new Map(), skip = new Set();
   let top = 0;
-  for (const h of samples) h.used = top = Math.max(top, h.used);
+  for (let i = 0; i < raw.length; i++) {
+    if (!(raw[i].used < top && raw[i + 1]?.used < top)) {
+      top = Math.max(top, raw[i].used);
+      continue;
+    }
+    let j = i;
+    while (j >= 2 && raw[j - 1].used >= top && raw[j - 2].used < top) {
+      skip.add(j - 1);
+      j -= 2;
+    }
+    drops.set(j, top);
+    top = Math.max(...raw.slice(j, i + 1).filter((_, k) => !skip.has(j + k)).map((s) => s.used));
+  }
+  const last = [...drops.values()].at(-1);
+  if (last === undefined || u.used < last) raw.push({at: now, used: u.used});
+  const samples = [{at: start, used: 0}];
+  samples.drops = [];
+  let base = 0;
+  top = 0;
+  raw.forEach((s, i) => {
+    if (skip.has(i)) return;
+    if (drops.has(i)) {
+      base += drops.get(i);
+      samples.drops.push({at: s.at, by: drops.get(i)});
+      top = 0;
+    }
+    top = Math.max(top, s.used);
+    samples.push({at: s.at, used: base + top});
+  });
   return samples;
+}
+
+// What the counter itself read at `t` (default the last sample), drops taken off
+export function usedNow(samples, t = samples.at(-1).at) {
+  return usedAt(samples, t) - samples.drops.filter((d) => d.at <= t)
+    .reduce((n, d) => n + d.by, 0);
 }
 
 // The week so far by local day, [{day, used, added, samples}]: `day` the ms its midnight
@@ -93,10 +134,11 @@ export function byDay(u, now = Date.now()) {
   while (from < now) {
     const next = new Date(from);
     next.setHours(24, 0, 0, 0);
-    const to = Math.min(next.getTime(), now), used = usedAt(samples, to);
+    const to = Math.min(next.getTime(), now), used = usedNow(samples, to);
     const n = samples.filter((s) => s.at > start && s.at >= from && s.at < to).length;
-    out.push({day: from, used, added: used - before, samples: n});
-    [from, before] = [next.getTime(), used];
+    const total = usedAt(samples, to);
+    out.push({day: from, used, added: total - before, samples: n});
+    [from, before] = [next.getTime(), total];
   }
   return out;
 }
@@ -115,12 +157,12 @@ export function pace(u, now = Date.now(), window = RECENT) {
   if (!u || now >= u.resetsAt) return null;
   const start = u.resetsAt - WEEK, elapsed = Math.max(0, now - start);
   const even = 100 * elapsed / WEEK;
-  const samples = weekSamples(u, now), used = samples.at(-1).used;
+  const samples = weekSamples(u, now), used = usedNow(samples), total = samples.at(-1).used;
   if (elapsed < SETTLE || used <= 0) {
     return {used, even, rate: null, ratio: null, end: null, out: null};
   }
   const span = Math.min(window, elapsed);
-  const perMs = (used - usedAt(samples, now - span)) / span;
+  const perMs = (total - usedAt(samples, now - span)) / span;
   const end = used + perMs * (u.resetsAt - now);
   const out = end > 100 ? now + (100 - used) / perMs : null;
   const ratio = used < 100 ? perMs * (u.resetsAt - now) / (100 - used) : null;
