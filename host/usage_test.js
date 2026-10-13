@@ -29,8 +29,8 @@ Deno.test("pace: past the reset the numbers are a week that is over", () => {
 
 Deno.test("usageLine: red only when it runs out before the reset", () => {
   const out = usageLine(at(50, 42), now), fine = usageLine(at(20, 84), now);
-  assertEquals(/^usage 50% \(3\.0x pace - out \w{3} \d\d?[ap]m\)$/.test(out.text), true);
-  assertEquals(/^usage 20% \(0\.[23]x pace\)$/.test(fine.text), true);
+  assertEquals(/^usage 50% \(3\.0x 2h, 3\.0x 6h pace - out \w{3} \d\d?[ap]m\)$/.test(out.text), true);
+  assertEquals(/^usage 20% \(0\.[23]x 2h, 0\.[23]x 6h pace\)$/.test(fine.text), true);
   assertEquals(out.color === fine.color, false);
 });
 
@@ -61,6 +61,9 @@ Deno.test("pace: the rate is what the last 2h added, not the week's average", ()
   assertEquals(p.out, now + 52 * H);
   // 52% over the 118h to the reset is 10.6%/day, and 24 is 2.3 times that
   assertEquals(p.ratio.toFixed(1), "2.3");
+  // over 6h it is 4% from hour 44, 16%/day, 1.5 times
+  assertEquals(pace(u, now, 6 * H).ratio.toFixed(1), "1.5");
+  assertEquals(/^usage 48% \(2\.3x 2h, 1\.5x 6h pace - out /.test(usageLine(u, now).text), true);
 });
 
 Deno.test("pace: with no history the 2h rate is the average", () => {
@@ -81,7 +84,7 @@ Deno.test("pace: nothing added in the last 2h is 0%/day and never runs out", () 
   u.history = [line(48, 40, u)];
   const p = pace(u, now);
   assertEquals([p.rate, p.end, p.out], [0, 48, null]);
-  assertEquals(/^usage 48% \(0\.0x pace\)$/.test(usageLine(u, now).text), true);
+  assertEquals(/^usage 48% \(0\.0x 2h, 0\.0x 6h pace\)$/.test(usageLine(u, now).text), true);
 });
 
 Deno.test("readHistory: one sample per line, five_hour dropped, junk skipped", async () => {
