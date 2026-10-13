@@ -1154,7 +1154,8 @@ async function cmdNew(...args) {
     const pane = String(r.pane ?? "").replace(`${host}/`, "");
     console.log(r.existing ? `${named(r.pid)} already running in ${host}:${rest}`
       : `started ${named(r.pid)} in ${host}:${rest}, ` +
-        (r.after ? `tmux window after ${r.after}` : focusIt ? `tmux pane ${pane}`
+        (r.into ? `new tmux window after ${r.into}, pane ${pane}`
+          : r.after ? `tmux window after ${r.after}` : focusIt ? `tmux pane ${pane}`
           : `detached tmux pane ${pane}`));
     return;
   }
@@ -1172,7 +1173,8 @@ async function cmdNew(...args) {
   if (r.warning) console.error(`new: ${r.warning}`);
   console.log(r.existing ? `${r.pid} already running in ${path.replace(HOME, "~")}`
     : `started ${r.pid} in ${path.replace(HOME, "~")}, ` +
-      (r.after ? `tmux window after ${r.after}` : focusIt ? "new kitty window"
+      (r.into ? `new tmux window after ${r.into}, pane ${r.pane}`
+        : r.after ? `tmux window after ${r.after}` : focusIt ? "new kitty window"
         : `detached tmux pane ${r.pane}`));
 }
 

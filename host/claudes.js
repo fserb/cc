@@ -23,6 +23,7 @@ export class Instance {
     this.cwd = "";            // the record's, where claude started; path follows the shell
     this.host = "";           // the machine it runs on, "" for this one
     this.peer = null;         // what a stand-in record on another host copies (relay.js)
+    this.nameDue = false;     // the record may be renamed by `claude -n` any moment (nameDue)
     this.statusSince = 0;     // epoch of the record's last status change, 0 without one
     this.lastWrite = 0;       // epoch claude last wrote to its session log
     this.since = 0;           // epoch this instance entered its current state
@@ -131,14 +132,34 @@ export function watchSessions(onChange) {
     try {
       for await (const e of watcher) {
         if (e.kind === "access") continue;
-        if (e.paths.some((p) => {
+        const paths = e.paths.filter((p) => {
           const m = /\/(\d+)\.json$/.exec(p);
           return m && Number(m[1]) < 90_000_000;
-        })) onChange();
+        });
+        if (!paths.length) continue;
+        // a claude's first write holds a derived name ("web-67") and `claude -n` rewrites
+        // it ~30ms later (2.1.296), so a read in between announced `new` under the wrong
+        // name. One that young and derived waits for the rewrite
+        if (paths.some(youngDerived)) setTimeout(onChange, 300);   // past nameDue
+        else onChange();
       }
     } catch { /* closed */ }
   })();
   return () => watcher.close();
+}
+
+function youngDerived(path) {
+  try {
+    return nameDue(JSON.parse(Deno.readTextFileSync(path)));
+  } catch {
+    return false;
+  }
+}
+
+// A record from a claude's first write, whose derived name a `claude -n` may replace in
+// the next ~30ms. StateClock does not take first sight of it from that
+function nameDue(rec) {
+  return rec.nameSource === "derived" && Date.now() - (rec.startedAt ?? 0) < 250;
 }
 
 // [state, epoch it started], or ["", 0] with no record. An empty session is free unless a
@@ -421,6 +442,10 @@ export class StateClock {
       // a screen we could not read is not a transition: an empty capture would otherwise
       // read as wait and ring every instance at once. || not ??, since 0 and "" mean absent
       i.state = i.state || (prev ? prev.state : "wait");
+      if (!prev && i.nameDue) {                    // seen on a later poll, under its name
+        i.since = i.statusSince || now;
+        continue;
+      }
       if (!prev) {                                  // first sight
         i.since = i.statusSince || i.lastWrite || now;
       } else if (prev.state === i.state) {
@@ -625,7 +650,7 @@ export async function discover() {
     if (!pane) {                                   // nothing to focus, but the record knows
       found.push(new Instance({pid, summary: title || cmd, path: rec.cwd ?? "",
         state, agents, asking: rec.status === "waiting" ? (rec.waitingFor ?? "") : "", waitsOn: holdFor,
-        name: rec.name ?? "", sock: rec.messagingSocketPath ?? "", statusSince: since,
+        name: rec.name ?? "", nameDue: nameDue(rec), sock: rec.messagingSocketPath ?? "", statusSince: since,
         sessionId: rec.sessionId ?? "", cwd: rec.cwd ?? "", peer: peerOf(rec)}));
       continue;
     }
@@ -647,6 +672,7 @@ export async function discover() {
       waitsOn: holdFor,
       agents,
       name: rec.name ?? "",
+      nameDue: nameDue(rec),
       sock: rec.messagingSocketPath ?? "",
       sessionId: rec.sessionId ?? "",
       cwd: rec.cwd ?? "",

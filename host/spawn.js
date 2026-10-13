@@ -97,6 +97,26 @@ async function detachedSession(dir, claude = "") {
   return r.code === 0 ? {pane: r.out.trim()} : {error: TMUX_ERR(r)};
 }
 
+// The last tmux window with a pane whose cwd is exactly `dir` (or its realpath), as
+// `session:index`, in a session with a client attached when `attached`; or "". Spawning
+// adds a window there instead of a session per claude (user, 2026-10-12: "we should reuse
+// a tmux of the same path")
+export async function windowIn(dir, attached = false) {
+  const dirs = [dir, Deno.realPathSync(dir)];
+  const out = await sh("tmux", "list-panes", "-a", "-F",
+    "#{session_name}\t#{window_index}\t#{session_attached}\t#{pane_current_path}");
+  return out.split("\n").map((l) => l.split("\t"))
+    .findLast(([s, , a, path]) => s && dirs.includes(path) && (!attached || a !== "0"))
+    ?.slice(0, 2).join(":") ?? "";
+}
+
+// A new window after `target` (`session:index`), in the background, named `name` if given.
+async function newWindowAt(target, dir, name = "") {
+  const r = await run("tmux", "new-window", "-a", "-d", "-t", target, "-c", dir,
+    ...(name ? ["-n", name] : []), "-P", "-F", "#{pane_id}");
+  return r.code === 0 ? {pane: r.out.trim()} : {error: TMUX_ERR(r)};
+}
+
 // The pid of the claude in `pane`, once it is running.
 export async function claudeIn(pane, wait = 10000) {
   for (const end = Date.now() + wait; Date.now() < end;) {
@@ -146,9 +166,11 @@ function shQuote(s) {
   return `'${s.replaceAll("'", "'\\''")}'`;
 }
 
-// Start a claude in `dir`: in a detached tmux session, unless `focus`, which puts it in a
-// new tmux window after pane `after` when given, else in a new kitty window, and focuses it.
-// `name` is its `claude -n`. {pid, pane}, or {error} with the pane when one was made,
+// Start a claude in `dir`: in a new window after the last tmux window already in `dir`,
+// else a detached tmux session, unless `focus`, which puts it in a new tmux window after
+// pane `after` when given, else after a window in `dir` of an attached session, else in a
+// new kitty window, and focuses it.
+// `name` is its `claude -n`. {pid, pane, into: the window it went after when reused}, or {error} with the pane when one was made,
 // since the screen still works off it. A claude by that name already in dir is the one
 // asked for: nothing starts, and {pid, pane, existing: true} names it.
 export async function spawn({dir, after = "", mkdir = false, name = "", focus = false}) {
@@ -168,7 +190,10 @@ export async function spawn({dir, after = "", mkdir = false, name = "", focus = 
       [dir, real].includes(i.cwd || i.path));
     if (same) return {pid: same.pid, pane: same.pane, existing: true};
   }
-  const made = !focus ? await detachedSession(dir, name)
+  // focus needs a client on the session to show it, so only an attached one is reused
+  const at = after ? "" : await windowIn(dir, focus);
+  const made = at ? await newWindowAt(at, dir, name)
+    : !focus ? await detachedSession(dir, name)
     : after ? await newWindowAfter(after, dir) : await newKittyWindow(dir, undefined, name);
   if (made.error) return made;
   // a shell, not a claude: no dialog to guard against
@@ -183,7 +208,8 @@ export async function spawn({dir, after = "", mkdir = false, name = "", focus = 
     warnings.push(inst ? await jump(inst) : `${pid} not found to focus`);
   }
   const warning = warnings.filter(Boolean).join("; ");
-  return warning ? {pid, pane: made.pane, warning} : {pid, pane: made.pane};
+  const r = at ? {pid, pane: made.pane, into: at} : {pid, pane: made.pane};
+  return warning ? {...r, warning} : r;
 }
 
 function alive(pid) {
