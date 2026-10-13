@@ -340,7 +340,7 @@ async function loadDocs(dir) {
   const files = [...new Set([...list.matchAll(/href="(?:\.\/)?([\w.-]+\.md)"/g)].map((m) => m[1]))];
   return Promise.all(files.map(async (f) => {
     const t = await fetch(`files/${dir}/${f}`, {cache: "no-cache"}).then((r) => r.text()).catch(() => "");
-    return {file: f, text: t, title: t.match(/^# (.+)$/m)?.[1] ?? f, status: t.match(/^Status: ([^.(]+)/m)?.[1]?.trim() ?? ""};
+    return {file: f, text: t, title: t.match(/^# (.+)$/m)?.[1] ?? f, status: t.match(/^(?:- )?Status: ([^.(]+)/m)?.[1]?.trim() ?? ""};
   }));
 }
 // the files tab: the path open in it, as caddy gives it (a dir ends in /), read again each time it's opened
