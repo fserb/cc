@@ -476,8 +476,8 @@ function items() {
   it.push({id: "blog", d: fresh ? "green" : "", unread: fresh, title: "blog", sub: top?.title ?? "", t: top?.time ? `${fresh ? `${fresh} new · ` : ""}${ago(new Date(top.time.replace(" ", "T")) / 1000)}` : ""});
   const due = dueTodos();
   it.push({id: "plan", d: due.length ? "blue" : "", hot: due.length, title: "plan", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : "", t: ""});
-  const ps = projects(), run = ps.filter((x) => x.running).length;
-  it.push({id: "projects", d: run ? "green" : "", title: "projects", sub: ps.filter((x) => x.running).map((x) => `${x.file.replace(/\.md$/, "")} running`).join(" · "), t: ""});
+  const todo = projects().filter((x) => x.state === "todo").length;
+  it.push({id: "projects", d: "", title: "projects", sub: todo ? `${todo} todo` : "", t: ""});
   const pk = S.packages, desk = pk?.desk.count ?? 0, onWay = pk?.packages.filter((x) => x.number && !x.unknown && !x.delivered).length ?? 0;
   // shown only while something is active: a package event in the last 24 h or a package at the desk (user, 2026-10-12)
   const pkActive = desk || pk?.packages.some((x) => Date.now() - Date.parse(x.last) < 86400e3);
@@ -791,20 +791,15 @@ function todoView() {
     <h2 class="h">ideas</h2><ul class="rows">${S.ideas.map((x) => `<li class="go" data-go="idea/${esc(x.file)}"><span>${esc(x.title)}</span></li>`).join("")}</ul></article>`;
 }
 function projectsView() {
-  const row = (x) => `<li class="go" data-go="project/${esc(x.file)}"><span>${esc(x.title)}</span>${x.running ? "<small>running</small>" : ""}</li>`;
+  const row = (x) => `<li class="go" data-go="project/${esc(x.file)}"><span>${esc(x.title)}</span></li>`;
   const ps = projects(), open = ps.filter((x) => x.state !== "done"), done = ps.filter((x) => x.state === "done");
   return `<article><h1>projects</h1><ul class="rows">${open.map(row).join("") || "<li><span class=meta>none</span></li>"}</ul>${done.length ? `<details><summary class="h">done (${done.length})</summary><ul class="rows">${done.map(row).join("")}</ul></details>` : ""}</article>`;
 }
 const docParent = (c) => c.startsWith("project/") ? "projects" : "plan";
 function projects() {
-  // state: running (a live <stem>-co, or <last part>-co: arcade-switch -> switch-co), else the Status: line's first word
-  const live = new Set(S.rows.map((r) => r.name)), order = ["running", "todo"];
-  const rank = (x) => (order.indexOf(x.state) + 3) % 3 + (x.state === "done") * 3;  // running, todo, other words, done
-  return S.projects.map((x) => {
-    const stem = x.file.replace(/\.md$/, "");
-    const running = live.has(`${stem}-co`) || live.has(`${stem.split("-").pop()}-co`);
-    return {...x, running, state: running ? "running" : x.status.split(/\s/)[0].toLowerCase()};
-  }).sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title));
+  // two states (user, 2026-10-12): the Status: line starting with "done" is done, anything else is todo
+  return S.projects.map((x) => ({...x, state: /^done\b/i.test(x.status) ? "done" : "todo"}))
+    .sort((a, b) => a.title.localeCompare(b.title));
 }
 function docView(kind, file) {
   const all = kind === "idea" ? S.ideas : S.projects, x = all.find((y) => y.file === file), up = docParent(`${kind}/`);
