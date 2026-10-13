@@ -23,7 +23,7 @@ import {attachSession, select, sendKeys, show, tmuxBackground, typeInto} from ".
 import {unqueue} from "./queue.js";
 import {close, expandDir, paneIn, spawn} from "./spawn.js";
 import {sendPeer} from "./peer.js";
-import {byDay, pace, readUsage} from "./usage.js";
+import {byDay, LONGER, pace, readUsage} from "./usage.js";
 import {localRows} from "./burn.js";
 import {base, burnReport, call, HOSTS, mergedUsage, SELF} from "./remote.js";
 import {STATES} from "./subs.js";
@@ -283,7 +283,7 @@ export class Server {
     if (url.searchParams.get("local")) return readUsage();
     return await this.cached("usage", async () => {
       const u = await mergedUsage();
-      return u && {...u, pace: pace(u), days: byDay(u)};
+      return u && {...u, pace: pace(u), pace6: pace(u, Date.now(), LONGER), days: byDay(u)};
     });
   }
 

@@ -17,7 +17,7 @@ export const HISTORY = `${HOME}/.claude/ccx-usage.log`;
 const WEEK = 7 * 24 * 3600_000;
 const SETTLE = 3600_000;    // under an hour into a week the average rate is noise
 const RECENT = 2 * 3600_000; // the rate is what the last 2h added
-const LONGER = 6 * 3600_000; // usageLine's second rate, over 6h
+export const LONGER = 6 * 3600_000; // the second rate, over 6h (usageLine, api/usage pace6)
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 // {used, resetsAt, at, history} with every time in ms, `at` being when the file was
