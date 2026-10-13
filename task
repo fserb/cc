@@ -33,6 +33,8 @@ install() {
   _ask_hook
   if [[ $(uname) == Darwin ]]; then
     mkdir -p "$(dirname "$HOST_PLIST")"
+    local old=""
+    [[ -f "$HOST_PLIST" ]] && old=$(cat "$HOST_PLIST")
     cat > "$HOST_PLIST" <<PLISTEOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -63,9 +65,17 @@ install() {
 </dict>
 </plist>
 PLISTEOF
-    launchctl bootout "gui/$(id -u)/$HOST_LABEL" 2>/dev/null || true
-    launchctl bootstrap "gui/$(id -u)" "$HOST_PLIST"
-    echo "$HOST_LABEL loaded from $HOST_PLIST"
+    # bootout returns before the service is gone, and a bootstrap then fails with
+    # "Bootstrap failed: 5: Input/output error" (2026-10-13), so wait it out; an
+    # unchanged plist only needs a kickstart
+    if [[ "$old" == "$(cat "$HOST_PLIST")" ]] && launchctl print "gui/$(id -u)/$HOST_LABEL" >/dev/null 2>&1; then
+      launchctl kickstart -k "gui/$(id -u)/$HOST_LABEL"
+    else
+      _bootout "$HOST_LABEL"
+      launchctl bootstrap "gui/$(id -u)" "$HOST_PLIST"
+    fi
+    _answers
+    echo "$HOST_LABEL running from $HOST_PLIST"
   else
     mkdir -p "$(dirname "$HOST_UNIT")"
     cat > "$HOST_UNIT" <<UNITEOF
@@ -85,6 +95,7 @@ UNITEOF
     systemctl --user daemon-reload
     systemctl --user enable --now cchost.service
     systemctl --user restart cchost.service
+    _answers
     echo "cchost.service running from $HOST_UNIT"
   fi
 }
@@ -92,7 +103,7 @@ UNITEOF
 uninstall() {
   _drop_old
   if [[ $(uname) == Darwin ]]; then
-    launchctl bootout "gui/$(id -u)/$HOST_LABEL" 2>/dev/null || true
+    _bootout "$HOST_LABEL"
     rm -f "$HOST_PLIST"
   else
     systemctl --user disable --now cchost.service 2>/dev/null || true
@@ -118,13 +129,36 @@ _ask_hook() {
 
 _drop_old() {
   if [[ $(uname) == Darwin ]]; then
-    launchctl bootout "gui/$(id -u)/$OLD_LABEL" 2>/dev/null || true
+    _bootout "$OLD_LABEL"
     rm -f "$HOME/Library/LaunchAgents/$OLD_LABEL.plist"
   elif [[ -f "$OLD_UNIT" ]]; then
     systemctl --user disable --now ccx-host.service 2>/dev/null || true
     rm -f "$OLD_UNIT"
     systemctl --user daemon-reload
   fi
+}
+
+# bootout, then wait until launchd no longer knows the label (10s at most)
+_bootout() {
+  local svc="gui/$(id -u)/$1"
+  launchctl print "$svc" >/dev/null 2>&1 || return 0
+  launchctl bootout "$svc" 2>/dev/null || true
+  for _ in $(seq 50); do
+    launchctl print "$svc" >/dev/null 2>&1 || return 0
+    sleep 0.2
+  done
+  echo "$1 still loaded 10s after bootout" >&2
+  return 1
+}
+
+# fail unless cchost answers on 7681 within 30s: a kickstart took 6-10s on marx
+_answers() {
+  for _ in $(seq 150); do
+    curl -sf -o /dev/null --max-time 2 http://127.0.0.1:7681/api/list && return 0
+    sleep 0.2
+  done
+  echo "cchost does not answer on 127.0.0.1:7681 30s after the restart" >&2
+  return 1
 }
 
 function help {
