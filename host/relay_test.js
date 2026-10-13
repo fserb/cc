@@ -110,7 +110,7 @@ Deno.test("tailnetOrLocal: loopback and the tailnet ranges only", () => {
 
 Deno.test("ownHost: our names and addresses on our port, nobody else's name", () => {
   for (const h of ["localhost:7681", "127.0.0.1:7681", "marx:7681", "100.1.2.3:7681",
-    "marx.giraffe-yo.ts.net:7681", "[::1]:7681"]) eq(ownHost(h, 7681, "marx"), true, h);
+    "marx.gum.ts.net:7681", "[::1]:7681"]) eq(ownHost(h, 7681, "marx"), true, h);
   for (const h of ["evil.com:7681", "marx:80", "localhost", "marx.evil.com:7681",
-    "nadya:7681", "xmarx.giraffe-yo.ts.net:7681"]) eq(ownHost(h, 7681, "marx"), false, h);
+    "nadya:7681", "xmarx.gum.ts.net:7681"]) eq(ownHost(h, 7681, "marx"), false, h);
 });

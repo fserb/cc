@@ -183,9 +183,9 @@ Deno.test("access: X-Forwarded-For from loopback, a tailnet name with no port", 
   eq(clientAddr("::1", "1.1.1.1, 100.64.0.1"), "100.64.0.1", "the last entry");
   eq(clientAddr("127.0.0.1", null), "127.0.0.1", "no header");
   eq(tailnetOrLocal(clientAddr("127.0.0.1", "8.8.8.8")), false, "outside, through caddy");
-  eq(ownHost("nadya.giraffe-yo.ts.net", 7681, "nadya"), true, "tailnet name, no port");
-  eq(ownHost("nadya.giraffe-yo.ts.net:7681", 7681, "nadya"), true, "tailnet name, our port");
-  eq(ownHost("nadya.giraffe-yo.ts.net:8080", 7681, "nadya"), false, "another port");
+  eq(ownHost("nadya.gum.ts.net", 7681, "nadya"), true, "tailnet name, no port");
+  eq(ownHost("nadya.gum.ts.net:7681", 7681, "nadya"), true, "tailnet name, our port");
+  eq(ownHost("nadya.gum.ts.net:8080", 7681, "nadya"), false, "another port");
   eq(ownHost("evil.example", 7681, "nadya"), false, "another name, no port");
   eq(ownHost("127.0.0.1", 7681, "nadya"), false, "an address, no port");
   const s = server([]);

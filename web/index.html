@@ -1255,14 +1255,14 @@ document.addEventListener("submit", async (e) => {
     draw(); drawView(true);
   } catch (err) { box.insertAdjacentHTML("afterend", `<p class="err">${esc(err.message)}</p>`); [...box.querySelectorAll("button, input")].forEach((x) => x.disabled = false); }
 });
-// a plain click on a link into ~/nadya (https://nadya.giraffe-yo.ts.net/nadya/..., http://nadya/nadya/..., /nadya/...) opens it
+// a plain click on a link into ~/nadya (https://nadya.gum.ts.net/nadya/..., http://nadya/nadya/..., /nadya/...) opens it
 // in the files tab; ctrl/cmd/shift/middle-click still open a tab, and data-out links (the files tab's "open ↗") always do
 window.filesLink = filesLink;  // for the blog iframe's onload
 function filesLink(e) {
   const a = e.target.closest?.("a[href]");
   if (!a || a.dataset.out != null || e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return false;
   const u = new URL(a.href, location.href);
-  if (![location.host, "nadya", "nadya.giraffe-yo.ts.net"].includes(u.host) || !/^\/nadya(\/|$)/.test(u.pathname)) return false;
+  if (![location.host, "nadya", "nadya.gum.ts.net"].includes(u.host) || !/^\/nadya(\/|$)/.test(u.pathname)) return false;
   e.preventDefault();
   const path = decodeURIComponent(u.pathname.replace(/^\/nadya\/?/, ""));
   cur = path ? `files/${path}` : "files"; push(true); open();

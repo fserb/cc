@@ -2,7 +2,7 @@
 
 An HTTP API, served by cchost, that lists every running Claude Code instance, shows each one's
 conversation, lets you type into it, answer its dialogs, interrupt it, and start new
-ones. Its client is cc (`web/`), which calls `https://nadya.giraffe-yo.ts.net/ccapi/api/...`:
+ones. Its client is cc (`web/`), which calls `https://nadya.gum.ts.net/ccapi/api/...`:
 nadya's caddy forwards `/ccapi/*` to nadya's cchost, which answers for every host.
 
 **There is no page any more** (user, 2026-10-12: "I'm not using it at all since cc is much
@@ -47,7 +47,7 @@ poll. `doctor` asks the port over HTTP, since the server is cchost's process.
 ## Reaching it through caddy
 
 The server binds **127.0.0.1 only**, default port 7681. Caddy already terminates TLS for
-`marx.giraffe-yo.ts.net:443` and proxies `/boxerz` the same way, so one more block:
+`marx.gum.ts.net:443` and proxies `/boxerz` the same way, so one more block:
 
     redir /ccx /ccx/
     handle_path /ccx* {
