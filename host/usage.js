@@ -16,7 +16,7 @@ export const USAGE = `${HOME}/.claude/ccx-usage.json`;
 export const HISTORY = `${HOME}/.claude/ccx-usage.log`;
 const WEEK = 7 * 24 * 3600_000;
 const SETTLE = 3600_000;    // under an hour into a week the average rate is noise
-const RECENT = 6 * 3600_000; // the rate is what the last 6h added
+const RECENT = 2 * 3600_000; // the rate is what the last 2h added
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 // {used, resetsAt, at, history} with every time in ms, `at` being when the file was
@@ -101,15 +101,15 @@ export function byDay(u, now = Date.now()) {
 }
 
 // Where the week stands at `now`: `even` is where an even spread over the 7 days would be,
-// `rate` what the last 6h added, in % per day, `ratio` that over what is left per day to
+// `rate` what the last 2h added, in % per day, `ratio` that over what is left per day to
 // the reset, `end` where that rate lands at the reset, and `out` the time it reaches 100% if that is before the reset. The week is taken to
 // start at 0, 7 days before `resets_at`. Past the reset the numbers belong to a week that
 // is over, so null.
 //
 // `u` itself is taken at `now`, not at when the file was written: no instance writing
 // means no instance calling, so the usage has not moved since. Use from claude.ai or another machine counts against the same limit and
-// is not seen until something here makes a call. With no history, or under 6h of it, the
-// 6h falls between the week's start and the first sample, so the rate is the average.
+// is not seen until something here makes a call. With no history, or under 2h of it, the
+// 2h falls between the week's start and the first sample, so the rate is the average.
 export function pace(u, now = Date.now()) {
   if (!u || now >= u.resetsAt) return null;
   const start = u.resetsAt - WEEK, elapsed = Math.max(0, now - start);

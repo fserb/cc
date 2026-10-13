@@ -1494,7 +1494,7 @@ const HELP = [
   "",
   ["  ps", "the listing as a TUI, and enter to jump to an instance"],
   ["  list", "the same listing, one line each, no UI"],
-  ["  usage", "the seven-day limit, the last 6h against what is left, the week by day"],
+  ["  usage", "the seven-day limit, the last 2h against what is left, the week by day"],
   ["  burn [hours] [--top N]", "who used it: last week, this week and its days by project; or the"],
   ["", "last N hours by project and session. --json for the data"],
   ["  doctor", "what resolves, and the kitty match it would use"],

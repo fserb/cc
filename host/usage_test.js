@@ -52,10 +52,10 @@ Deno.test("readUsage: no file, bad JSON or no seven_day is no data", async () =>
 const line = (used, hours, u) => ({at: u.resetsAt - WEEK + hours * H, used,
   resetsAt: u.resetsAt});
 
-Deno.test("pace: the rate is what the last 6h added, not the week's average", () => {
-  // 30% by hour 36, then 6% over the last 6h: 24%/day, 52% left lasts 52h
+Deno.test("pace: the rate is what the last 2h added, not the week's average", () => {
+  // 44% by hour 44, 46% at 48, then 2% over the last 2h: 24%/day, 52% left lasts 52h
   const u = {...at(48, 50), history: []};
-  u.history = [line(16, 10, u), line(42, 44, u), line(45, 47, u)];
+  u.history = [line(16, 10, u), line(44, 44, u), line(46, 48, u)];
   const p = pace(u, now);
   assertEquals(Math.round(p.rate * 10) / 10, 24);
   assertEquals(p.out, now + 52 * H);
@@ -63,20 +63,20 @@ Deno.test("pace: the rate is what the last 6h added, not the week's average", ()
   assertEquals(p.ratio.toFixed(1), "2.3");
 });
 
-Deno.test("pace: with no history the 6h rate is the average", () => {
+Deno.test("pace: with no history the 2h rate is the average", () => {
   const p = pace(at(50, 42), now);
   assertEquals(Math.round(p.rate * 1e6), Math.round(50 * 24 / 42 * 1e6));
 });
 
 Deno.test("pace: an older number written late, or last week's, does not pull it down", () => {
   const u = {...at(48, 50), history: []};
-  u.history = [line(42, 44, u), line(47, 46, u), line(20, 47, u),
+  u.history = [line(42, 44, u), line(46, 47.5, u), line(20, 48, u),
     {at: now - H, used: 99, resetsAt: u.resetsAt - WEEK}];
   assertEquals(pace(u, now).used, 48);
   assertEquals(Math.round(pace(u, now).rate * 1e6) / 1e6, 6 * 4);
 });
 
-Deno.test("pace: nothing added in the last 6h is 0%/day and never runs out", () => {
+Deno.test("pace: nothing added in the last 2h is 0%/day and never runs out", () => {
   const u = {...at(48, 60), history: []};
   u.history = [line(48, 40, u)];
   const p = pace(u, now);

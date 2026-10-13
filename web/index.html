@@ -1205,7 +1205,7 @@ function open() {
 // ---------- start
 listen();
 loadUsage(); loadBlog(); loadTodo(); loadPackages();
-setInterval(loadUsage, 5 * 60e3); setInterval(loadBlog, 60e3); setInterval(loadTodo, 30e3); setInterval(loadPackages, 5 * 60e3);
+setInterval(loadUsage, 60e3); setInterval(loadBlog, 60e3); setInterval(loadTodo, 30e3); setInterval(loadPackages, 5 * 60e3);
 // back on the tab or window (or the phone woke up): read everything again at once and reopen the streams.
 // focus, visibilitychange and pageshow often come together: one refresh per 2s
 let refreshed = Date.now();  // the load just read everything
