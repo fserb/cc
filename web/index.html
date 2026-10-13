@@ -762,7 +762,7 @@ function nadyaView() {
 let freeText = null;
 function dialogBox(r) {
   const dg = r.state === "wait" && stream?.pid === r.pid ? S.screens[r.pid]?.dialog : null;
-  if (!dg?.options?.length) return r.state === "wait" && r.asking ? `<div class="need red"><b>Waiting: ${esc(r.asking)}</b><p>Reading the dialog from the pane…</p></div>` : "";
+  if (!dg?.options?.length) return r.state === "wait" && r.asking ? `<div class="need"><b>Waiting: ${esc(r.asking)}</b><p>Reading the dialog from the pane…</p></div>` : "";
   const labels = dg.options.map((o) => o.label);
   // a multi-select: its checked options are filled with a ✓, not the first one
   const multi = dg.options.some((o) => o.checked !== null);
@@ -775,7 +775,7 @@ function dialogBox(r) {
   // the highlighted option's preview, as the pane draws it (cut short on a narrow pane)
   const pv = dg.options.find((o) => o.preview);
   const preview = pv ? `<p class="pvh">preview of ${esc(pv.label)}:</p><pre class="pv">${esc(pv.preview)}</pre>` : "";
-  return `<div class="need red">${tabs}<b>${esc(dg.title ?? dg.question ?? "Dialog")}</b>${dg.body ? `<div class="body">${md(dg.body)}</div>` : ""}<div class="opts${multi ? " multi" : ""}" data-pick="${esc(r.pid)}" data-labels="${esc(JSON.stringify(labels))}">${dg.options.map(opt).join("")}</div>${preview}</div>`;
+  return `<div class="need">${tabs}<b>${esc(dg.title ?? dg.question ?? "Dialog")}</b>${dg.body ? `<div class="body">${md(dg.body)}</div>` : ""}<div class="opts${multi ? " multi" : ""}" data-pick="${esc(r.pid)}" data-labels="${esc(JSON.stringify(labels))}">${dg.options.map(opt).join("")}</div>${preview}</div>`;
 }
 function sessionView(r) {
   return `<article><h1>${esc(r.name)}</h1>${metaLine(r)}${chat(r)}${dialogBox(r)}</article>`;
