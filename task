@@ -6,8 +6,12 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # deno test needs --ext js: `ccx` and `cchost` have no extension, so anything that
 # reads them types them as TypeScript.
+# The tests' temp dirs and files go in one dir per run, removed after: they never removed
+# their own, and 2,874 ccx-chat-* dirs filled nadya's /tmp quota (2026-10-12).
 test() {
-  deno test -A --ext js "$ROOT"/ccx/*_test.js "$ROOT"/host/*_test.js "$@"
+  TEST_TMP=$(mktemp -d "${TMPDIR:-/tmp}/ccx-test.XXXXXX")
+  trap 'command rm -rf "$TEST_TMP"' EXIT
+  TMPDIR=$TEST_TMP deno test -A --ext js "$ROOT"/ccx/*_test.js "$ROOT"/host/*_test.js "$@"
 }
 
 check() {
