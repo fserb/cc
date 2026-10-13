@@ -18,7 +18,7 @@
 
 import {byCodePoint, HOME} from "./sh.js";
 import {imageAt, logPath, readFrom, readPage} from "./transcript.js";
-import {parseDialog, pick, screen} from "./dialog.js";
+import {parseDialog, pendingAsk, pick, screen, withAsk} from "./dialog.js";
 import {attachSession, select, sendKeys, show, tmuxBackground, typeInto} from "./jump.js";
 import {unqueue} from "./queue.js";
 import {close, expandDir, paneIn, spawn} from "./spawn.js";
@@ -434,7 +434,9 @@ export class Server {
       c.send("screen", {text});
     }
     // parsed every tick, not on a new screen: the dialog draws before the record says wait
-    const dialog = inst.state === "wait" ? parseDialog(text) : null;
+    // the question tool's text comes from askhook.sh's file, the pane says which question and how to answer
+    const parsed = inst.state === "wait" ? parseDialog(text) : null;
+    const dialog = parsed && withAsk(parsed, pendingAsk(inst.sessionId, path));
     const d = JSON.stringify(dialog);
     if (d !== c.dialog) {
       c.dialog = d;
@@ -820,7 +822,8 @@ export class Server {
       if (!inst.pane) return json({error: `pid ${pid} is not inside tmux`}, 409);
       const text = await screen(inst.pane);
       return text === null ? json({error: "tmux: capture failed"}, 502)
-        : json({text, dialog: inst.state === "wait" ? parseDialog(text) : null});
+        : json({text, dialog: inst.state === "wait" ? withAsk(parseDialog(text),
+          pendingAsk(inst.sessionId, inst.sessionId && logPath(inst.cwd, inst.sessionId))) : null});
     }
     if (!post) return json({error: "not found"}, 404);
     const body = await req.json().catch(() => ({}));

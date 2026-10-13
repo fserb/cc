@@ -2,7 +2,7 @@
 // dialogs on 2.1.289, one session in a scratch directory; question-wide.txt is a capture
 // from another project with its words replaced and its layout kept.
 
-import {dialogRefusal, parseDialog, pickKeys} from "./dialog.js";
+import {dialogRefusal, parseDialog, pendingAsk, pickKeys, withAsk} from "./dialog.js";
 import {IMAGE, imageParts, typeInto} from "./jump.js";
 import {run} from "./sh.js";
 
@@ -188,4 +188,49 @@ Deno.test("parseDialog: a question taller than the screen is cut, all of what sh
   const d = parseDialog(fixture("question-cut"));
   eq([d.cut, d.title, d.options.map((o) => o.label)], [true, "", ["apply all", "apply none", "Type something.", "Chat about this"]], "cut, no title");
   eq([d.body.split("\n")[0].slice(0, 10), d.body.split("\n").at(-1)], ["LOR emi Ps", "rsita metconse: ctetu rad."], "every line on screen");
+});
+
+// the question-tabs fixtures were asked with these two questions
+const TWO = [
+  {header: "Design", question: "Which layout should I build?", multiSelect: false,
+    options: [{label: "Grid", description: "tiles in rows"}, {label: "List", description: "one per row"}, {label: "Map", description: ""}]},
+  {header: "Storage", question: "Where do picks go?", multiSelect: false,
+    options: [{label: "JSON file", description: "", preview: "const path = ..."}, {label: "SQLite", description: ""}]},
+];
+
+Deno.test("withAsk: the question as written, the one the pane shows", () => {
+  const one = withAsk(parseDialog(fixture("question-tabs")), TWO);
+  eq([one.ask.header, one.ask.question, one.ask.i, one.ask.of, one.ask.options[0].description], ["Design", "Which layout should I build?", 0, 2, "tiles in rows"], "first");
+  const two = withAsk(parseDialog(fixture("question-tabs-2")), TWO);
+  eq([two.ask.header, two.ask.i, two.ask.options[0].preview], ["Storage", 1, "const path = ..."], "second, by its labels");
+  eq(withAsk(parseDialog(fixture("question-tabs-review")), TWO).ask, undefined, "the review page is the pane's");
+  eq(withAsk(parseDialog(fixture("bash")), TWO).ask, undefined, "a permission is the pane's");
+  // the same labels on both: the title says which, then the first tab not answered
+  const same = TWO.map((q) => ({...q, options: [{label: "JSON file"}, {label: "SQLite"}]}));
+  eq(withAsk(parseDialog(fixture("question-tabs-2")), same).ask.i, 1, "same labels, by the title");
+  const blank = {...parseDialog(fixture("question-tabs-2")), title: "", body: ""};
+  eq(withAsk(blank, same).ask.i, 1, "same labels and no title: the first tab not answered");
+  // cut: no title, its first line on screen is in the question
+  const cut = parseDialog(fixture("question-cut"));
+  const qs = [{question: "other", options: [{label: "apply all"}, {label: "apply none"}]},
+    {question: `start\n${cut.body}`, options: [{label: "apply all"}, {label: "apply none"}]}];
+  eq(withAsk(cut, qs).ask.i, 1, "cut, by the first line it shows");
+});
+
+Deno.test("pendingAsk: askhook.sh's file until the log holds its tool_use_id", async () => {
+  const dir = Deno.makeTempDirSync(), log = `${dir}/log.jsonl`, ask = `${dir}/.claude/ccx-ask`;
+  eq(pendingAsk("0a1b-2c", log, ask), null, "no file");
+  const p = new Deno.Command("sh", {args: [new URL("askhook.sh", import.meta.url).pathname], env: {HOME: dir},
+    stdin: "piped", stdout: "piped"}).spawn();
+  const w = p.stdin.getWriter();
+  await w.write(new TextEncoder().encode(JSON.stringify({session_id: "0a1b-2c", hook_event_name: "PreToolUse",
+    tool_name: "AskUserQuestion", tool_use_id: "toolu_x", tool_input: {questions: TWO}})));
+  await w.close();
+  const out = await p.output();
+  eq([out.code, out.stdout.length], [0, 0], "the hook prints nothing and exits 0");
+  Deno.writeTextFileSync(log, `{"type":"user"}\n`);
+  eq(pendingAsk("0a1b-2c", log, ask)?.length, 2, "pending");
+  Deno.writeTextFileSync(log, JSON.stringify({type: "user", message: {content: [{type: "tool_result", tool_use_id: "toolu_x", content: "answered"}]}}) + "\n", {append: true});
+  eq(pendingAsk("0a1b-2c", log, ask), null, "answered");
+  Deno.removeSync(dir, {recursive: true});
 });

@@ -771,17 +771,20 @@ function dialogBox(r) {
   const ft = freeText?.pid === r.pid && JSON.stringify(freeText.labels) === JSON.stringify(labels) ? freeText : null;
   const opt = (o, k) => ft?.i === k
     ? `<form class="free" data-i="${k}"><input name="a" value="${esc(ft.value)}" placeholder="Type something." autocomplete="off" enterkeyhint="send"><button>send</button></form>`
-    : `<button data-i="${k}"${o.free ? " data-free" : ""}${o.checked !== null ? ` aria-pressed="${o.checked}"` : ""}>${o.checked ? "✓ " : ""}${esc(o.free ? "Type something…" : o.label)}${o.detail ? `<small>${esc(o.detail)}</small>` : ""}</button>`;
-  // several questions: their tabs, ☒ once answered (which one is current the pane doesn't say); a pick moves to the next
-  const tabs = dg.tabs ? `<p class="tabs">${dg.tabs.map((t) => `${t.done ? "☒" : t.label === "Submit" ? "✔" : "☐"} ${esc(t.label)}`).join(" · ")}</p>` : "";
-  // the highlighted option's preview, as the pane draws it (cut short on a narrow pane)
-  const pv = dg.options.find((o) => o.preview);
-  const preview = pv ? `<p class="pvh">preview of ${esc(pv.label)}:</p><pre class="pv">${esc(pv.preview)}</pre>` : "";
+    : `<button data-i="${k}"${o.free ? " data-free" : ""}${o.checked !== null ? ` aria-pressed="${o.checked}"` : ""}>${o.checked ? "✓ " : ""}${esc(o.free ? "Type something…" : ask?.options[k]?.label ?? o.label)}${(ask?.options[k]?.description ?? o.detail) ? `<small>${esc(ask?.options[k]?.description ?? o.detail)}</small>` : ""}</button>`;
+  // the question tool: cchost sends its text as written (ask, from askhook.sh), the pane says only which one is up
+  const ask = dg.ask;
+  // several questions: their tabs, ☒ once answered; the current one is known only from ask; a pick moves to the next
+  const tabs = dg.tabs ? `<p class="tabs">${dg.tabs.map((t, k) => { const s = `${t.done ? "☒" : t.label === "Submit" ? "✔" : "☐"} ${esc(t.label)}`; return ask?.i === k ? `<b>${s}</b>` : s; }).join(" · ")}</p>` : "";
+  // the highlighted option's preview: as written, else as the pane draws it (cut short on a narrow pane)
+  const pvk = dg.options.findIndex((o) => o.preview), pv = dg.options[pvk];
+  const preview = pv ? `<p class="pvh">preview of ${esc(ask?.options[pvk]?.label ?? pv.label)}:</p><pre class="pv">${esc(ask?.options[pvk]?.preview ?? pv.preview)}</pre>` : "";
   // the question tool read off the pane: normal text, the terminal's wraps joined back (a line goes on the one above
   // unless it starts a list item or follows a blank one), and a note when its start is above the top of the screen
   const unwrap = (t) => t.includes("```") ? t : t.replace(/(?<=\S)\n(?!\n|\s*(?:[-*]|\d+\.)\s)/g, " ");
   const paneQ = dg.options.some((o) => o.label === "Chat about this") || dg.tabs;
-  const head = paneQ ? `${dg.cut ? `<p class="qh">its start is above the top of the session's screen</p>` : ""}<div class="q">${md(unwrap([dg.title, dg.body].filter(Boolean).join("\n\n")))}</div>`
+  const head = ask ? `${!dg.tabs && ask.header ? `<p class="qh">${esc(ask.header)}</p>` : ""}<div class="q">${md(ask.question)}</div>`
+    : paneQ ? `${dg.cut ? `<p class="qh">its start is above the top of the session's screen</p>` : ""}<div class="q">${md(unwrap([dg.title, dg.body].filter(Boolean).join("\n\n")))}</div>`
     : `<b>${esc(dg.title ?? dg.question ?? "Dialog")}</b>${dg.body ? `<div class="body">${md(dg.body)}</div>` : ""}`;
   return `<div class="need">${tabs}${head}<div class="opts${multi ? " multi" : ""}" data-pick="${esc(r.pid)}" data-labels="${esc(JSON.stringify(labels))}">${dg.options.map(opt).join("")}</div>${preview}</div>`;
 }

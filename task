@@ -30,6 +30,7 @@ HOST_PATH="$(dirname "$(command -v deno)"):/opt/homebrew/bin:/usr/local/bin:/usr
 
 install() {
   _drop_old
+  _ask_hook
   if [[ $(uname) == Darwin ]]; then
     mkdir -p "$(dirname "$HOST_PLIST")"
     cat > "$HOST_PLIST" <<PLISTEOF
@@ -102,6 +103,19 @@ uninstall() {
 }
 
 # the daemon was `ccx host` under net.fserb.ccx-host / ccx-host.service until 2026-10-12
+# askhook.sh as a PreToolUse hook on AskUserQuestion in ~/.claude/settings.json, once: it
+# keeps a question's whole text for cchost while the dialog is up (host/askhook.sh)
+_ask_hook() {
+  ROOT="$ROOT" deno eval '
+    const p = `${Deno.env.get("HOME")}/.claude/settings.json`;
+    const s = JSON.parse(Deno.readTextFileSync(p));
+    const pre = ((s.hooks ??= {}).PreToolUse ??= []);
+    if (pre.some((h) => h.matcher === "AskUserQuestion")) Deno.exit(0);
+    pre.push({matcher: "AskUserQuestion", hooks: [{type: "command", command: `${Deno.env.get("ROOT")}/host/askhook.sh`}]});
+    Deno.writeTextFileSync(p, JSON.stringify(s, null, 2) + "\n");
+    console.log(`added the AskUserQuestion hook to ${p}`);'
+}
+
 _drop_old() {
   if [[ $(uname) == Darwin ]]; then
     launchctl bootout "gui/$(id -u)/$OLD_LABEL" 2>/dev/null || true

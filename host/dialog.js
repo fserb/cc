@@ -37,7 +37,7 @@
 // - **a dialog taller than the screen loses its top**, the `─` rule and the question's first
 //   lines with it; the pane keeps no scrollback of it. What shows is the body, with no title,
 //   and the dialog says `cut`. The question tool's input is in the transcript only once it
-//   is answered (2.1.296), so nothing on disk has the rest while the dialog is up
+//   is answered (2.1.296); while the dialog is up only askhook.sh's file has all of it
 // - **options with a preview draw it to their right**, a ┌─┐ box at a fixed column whose
 //   rows end the option lines, with `Notes: press n to add notes` under it at that column;
 //   that dialog has no free-text option and a bare `Chat about this` under a rule. The box
@@ -45,8 +45,9 @@
 //   `preview`. **There a digit only moves the cursor**, and Enter picks (the dialog says
 //   `digitMoves`)
 
-import {run} from "./sh.js";
+import {HOME, run, UTF8} from "./sh.js";
 import {sendKeys} from "./jump.js";
+import {readRange, sizeOf} from "./transcript.js";
 
 const NUMBERED = /^(\s*)(?:❯\s+)?(\d+)\.\s+(.*)$/;
 const CURSOR = /^\s*❯\s+\S/;
@@ -229,6 +230,66 @@ function bare(lines, cursor) {
   const options = lines.slice(from, to).map((l) => ({n: null,
     label: l.replace("❯", "").trim(), detail: "", current: l.includes("❯"), checked: null}));
   return [from, to, options];
+}
+
+// The questions of the session's open AskUserQuestion, or null. askhook.sh, a PreToolUse
+// hook, keeps the tool's input in ASK_DIR/<sessionId>.json before the dialog draws; it is
+// answered once the log holds its tool_use_id (in the tool_result, written with the answer).
+// Read again only when the file or the log changed.
+export const ASK_DIR = `${HOME}/.claude/ccx-ask`;
+const ASK_TAIL = 512 * 1024;
+const askCache = new Map();  // sessionId -> {key, questions}
+export function pendingAsk(sessionId, log, dir = ASK_DIR) {
+  if (!sessionId) return null;
+  const file = `${dir}/${sessionId}.json`;
+  let mtime;
+  try {
+    mtime = Deno.statSync(file).mtime?.getTime();
+  } catch {
+    return null;
+  }
+  const size = log ? sizeOf(log) : -1;
+  const key = `${mtime}:${size}`;
+  const hit = askCache.get(sessionId);
+  if (hit?.key === key) return hit.questions;
+  let questions = null;
+  try {
+    const hook = JSON.parse(Deno.readTextFileSync(file));
+    const id = hook.tool_use_id;
+    const answered = id && size > 0 &&
+      UTF8.decode(readRange(log, Math.max(0, size - ASK_TAIL), size)).includes(`"tool_use_id":"${id}"`);
+    if (!answered && Array.isArray(hook.tool_input?.questions)) questions = hook.tool_input.questions;
+  } catch {
+    // half written or not JSON: as if none
+  }
+  if (askCache.size > 64) askCache.clear();
+  askCache.set(sessionId, {key, questions});
+  return questions;
+}
+
+const norm = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
+
+// The question tool's dialog with its question as written, not as the pane wrapped and cut
+// it: `ask` {header, question, multiSelect, options: [{label, description, preview}], i, of}.
+// The pane still says which question is up and how to answer. Which one is up: the one whose
+// labels the pane's numbered options start, then the one holding the pane's title, then the
+// first tab not answered. The dialog as it was when nothing matches.
+export function withAsk(dialog, questions) {
+  if (!dialog || !questions?.length) return dialog;
+  const shown = dialog.options.filter((o) => o.n !== null && !o.free);
+  const fits = (q) => Array.isArray(q.options) && shown.length >= q.options.length &&
+    q.options.every((o, k) => shown[k].label && norm(o.label).startsWith(norm(shown[k].label)));
+  let cands = questions.map((q, i) => ({q, i})).filter(({q}) => fits(q));
+  if (!cands.length) return dialog;
+  const title = norm(dialog.title || dialog.body.split("\n").find((l) => l.trim())).slice(0, 60);
+  const byTitle = title ? cands.filter(({q}) => norm(q.question).includes(title)) : [];
+  if (byTitle.length) cands = byTitle;
+  const open = dialog.tabs?.findIndex((t) => !t.done) ?? -1;
+  const {q, i} = cands.find((c) => c.i === open) ?? cands[0];
+  const options = q.options.map((o) => ({label: String(o.label ?? ""), description: String(o.description ?? ""),
+    ...o.preview && {preview: String(o.preview)}}));
+  return {...dialog, ask: {header: String(q.header ?? ""), question: String(q.question ?? ""),
+    multiSelect: !!q.multiSelect, options, i, of: questions.length}};
 }
 
 // Why text typed onto this screen must not go in, or null. A dialog takes the Enter that

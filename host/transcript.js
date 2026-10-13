@@ -35,7 +35,7 @@ export function logPath(cwd, sessionId, root = CLAUDE) {
   return `${root}/projects/${slug(cwd)}/${sessionId}.jsonl`;
 }
 
-function sizeOf(path) {
+export function sizeOf(path) {
   try {
     return Deno.statSync(path).size;
   } catch {
@@ -43,7 +43,7 @@ function sizeOf(path) {
   }
 }
 
-function readRange(path, from, to) {
+export function readRange(path, from, to) {
   const buf = new Uint8Array(Math.max(0, to - from));
   let f;
   try {
