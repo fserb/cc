@@ -529,6 +529,7 @@ let pausedAt = 0, autoTop = -1;
 let cap = null;
 const atBottom = (v) => v.scrollHeight - v.scrollTop - v.clientHeight < 40;
 function keepUp() {
+  if (cur && cur !== "nadya" && !isPid(cur)) return;  // only a chat follows its bottom; quota, plan, files... open at the top
   const v = $("#view"), end = v.scrollHeight - v.clientHeight, el = cap !== null && v.querySelector(`.m[data-at="${cap}"]`);
   v.scrollTop = el ? Math.min(end, el.getBoundingClientRect().top - v.getBoundingClientRect().top + v.scrollTop - 16) : end;
   autoTop = v.scrollTop; pausedAt = 0; $("#newer").hidden = atBottom(v);
