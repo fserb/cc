@@ -39,7 +39,7 @@
   .it { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 0 0.7rem; padding: 0.35rem 1.1rem; cursor: pointer; align-items: baseline; }
   .it:hover { background: var(--hover); }
   .it[aria-current=true] { background: var(--cur); }
-  .it.hot { background: var(--hot); } .it.hot.q { background: var(--hot-red); } .it.hot[aria-current=true] { box-shadow: inset 3px 0 0 var(--accent); }
+  .it.hot { background: var(--hot); } .it.hot[aria-current=true] { box-shadow: inset 3px 0 0 var(--accent); }
   .it .d { width: 8px; height: 8px; border-radius: 50%; position: relative; top: calc(4px - 0.5ex); }  /* bottom on the title's baseline, then up so its center is mid x-height */
   .d.red { background: var(--red); } .d.blue { background: var(--accent); } .d.green { background: var(--green); } .d.yel { background: var(--yel); } .d.gray { background: var(--gray); }
   .it .d.q { width: auto; height: auto; top: 0; border-radius: 0; color: var(--red); font-weight: 700; text-align: center; }  /* a session waiting on a dialog: "?" instead of the dot */
