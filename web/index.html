@@ -552,8 +552,11 @@ $("#view").addEventListener("pointerdown", () => { held = true; });
 function release() { held = false; if (missed) { missed = false; setTimeout(() => drawView(true)); } }
 addEventListener("pointerup", release);
 addEventListener("pointercancel", release);
+// so does a selection in the view: the redraw waits until it is cleared
+const selected = () => { const s = getSelection(); return s && !s.isCollapsed && s.rangeCount && $("#view").contains(s.getRangeAt(0).commonAncestorContainer); };
+document.addEventListener("selectionchange", () => { if (missed && !held && !selected()) release(); });
 function drawView(soft) {
-  if (soft && held) { missed = true; return; }
+  if (soft && (held || selected())) { missed = true; return; }
   // a redraw replaces the view and would cut a reply's grow short: wait for it to end
   if (soft && Date.now() < growing) { later ||= setTimeout(() => { later = 0; drawView(true); }, growing - Date.now() + 20); return; }
   const i = items().find((x) => x.id === cur);
