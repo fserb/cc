@@ -30,7 +30,7 @@
   #qbtn .bar s { position: absolute; top: calc(100% + 1px); width: 0; height: 0; margin-left: -4px; border: 4px solid transparent; border-top: 0; border-bottom: 5px solid var(--qc); }
   #qbtn b { color: var(--text); font-weight: 600; min-width: 4ch; text-align: right; }
   #qbtn.out b, #qbtn.out em { color: var(--red); }
-  #qbtn em { font-style: normal; }
+  #qbtn em { font-style: normal; } #qbtn .tr { display: inline-block; width: 1em; text-align: center; }
   #home { display: grid; grid-template-columns: 320px minmax(0, 1fr); min-height: 0; }
   #left { border-right: 1px solid var(--line); overflow: auto; padding: 0; display: flex; flex-direction: column; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   #left > * { flex-shrink: 0; }
@@ -433,6 +433,8 @@ function hasDialog(r) { return r.state === "wait" && (r.asking || (stream?.pid =
 function dueTodos() { const soon = Date.now() + 3600e3; return [...S.reminders, ...S.todo].filter((t) => t.due && t.due.getTime() <= soon && !sent.has("todo:" + t.full)); }
 // the pace is ccx's (api/usage, every host's log merged), so the page and `ccx usage` agree: x over the last 2h, x6 over
 // the last 6h (null from an older cchost); out is the 2h one's
+// the 2h pace against the 6h one, as shown (one decimal): ↑ faster lately, ↓ slower, nothing when equal or no 6h
+function trend(p) { if (p.x6 == null) return ""; const a = +p.x.toFixed(1), b = +p.x6.toFixed(1); return a > b ? "↑" : a < b ? "↓" : ""; }
 function paces(p) { return `${p.x.toFixed(1)}x (2h)${p.x6 == null ? "" : `, ${p.x6.toFixed(1)}x (6h)`}`; }
 function pace() {
   const p = S.usage?.pace; if (p?.ratio == null) return null;
@@ -517,7 +519,7 @@ function draw() {
   // the bar: % used; the tick: where the even pace would be by now
   const even = u ? Math.min(100, Math.max(0, (Math.min(Date.now(), u.resetsAt) - (u.resetsAt - 7 * 86400e3)) / (7 * 86400e3) * 100)) : 0;
   const tip = u ? `quota ${u.used}% used${p ? `, ${paces(p)} the pace that lasts to the reset` : ""}${p?.out ? `, runs out ${day(p.out)}` : ""}; reset ${day(new Date(u.resetsAt))}` : "no usage data";
-  $("#sum").innerHTML = `<button id="qbtn" class="${p?.out ? "out" : p?.x > 1 ? "hi" : ""}" title="${esc(tip)}" aria-label="${esc(tip)}">${p?.out ? `<em>out ${day(p.out)}</em>` : ""}<span class="bar"><i style="width:${u?.used ?? 0}%"></i>${u ? `<s style="left:${even.toFixed(1)}%"></s>` : ""}</span><b>${u ? u.used + "%" : "?"}</b>${p ? `<em>${p.x.toFixed(1)}x</em>` : ""}</button>`;
+  $("#sum").innerHTML = `<button id="qbtn" class="${p?.out ? "out" : p?.x > 1 ? "hi" : ""}" title="${esc(tip)}" aria-label="${esc(tip)}">${p?.out ? `<em>out ${day(p.out)}</em>` : ""}<span class="bar"><i style="width:${u?.used ?? 0}%"></i>${u ? `<s style="left:${even.toFixed(1)}%"></s>` : ""}</span><b>${u ? u.used + "%" : "?"}</b>${p ? `<em>${p.x.toFixed(1)}x<span class="tr">${trend(p)}</span></em>` : ""}</button>`;
   if (["nadya", "plan", "projects", "quota"].includes(cur) || isPid(cur) || isDoc(cur)) drawView(true);
 }
 
