@@ -129,10 +129,12 @@ All JSON, all under `api/`.
                                            in the last two cases. Without text: drops every
                                            queued message and answers {ok} (cchost before
                                            2026-10-12 does this with text too); the turn goes on
-    POST api/spawn  {dir, after?, mkdir?}
+    POST api/s/<pid>/goal {goal}           what cc shows under its name (goals.js), kept in
+                                           ~/.claude/ccx-goals.json; "" clears it. {ok, goal}
+    POST api/spawn  {dir, after?, mkdir?, goal?}
                                    with `after`, a pane id: a new tmux window right after
                                    that pane's, in its session. Without: a new kitty
-                                   window. Answers {pid, pane}
+                                   window. `goal` as api/s/<pid>/goal. Answers {pid, pane}
     GET  api/dirs?prefix=~/ai/c    {dirs, exists}: subdirectories under prefix, for the
                                    dir field, and whether prefix itself is one. Here and
                                    in spawn a dir not starting with ~ or / is under ~
@@ -144,6 +146,8 @@ Every row has these fields and no others (`ROW` in server.js, pinned by a test; 
 2026-10-12 the record's fields were spread in, and absent with no record):
 
 - `pid`, `name`, `path` (`~`-relative), `cwd`, `sessionId`, `sock` (the messaging socket)
+- `goal` (goals.js, "" with none) and `context` (tokens in its context at its last reply,
+  read off the session log; 0 with none), since 2026-10-14
 - `state` wait | busy | hold | free, `since` (epoch s), `summary`, `asking` (the dialog a
   wait is on), `waitsOn` (the peer a hold is on), `agents` (its subagents running now,
   0 unless busy; claudes.js `subagentsRunning`)

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc session list mocks</title>
+<style>
+  :root {
+    --bg: #fff; --text: #212529; --muted: #6c757d; --line: #e9ecef; --hover: #f3f4f6;
+    --accent: #0b7bd3; --red: #d63939; --green: #2f9e44; --yel: #f59f00; --gray: #ced4da;
+    --cur: #e7f1fb;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #ddd; font: 15px/1.5 var(--font); color: var(--text); padding: 1rem; }
+  h1 { font-size: 1.1rem; margin: 0 0 0.3rem; }
+  body > p { max-width: 760px; font-size: 0.85rem; color: #333; margin: 0 0 1rem; }
+  body > p code { font: 0.8rem var(--mono); }
+  section { display: flex; gap: 1.2rem; align-items: flex-start; margin: 0 0 1.6rem; padding-top: 1rem; border-top: 1px solid #c4c4c4; }
+  section > div:last-child { max-width: 380px; font-size: 0.85rem; color: #333; }
+  h2 { font-size: 1rem; margin: 0 0 0.3rem; }
+  .left { flex: none; width: 320px; background: var(--bg); border-radius: 10px; padding: 0.3rem 0 0.6rem; user-select: none; }
+  .sec { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 0.8rem 1.1rem 0.25rem; }
+  .it { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 0 0.7rem; padding: 0.35rem 1.1rem; cursor: pointer; align-items: baseline; }
+  .l2 { display: flex !important; gap: 0.6rem; align-items: baseline; } .l2 small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cb.big { color: #b67400; }
+  .cb { margin-left: auto; flex: none; font-size: 0.72rem; color: var(--muted); }
+  .it[style*="--u"] { position: relative; } .it[style*="--u"]::after { content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: var(--u); background: var(--gray); }
+  .it.two { grid-template-columns: 10px minmax(0, 1fr); }
+  .it:hover { background: var(--hover); }
+  .it.cur { background: var(--cur); }
+  .d { width: 8px; height: 8px; border-radius: 50%; position: relative; top: calc(4px - 0.5ex); }
+  .d.green { background: var(--green); } .d.yel { background: var(--yel); } .d.gray { background: var(--gray); }
+  .d.q { width: auto; height: auto; top: 0; border-radius: 0; color: var(--red); font-weight: 700; text-align: center; }
+  .tx { min-width: 0; }
+  .tx > * { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .t1 { display: flex !important; gap: 0.5rem; align-items: baseline; }
+  .t1 b { font-weight: 400; flex: none; } .unread .t1 b { font-weight: 600; }
+  .t1 .rt { margin-left: auto; min-width: 0; display: flex; gap: 0.4rem; align-items: baseline; } .t1 .at { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: right; }
+  .tx small { color: var(--muted); font-size: 0.82rem; line-height: 1.3; }
+  .it .r { font-size: 0.75rem; color: var(--muted); white-space: nowrap; text-align: right; }
+  .at { font: 0.72rem var(--mono); color: var(--muted); }
+  .ag { font-size: 0.72rem; color: var(--muted); flex: none; }
+  .ag.or { color: #e8590c; } .ag.red { color: var(--red); }
+  .at .h { color: #5b4fc4; }
+  .goal { color: var(--text) !important; }
+  .ask { color: var(--red) !important; }
+  .st { font-size: 0.72rem; }
+  .st.wait { color: var(--green); } .st.hold { color: #b67400; } .st.free, .st.busy { color: var(--muted); }
+  .meta { display: flex !important; flex-wrap: wrap; gap: 0.1rem 0.6rem; font-size: 0.72rem; color: var(--muted); line-height: 1.4; }
+  .meta span { white-space: nowrap; }
+  .ctx { display: inline-block; width: 28px; height: 4px; border-radius: 2px; background: var(--line); position: relative; vertical-align: 2px; margin-right: 0.25rem; }
+  .ctx i { position: absolute; inset: 0 auto 0 0; border-radius: 2px; background: var(--muted); }
+  .ctx.hi i { background: var(--yel); }
+</style>
+<h1>cc session list mocks</h1>
+<p>Desktop sidebar, 320px. The same six rows in each: nadya (waits on you), cc-a (busy, 1 agent, open), nadya-a (hold on cc-a), gene-a on marx (dialog), arcade on marx (your own session: no goal, unread), ccx-apis on marx (never used). The time is gone and host:path takes the right side. <b>goal</b> is new; <b>ctx</b> (context size) is not in the API yet, cchost would read it from the last assistant message in the session log (<code>input + cache_read + cache_creation</code> tokens), drawn against 200k.</p>
+<main id="main"></main>
+<script type="module">
+const R = [
+  {name: "nadya", host: "nadya", dir: "~/nadya", state: "wait", goal: "your assistant: plans, projects, helpers", summary: "Coordinate cc helpers and plan", ctx: 342, agents: 0},
+  {name: "cc-a", host: "nadya", dir: "~/ai/cc/web", state: "busy", goal: "cc: session goal field + list mocks", summary: "Session list redesign", ctx: 61, agents: 1, cur: true},
+  {name: "nadya-a", host: "nadya", dir: "~/nadya", state: "hold", waitsOn: "cc-a", goal: "weekly plan review", summary: "nadya-a", ctx: 38, agents: 0},
+  {name: "gene-a", host: "marx", dir: "~/web/gene", state: "wait", ask: "Bash: deno task build --prod", goal: "gene: fix search scoring", summary: "Search ranking weights", ctx: 540, agents: 0},
+  {name: "arcade", host: "marx", dir: "~/web/arcade", state: "wait", goal: "", summary: "Fix tetris piece collision", ctx: 96, agents: 0, unread: true},
+  {name: "ccx-apis", host: "marx", dir: "~/ai/apis", state: "free", goal: "", summary: "", ctx: 0, agents: 0},
+];
+const DOT = {busy: "", wait: "green", hold: "yel", free: "gray"};
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+const dot = (r) => r.ask ? `<span class="d q">?</span>` : `<span class="d ${DOT[r.state]}"></span>`;
+// direction: rtl on .at cuts the start of a long path, so the dir's last part stays
+const at = (r, host = true, grey = false) => `<span class="at">&lrm;${host ? `<span class="${grey ? "" : "h"}">${r.host}</span>:` : ""}${esc(r.dir)}&lrm;</span>`;
+const title = (r, right) => `<span class="t1"><b>${esc(r.name)}</b><span class="rt">${right}</span></span>`;
+const row = (r, inner, right = "", under = 0) => `<div class="it ${r.cur ? "cur" : ""} ${r.unread ? "unread" : ""} ${right ? "" : "two"}"${under ? ` style="--u:${Math.min(100, under / 2)}%"` : ""}>${dot(r)}<span class="tx">${inner}</span>${right ? `<span class="r">${right}</span>` : ""}</div>`;
+const askLine = (r) => `<small class="ask">waits on a dialog: ${esc(r.ask)}</small>`;
+const line2 = (r) => r.ask ? askLine(r) : `<small class="${r.goal ? "goal" : ""}">${esc(r.goal || (r.summary && r.summary !== r.name ? r.summary : " "))}</small>`;
+const ctx = (r) => r.ctx ? `<span><span class="ctx ${r.ctx > 150 ? "hi" : ""}"><i style="width:${Math.min(100, r.ctx / 2)}%"></i></span>${r.ctx}k</span>` : "";
+const stateWord = (r) => r.ask ? `<span class="st ask">dialog</span>` : r.state === "hold" ? `<span class="st hold">on ${esc(r.waitsOn)}</span>` : `<span class="st ${r.state}">${r.state}</span>`;
+const facts = (r) => `<span class="meta">${stateWord(r)}${r.agents ? `<span>+${r.agents} agent</span>` : ""}${ctx(r)}</span>`;
+const bar = (r, n = false) => r.ctx ? `<span class="cb"><span class="ctx ${r.ctx > 150 ? "hi" : ""}"><i style="width:${Math.min(100, r.ctx / 2)}%"></i></span>${n ? `${r.ctx}k` : ""}</span>` : "";
+const title2 = (r) => `<span class="t1"><b>${esc(r.name)}</b>${r.agents ? `<span class="ag">+${r.agents}</span>` : ""}${r.ctx >= 300 ? `<span class="ag" style="color:color-mix(in oklab, var(--red) ${Math.min(100, (r.ctx - 300) / 3).toFixed(0)}%, #f08c00)">${r.ctx}k</span>` : ""}<span class="rt"><span class="at">&lrm;${r.host === "nadya" ? "" : `${r.host}:`}${esc(r.dir.replace(/^~\//, ""))}&lrm;</span></span></span>`;
+const ago = {nadya: "2m", "cc-a": "40s", "nadya-a": "12m", "gene-a": "4m", arcade: "3h", "ccx-apis": "1d"};
+
+const L = [
+  ["today", "For comparison, as it is now: the second line is Claude's summary, or the path when the summary only repeats the name, blank while busy; host and time on the right.",
+    (rs) => rs.map((r) => row(r, `<span class="t1"><b>${esc(r.name)}</b></span>${r.ask ? askLine(r) : `<small>${r.state === "busy" ? "&nbsp;" : esc(r.summary && r.summary !== r.name ? r.summary : `${r.host}:${r.dir}`)}</small>`}`,
+      `${r.agents ? `+${r.agents} · ` : ""}${r.host === "nadya" ? "" : `${r.host} · `}${ago[r.name]}`)).join("")],
+  ["A · goal as subtitle", "Smallest change. Line 1: name, and host:path on the right, in grey mono, the host in purple. Line 2: the goal, else Claude's summary, kept while busy; a dialog takes it over, as today. Agents, when any, as +N after the path.",
+    (rs) => rs.map((r) => row(r, title(r, `${r.agents ? `<span class="ag">+${r.agents}</span>` : ""}${at(r)}`) + line2(r))).join("")],
+  ["H · context only when large", "No host for nadya's rows, no ~/ on paths. After the name: +N agents, then the context size only from 300k up: orange at 300k, getting redder up to full red at 600k (nadya 342k, gene-a 540k).",
+    (rs) => rs.map((r) => row(r, title2(r) + line2(r))).join("")],
+];
+document.querySelector("#main").innerHTML = L.map(([t, note, draw]) =>
+  `<section><div class="left">${t === "C · by host" ? "" : `<div class="sec">sessions</div>`}${draw(R)}</div><div><h2>${esc(t)}</h2><p>${esc(note)}</p></div></section>`).join("");
+</script>

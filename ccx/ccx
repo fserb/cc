@@ -1130,13 +1130,16 @@ async function cmdFocus(spec) {
 // `host:pid` out of a tagged `host.pid`, and a bare pid as it is
 const named = (pid) => String(pid).replace(/^([^.]+)\.(\d+)$/, "$1:$2");
 
-// ccx new [--focus] [host:]<dir> [name]
+// ccx new [--focus] [--goal <text>] [host:]<dir> [name]
 // cchost's api/spawn, which cc's + calls too: a detached tmux session. --focus puts it in a
 // new tmux window after an instance already in `dir`, else a new kitty window, and focuses
-// it, on the host it runs on.
+// it, on the host it runs on. --goal is what cc shows under its name
 async function cmdNew(...args) {
   const focusIt = args.includes("--focus");
-  const [dir, ...words] = args.filter((a) => a !== "--focus");
+  const g = args.indexOf("--goal");
+  const goal = g < 0 ? "" : args[g + 1] ?? "";
+  if (g >= 0 && !goal.trim()) usage();
+  const [dir, ...words] = args.filter((a, n) => a !== "--focus" && (g < 0 || n < g || n > g + 1));
   if (!dir) usage();
   const name = words.join(" ");
   await listing();                   // for HOSTS and SELF
@@ -1148,7 +1151,7 @@ async function cmdNew(...args) {
     }
     // spawn() waits up to 5s for a window, 10s for claude and 10s for its trust dialog
     const [r, err] = await api("/api/spawn", {dir: `${host}:${rest}`, name, beside: true,
-      focus: focusIt}, 45_000);
+      focus: focusIt, goal}, 45_000);
     if (err) fail("new", `${host}: ${err}`);
     if (r.warning) console.error(`new: ${host}: ${r.warning}`);
     const pane = String(r.pane ?? "").replace(`${host}/`, "");
@@ -1167,8 +1170,8 @@ async function cmdNew(...args) {
   } catch {
     // spawn() names the missing directory
   }
-  const [r, err] = await api("/api/spawn", {dir: path, name, beside: true, focus: focusIt},
-    45_000);
+  const [r, err] = await api("/api/spawn", {dir: path, name, beside: true, focus: focusIt,
+    goal}, 45_000);
   if (err) fail("new", err);
   if (r.warning) console.error(`new: ${r.warning}`);
   console.log(r.existing ? `${r.pid} already running in ${path.replace(HOME, "~")}`
@@ -1311,6 +1314,15 @@ async function cmdUser(...args) {
   const {found, missed} = await targets("user", spec, text);
   report("typed", found, missed, await Promise.all(found.map(async (i) =>
     (await api(`/api/s/${i.id}/type`, {text, force}, 10_000))[1])));
+}
+
+// ccx goal <target>[,<target>...] <text...>
+// cchost's api/s/<id>/goal: what cc shows under its name, in place of Claude's summary
+async function cmdGoal(spec, ...words) {
+  const goal = words.join(" ");
+  const {found, missed} = await targets("goal", spec, goal);
+  report("set", found, missed, await Promise.all(found.map(async (i) =>
+    (await api(`/api/s/${i.id}/goal`, {goal}))[1])));
 }
 
 // ccx chat [--no-follow] [--here]
@@ -1475,6 +1487,7 @@ const COMMANDS = {
   delete: [cmdDelete, 1],
   send: [cmdSend, -1],               // -1: its own validation, since the message is the rest
   user: [cmdUser, -1],
+  goal: [cmdGoal, -1],
   chat: [cmdChat, -1],
   notify: [cmdNotify, -1],
   subs: [cmdSubs, 0],
@@ -1501,10 +1514,12 @@ const HELP = [
   ["  focus <target>", "jump to one instance without the UI, on any host"],
   ["  new [--focus] [host:]<dir> [name...]", "a claude in dir, in a detached tmux session named name (else ccx-<dir>); none if name is there"],
   ["    --focus", "instead a tmux window beside one already in dir, else a kitty window, and focus it"],
+  ["    --goal <text>", "a few words on what it is for, which cc shows under its name"],
   ["  delete [host:]<name|pid>", "end one instance and close its tmux pane"],
   ["  send <target> <message...>", "a chat message to one or more instances"],
   ["  user [--force] <target> <text...>", "typed into an instance as its user, /commands included;"],
   ["", "refused while it shows a dialog, which the Enter would answer, unless --force"],
+  ["  goal <target> <text...>", "set what cc shows under its name, in place of Claude's summary"],
   ["  chat [--no-follow] [--here]", "what the agents in this dir have said to each other, on every"],
   ["", "host (the same path under its home); --here this host's only"],
   ["  notify <who> when <target>", "message who (`me` inside a claude) from `ccx` when target's"],

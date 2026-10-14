@@ -1009,6 +1009,9 @@ const BAD = [
   ["user", "ccx-e8", "   "],
   ["user", "--force"],          // --force is not a target
   ["user", "--force", "ccx-e8"],
+  ["goal"],                     // a target and its goal, as send
+  ["goal", "ccx-e8"],
+  ["new", "--goal"],            // --goal and no text
   ["chat", "foo"],              // chat takes --no-follow, or nothing
   ["--resolve"],                // no target
   ["--snapshot", "bogus"],

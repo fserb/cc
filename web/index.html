@@ -46,6 +46,10 @@
   .it .d.q { width: auto; height: auto; top: 0; border-radius: 0; color: var(--red); font-weight: 700; text-align: center; }  /* a session waiting on a dialog: "?" instead of the dot */
   .it .tx div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .it .tx small { display: block; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.82rem; line-height: 1.3; }
   .it.hot .tx div, .it.unread .tx div { font-weight: 600; }
+  .it:has(.t1) { grid-template-columns: 10px minmax(0, 1fr); }
+  .it .tx .t1 { display: flex; gap: 0.5rem; align-items: baseline; font-weight: 400; } .it .t1 b { font-weight: inherit; flex: none; } .it.hot .t1 b, .it.unread .t1 b { font-weight: 600; }
+  .it .t1 .tag { font-size: 0.75rem; color: var(--muted); flex: none; }
+  .it .t1 .at { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; direction: rtl; font: 0.72rem var(--mono); color: var(--muted); }  /* rtl cuts the start of a long path, so its last part stays */
   .it time { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
   #center { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
   #center.nadya { --accent: #d81212; }  /* nadya's chat in the red of the star icon */
@@ -480,14 +484,8 @@ function day(d) {
 }
 
 // ---------- list
-// a busy session, or one whose last chat message is the user's (known only for the open one), shows a blank line under its title (a space, so the row keeps its height)
-// a reply that is empty or only "·": nadya's answer to a routine ccx notice; not drawn, and not a row's subtitle
+// a reply that is empty or only "·": nadya's answer to a routine ccx notice; not drawn
 const blank = (e) => e.type === "text" && ["", "·"].includes(e.text?.trim() ?? "");
-function quiet(r) {
-  if (r.state === "busy") return true;
-  const log = stream?.pid === r.pid ? S.log : [];
-  return log.findLast((e) => e.type === "user" || e.type === "text")?.type === "user";
-}
 // a session's dot: green when it waits on you, none while it works (user, 2026-10-12: it was green for busy)
 const DOT = {busy: "", wait: "green", hold: "yel", free: "gray"};
 // a session is bold when it has replied since you last had it open (user, 2026-10-12). Its reply ends
@@ -511,10 +509,8 @@ function items() {
   const it = [];
   const n = nadyaRow();
   const nadyaHot = n && hasDialog(n);
-  const nLog = n && stream?.pid === n.pid ? S.log : [];
-  const lastText = nLog.findLast((e) => e.type === "text" && !blank(e));
   it.push({id: "nadya", d: nadyaHot ? "q" : n ? DOT[n.state] : "gray", hot: false, unread: unseen("nadya", n), title: "nadya",
-    sub: nadyaHot ? `waits on a dialog: ${n.asking || "see pane"}` : n && quiet(n) ? "\u00a0" : lastText?.text.split("\n")[0] ?? (n ? n.summary : "not running"), t: n ? ago(n.since) : ""});
+    ...(n ? sessionLine(n) : {sub: "not running", t: ""})});
   if (!localStorage.cc_blog_seen && S.posts.length) localStorage.cc_blog_seen = Date.now();
   const seen = +localStorage.cc_blog_seen || 0, top = S.posts[0];
   const fresh = S.posts.filter((x) => Date.parse(x.time) > seen).length;
@@ -531,15 +527,24 @@ function items() {
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, dialog: !!hasDialog(r)}));
   ss.sort((a, b) => b.dialog - a.dialog);
   for (const {r, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "q" : DOT[r.state] ?? "gray", hot: false, unread: unseen(r.pid, r),
-    title: r.name, sub: dialog ? `waits on a dialog: ${r.asking || "see pane"}` : quiet(r) ? "\u00a0" : r.summary !== r.name ? r.summary : r.path, t: `${r.agents ? `+${r.agents} · ` : ""}${r.pid.split(".")[0] === "nadya" ? "" : r.pid.split(".")[0] + " · "}${ago(r.since)}`});
+    title: r.name, ...sessionLine(r)});
   return it;
+}
+// a session row (user, 2026-10-14; web/mocks/sessions.html, H): the second line is always its goal, else Claude's
+// summary; beside the name its agents and, from 300k, its context size, orange getting red by 600k; on the right
+// host:path, no host for nadya's and no ~/. A dialog shows only as the ?
+function sessionLine(r) {
+  const [host, path] = [r.pid.split(".")[0], r.path.slice(r.path.indexOf(":") + 1).replace(/^~\/?/, "")];
+  const k = Math.round((r.context ?? 0) / 1000);
+  return {sub: r.goal || (r.summary !== r.name ? r.summary : "") || "\u00a0", at: `${host === "nadya" ? "" : `${host}:`}${path || "~"}`,
+    tags: `${r.agents ? `<span class="tag">+${r.agents}</span>` : ""}${k >= 300 ? `<span class="tag" style="color:color-mix(in oklab, var(--red) ${Math.min(100, (k - 300) / 3).toFixed(0)}%, #f08c00)">${k}k</span>` : ""}`};
 }
 function draw() {
   const all = items();
   let sec = null, html = "";
   for (const i of all) {
     if ((i.sec ?? "") !== sec) { sec = i.sec ?? ""; if (sec) html += `<div class="sec">${sec}</div>`; }
-    html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""}" data-id="${esc(i.id)}" aria-current="${i.id === (isDoc(cur) ? docParent(cur) : isFiles(cur) ? "files" : cur)}"><span class="d ${i.d}">${i.d === "q" ? "?" : ""}</span><span class="tx"><div>${esc(i.title)}</div><small>${esc(i.sub)}</small></span><time>${esc(i.t)}</time></div>`;
+    html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""}" data-id="${esc(i.id)}" aria-current="${i.id === (isDoc(cur) ? docParent(cur) : isFiles(cur) ? "files" : cur)}"><span class="d ${i.d}">${i.d === "q" ? "?" : ""}</span><span class="tx">${i.at === undefined ? `<div>${esc(i.title)}</div>` : `<div class="t1"><b>${esc(i.title)}</b>${i.tags}<span class="at">\u200e${esc(i.at)}\u200e</span></div>`}<small>${esc(i.sub)}</small></span>${i.at === undefined ? `<time>${esc(i.t)}</time>` : ""}</div>`;
   }
   if (S.offline) html += `<p class="meta" style="padding:0 1.1rem">${esc(S.offline)}</p>`;
   // the addbar stays put across redraws, so the desktop's new-session input keeps its text and focus

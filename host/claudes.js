@@ -13,6 +13,8 @@ export class Instance {
     this.tab = "";            // window index, only when the session holds >1 claude
     this.path = "";
     this.summary = "";
+    this.goal = "";           // what it is for, from goals.js; cchost sets it after each poll
+    this.context = 0;         // tokens in its context at its last reply (sessionTitle)
     this.state = "";          // "" until StateClock fills it in
     this.asking = "";         // the record's waitingFor: a dialog is up, and which one
     this.waitsOn = "";        // hold on a peer: the name of the session it waits for
@@ -193,24 +195,25 @@ function hasReply(cwd, sessionId) {
 }
 
 const TITLE_TAIL = 256 * 1024;     // titles sit at most 34KB from the end, over 108 logs
-const TITLES = new Map();          // session log -> [size when read, title found]
+const TITLES = new Map();          // session log -> [size when read, {title, context}]
 
 // Claude's own name for the session, cached against the log's size and re-read when it
-// has grown, which is what carries a /rename onto the next poll.
+// has grown, which is what carries a /rename onto the next poll. With it, the context size
+// at the last reply: that message's input tokens, cached or not.
 function sessionTitle(cwd, sessionId) {
-  if (!cwd || !sessionId) return "";
+  if (!cwd || !sessionId) return {title: "", context: 0};
   const path = `${projectDir(cwd)}/${sessionId}.jsonl`;
   let size;
   try {
     size = Deno.statSync(path).size;
   } catch {
-    return "";
+    return {title: "", context: 0};
   }
-  const [sizeRead, cached] = TITLES.get(path) ?? [-1, ""];
+  const [sizeRead, cached] = TITLES.get(path) ?? [-1, null];
   if (size === sizeRead) return cached;
-  const title = readTitle(path, size);
-  TITLES.set(path, [size, title]);
-  return title;
+  const got = readTitle(path, size);
+  TITLES.set(path, [size, got]);
+  return got;
 }
 
 // The last TITLE_TAIL (or tail) of a session log, or "" if it cannot be read. The first line of it
@@ -237,20 +240,27 @@ function readTail(path, size, tail = TITLE_TAIL) {
   }
 }
 
-// The last title in the tail of a session log, /rename's winning over the AI one.
+// The last title in the tail of a session log, /rename's winning over the AI one, and the
+// context size at the last reply in it (0 with none).
 function readTitle(path, size) {
   const text = readTail(path, size);
   const found = {};
+  let context = 0;
   for (const line of text.split("\n")) {
-    if (!line.includes('"type":"ai-title"') && !line.includes('"type":"custom-title"')) continue;
+    const usage = line.includes('"type":"assistant"') && line.includes('"usage":');
+    if (!usage && !line.includes('"type":"ai-title"') && !line.includes('"type":"custom-title"')) continue;
     try {                               // the first line of the tail is a fragment
       const rec = JSON.parse(line);
-      found[rec.type] = rec.customTitle ?? rec.aiTitle ?? "";
+      if (rec.type === "assistant") {
+        const u = rec.message?.usage ?? {};
+        const n = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+        if (n) context = n;
+      } else found[rec.type] = rec.customTitle ?? rec.aiTitle ?? "";
     } catch {
       continue;
     }
   }
-  return found["custom-title"] ?? found["ai-title"] ?? "";
+  return {title: found["custom-title"] ?? found["ai-title"] ?? "", context};
 }
 
 // How many of this session's subagents are running now. Each has its own log,
@@ -645,11 +655,11 @@ export async function discover() {
       if (!procs.has(cur)) break;
       cur = procs.get(cur)[0];
     }
-    const title = sessionTitle(rec.cwd ?? "", rec.sessionId ?? "");
+    const {title, context} = sessionTitle(rec.cwd ?? "", rec.sessionId ?? "");
     const agents = subagentsRunning(rec);
     if (!pane) {                                   // nothing to focus, but the record knows
       found.push(new Instance({pid, summary: title || cmd, path: rec.cwd ?? "",
-        state, agents, asking: rec.status === "waiting" ? (rec.waitingFor ?? "") : "", waitsOn: holdFor,
+        state, agents, context, asking: rec.status === "waiting" ? (rec.waitingFor ?? "") : "", waitsOn: holdFor,
         name: rec.name ?? "", nameDue: nameDue(rec), sock: rec.messagingSocketPath ?? "", statusSince: since,
         sessionId: rec.sessionId ?? "", cwd: rec.cwd ?? "", peer: peerOf(rec)}));
       continue;
@@ -671,6 +681,7 @@ export async function discover() {
       asking: rec.status === "waiting" ? (rec.waitingFor ?? "") : "",
       waitsOn: holdFor,
       agents,
+      context,
       name: rec.name ?? "",
       nameDue: nameDue(rec),
       sock: rec.messagingSocketPath ?? "",

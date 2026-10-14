@@ -86,13 +86,13 @@ export function tmuxOrder(instances) {
 // them, and `status` tells `shell` from a peer hold where `state` says `hold` for both.
 // Empty or 0 when there is no record (a session read off the pane)
 export const ROW = ["pid", "name", "path", "cwd", "state", "asking", "waitsOn", "agents",
-  "summary", "since", "hasPane", "pane", "session", "window", "paneIndex", "tab", "sessionId", "sock",
+  "summary", "goal", "context", "since", "hasPane", "pane", "session", "window", "paneIndex", "tab", "sessionId", "sock",
   "status", "startedAt", "version", "peerFeatures", "statusUpdatedAt"];
 
 export function rowOf(i) {
   const p = i.peer ?? {};
   return {pid: i.pid, name: i.name, path: tilde(i.path), cwd: i.cwd, state: i.state,
-    asking: i.asking, waitsOn: i.waitsOn, agents: i.agents, summary: i.summary, since: i.since,
+    asking: i.asking, waitsOn: i.waitsOn, agents: i.agents, summary: i.summary, goal: i.goal, context: i.context, since: i.since,
     hasPane: Boolean(i.pane), pane: i.pane, session: i.session, window: i.window,
     paneIndex: i.paneIndex, tab: i.tab, sessionId: i.sessionId, sock: i.sock,
     status: p.status ?? "", startedAt: p.startedAt ?? 0, version: p.version ?? "",
@@ -247,6 +247,7 @@ export class Server {
     this.port = port;
     this.relay = relay;                   // a Relay, under `cchost`
     this.subs = subs;                     // a Subs, under `cchost`
+    this.goals = null;                    // a Goals, under `cchost`
     this.lists = new Set();               // api/events clients
     this.allLists = new Set();            // api/events?all=1 clients
     this.sessions = new Set();            // api/s/<pid>/events clients
@@ -697,6 +698,7 @@ export class Server {
     }
     const r = await spawn({dir: String(body.dir ?? ""), after,
       mkdir: body.mkdir === true, name: String(body.name ?? ""), focus});
+    if (r.pid && typeof body.goal === "string" && body.goal.trim()) this.goals?.set(r.pid, body.goal);
     return r.error ? r : {...r, after};
   }
 
@@ -801,7 +803,7 @@ export class Server {
       tag = host;
       path = `/api/s/${pid}/${verb}`;
     }
-    const m = path.match(/^\/api\/s\/(\d+)\/(log|img|events|type|pick|now|unqueue|screen|send|select|close)$/);
+    const m = path.match(/^\/api\/s\/(\d+)\/(log|img|events|type|pick|now|unqueue|screen|send|select|close|goal)$/);
     if (!m) return json({error: "not found"}, 404);
     const [, pidText, verb] = m, pid = Number(pidText);
     // the pid has to be a claude in the current poll: a pane whose claude exited types
@@ -867,6 +869,13 @@ export class Server {
         session: inst.session});
     }
     if (verb === "close") return answer(await close(inst));
+    if (verb === "goal") {
+      if (!this.goals) return json({error: "no goals here; they run under cchost"}, 409);
+      if (typeof body.goal !== "string") return json({error: "no goal"}, 400);
+      this.goals.set(pid, body.goal);
+      inst.goal = this.goals.get(pid);   // the next tick pushes the list
+      return json({ok: true, goal: inst.goal});
+    }
     return json({error: "not found"}, 404);
   }
 }
@@ -874,8 +883,9 @@ export class Server {
 // Start serving. {server, stop} or {error}: a port already taken is reported, not thrown,
 // so a caller can say why.
 export function runServer({source, port = PORT, hostname = "127.0.0.1", relay = null,
-  subs = null}) {
+  subs = null, goals = null}) {
   const s = new Server(source, port, relay, subs);
+  s.goals = goals;
   let http;
   try {
     http = Deno.serve({port, hostname, onListen() {}}, (req, info) => s.handle(req, info).catch((e) =>
