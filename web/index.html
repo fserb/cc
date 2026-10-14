@@ -33,9 +33,10 @@
   #qbtn .spark { width: 32px; height: 0.72em; flex: none; align-self: baseline; } #qbtn b, #qbtn em { align-self: baseline; } #qbtn .spark path { fill: var(--qc); } #qbtn .spark line { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; } #qbtn .spark .ref { stroke: var(--muted); stroke-dasharray: 2 2; opacity: 0.6; }
   #qbtn em { font-style: normal; } #qbtn .tr { display: inline-block; width: 1em; text-align: center; }
   #home { display: grid; grid-template-columns: 320px minmax(0, 1fr); min-height: 0; }
-  #left { border-right: 1px solid var(--line); overflow: auto; padding: 0; display: flex; flex-direction: column; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  #left { border-right: 1px solid var(--line); overflow: hidden auto; position: relative; padding: 0; display: flex; flex-direction: column; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   #left > * { flex-shrink: 0; }
   .addbar { position: sticky; bottom: 0; margin-top: auto; background: var(--bg); padding: 0.6rem 1.1rem calc(0.6rem + env(safe-area-inset-bottom)); }
+  #left > .gone { position: absolute; left: 0; z-index: 1; background: var(--bg); pointer-events: none; }
   .sec { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 0.8rem 1.1rem 0.25rem; }
   .it { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 0 0.7rem; padding: 0.35rem 1.1rem; cursor: pointer; align-items: baseline; }
   .it:hover { background: var(--hover); }
@@ -407,7 +408,7 @@ function listen() {
     const rows = d.rows ?? [];
     for (const r of rows) if (r.status) recorded.add(r.pid);
     for (const p of recorded) if (!rows.some((r) => r.pid === p)) recorded.delete(p);
-    S.rows = rows.filter((r) => r.status || !recorded.has(r.pid)); S.offline = d.offline;
+    S.rows = rows.filter((r) => r.status || !recorded.has(r.pid)); S.offline = d.offline; S.listed = true;
     // the open session ended (its host still answers): go to nadya, replacing the hash
     const up = S.up = d.up ?? [];
     if (had && !S.rows.some((r) => r.pid === cur) && up.includes(cur.split(".")[0])) { cur = "nadya"; if (history.state?.cc) history.replaceState({cc: cur}, ""); open(); return; }
@@ -544,6 +545,37 @@ function sessionLine(r) {
   return {sub: r.goal || (r.summary !== r.name ? r.summary : "") || "\u00a0", at: `${host === "nadya" ? "" : `${host}:`}${path || "~"}`,
     tags: `${r.agents ? `<span class="tag">+${r.agents}</span>` : ""}${k >= 300 ? `<span class="tag" style="color:color-mix(in oklab, var(--red) ${Math.min(100, (k - 300) / 3).toFixed(0)}%, #f08c00)">${k}k</span>` : ""}`};
 }
+// a session row slides in from the right and out to the right, and the rows around it move to their new place
+// (user, 2026-10-14). Only between two draws of a loaded list, so the first load moves nothing; a redraw of the
+// same rows finds every row where it was. Rows are keyed by data-id, the section titles by their text
+let slid = false;
+const SLIDE = {duration: 200, easing: "ease-out"};
+function places(left) {
+  const lr = left.getBoundingClientRect(), m = new Map();
+  if (!lr.height) return null;  // the list is hidden (phone, a session open)
+  for (const e of left.querySelectorAll(":scope > .it:not(.gone), :scope > .sec")) {
+    const r = e.getBoundingClientRect();
+    m.set(e.dataset.id ?? `sec:${e.textContent}`, {e, x: r.left - lr.left, y: r.top - lr.top});
+  }
+  return m;
+}
+function slide(left, was) {
+  const now = places(left);
+  if (!now) return;
+  for (const [k, n] of now) {
+    const o = was.get(k);
+    if (o) { if (o.x !== n.x || o.y !== n.y) n.e.animate([{transform: `translate(${o.x - n.x}px, ${o.y - n.y}px)`}, {transform: "none"}], SLIDE); continue; }
+    if (k.includes(".")) n.e.animate([{transform: "translateX(100%)", opacity: 0}, {transform: "none", opacity: 1}], SLIDE);
+  }
+  for (const [k, o] of was) {
+    if (now.has(k) || !k.includes(".")) continue;
+    const g = o.e;  // detached by the redraw, put back over where it was
+    g.classList.add("gone"); g.removeAttribute("data-id"); g.setAttribute("aria-hidden", "true");
+    g.style.top = `${o.y + left.scrollTop}px`; g.style.width = `${left.clientWidth}px`;
+    left.append(g);
+    g.animate([{transform: `translateX(${o.x}px)`, opacity: 1}, {transform: "translateX(100%)", opacity: 0}], SLIDE).onfinish = () => g.remove();
+  }
+}
 function draw() {
   const all = items();
   let sec = null, html = "";
@@ -553,9 +585,11 @@ function draw() {
   }
   if (S.offline) html += `<p class="meta" style="padding:0 1.1rem">${esc(S.offline)}</p>`;
   // the addbar stays put across redraws, so the desktop's new-session input keeps its text and focus
-  const left = $("#left"), bar = left.querySelector(".addbar");
-  for (const c of [...left.children]) if (c !== bar) c.remove();
+  const left = $("#left"), bar = left.querySelector(".addbar"), was = slid && places(left);
+  for (const c of [...left.children]) if (c !== bar && !c.classList.contains("gone")) c.remove();
   left.insertAdjacentHTML("afterbegin", html);
+  if (was) slide(left, was);
+  slid = !!S.listed && !matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (!bar) left.insertAdjacentHTML("beforeend", `<div class="addbar">${ADD}</div>`);
   $("#add")?.setAttribute("aria-current", cur === "new");
   const u = S.usage, p = pace();
