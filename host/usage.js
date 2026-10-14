@@ -159,14 +159,14 @@ export function pace(u, now = Date.now(), window = RECENT) {
   const even = 100 * elapsed / WEEK;
   const samples = weekSamples(u, now), used = usedNow(samples), total = samples.at(-1).used;
   if (elapsed < SETTLE || used <= 0) {
-    return {used, even, rate: null, ratio: null, end: null, out: null};
+    return {used, even, rate: null, ratio: null, end: null, out: null, added: null};
   }
   const span = Math.min(window, elapsed);
-  const perMs = (total - usedAt(samples, now - span)) / span;
+  const added = total - usedAt(samples, now - span), perMs = added / span;
   const end = used + perMs * (u.resetsAt - now);
   const out = end > 100 ? now + (100 - used) / perMs : null;
   const ratio = used < 100 ? perMs * (u.resetsAt - now) / (100 - used) : null;
-  return {used, even, rate: perMs * 24 * 3600_000, ratio, end, out};
+  return {used, even, rate: perMs * 24 * 3600_000, ratio, end, out, added};
 }
 
 // `Thu 4pm` for 16:53: the hour it falls in
@@ -174,6 +174,17 @@ function when(ms) {
   const d = new Date(ms);
   const h = d.getHours();
   return `${DAYS[d.getDay()]} ${h % 12 || 12}${h < 12 ? "am" : "pm"}`;
+}
+
+// `ccx usage`'s table under the line: the pace over each of the last 1h to 6h, what it
+// added, the ratio, and when it runs out at that rate (`-` when it lasts to the reset).
+// Lines of text, or [] with no rate to project
+export function paceTable(u, now = Date.now()) {
+  const rows = [1, 2, 3, 4, 5, 6].map((h) => [h, pace(u, now, h * 3600_000)]);
+  if (rows[0][1]?.ratio == null) return [];
+  return ["last  added  pace  out", ...rows.map(([h, p]) =>
+    `${`${h}h`.padStart(4)}  ${`+${p.added.toFixed(1)}%`.padStart(5)}  ` +
+    `${`${p.ratio.toFixed(1)}x`.padStart(4)}  ${p.out ? when(p.out) : "-"}`)];
 }
 
 // What a UI writes, `usage <used> (<1h ratio>x 1h, <3h ratio>x 3h pace - out <when>)`, the

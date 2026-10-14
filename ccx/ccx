@@ -17,7 +17,7 @@ import {HOME, ON_EXIT, sh} from "../host/sh.js";
 import {fuzzy, NUMBERS, PALETTE, rank, SORTS, stateOf} from "../host/view.js";
 import {attachSession, jump, kittyWindowTitle, raiseTarget, tmuxWindowName,
   withClient} from "../host/jump.js";
-import {byDay, HISTORY, usageLine, USAGE} from "../host/usage.js";
+import {byDay, HISTORY, paceTable, usageLine, USAGE} from "../host/usage.js";
 import {parseNotify} from "../host/subs.js";
 
 // render
@@ -997,7 +997,8 @@ async function cmdList() {
 }
 
 // ccx usage
-// The seven-day line, then the week so far a local day per row, every host's log merged
+// The seven-day line, the pace over each of the last 1h to 6h, then the week so far a
+// local day per row, every host's log merged
 async function cmdUsage() {
   const [body, err] = await api("/api/usage", undefined, 30_000);
   if (err) fail("usage", err);
@@ -1008,6 +1009,8 @@ async function cmdUsage() {
     return Deno.exit(1);
   }
   console.log(`${line.text}\n`);
+  const table = paceTable(u);
+  if (table.length) console.log(`${table.join("\n")}\n`);
   for (const d of byDay(u)) {
     const day = new Date(d.day).toLocaleDateString("en-US", {weekday: "short"});
     console.log(`${day}  ${`${Math.round(d.used)}%`.padStart(4)}  ` +

@@ -1,5 +1,5 @@
 import {assertEquals} from "jsr:@std/assert";
-import {byDay, pace, readHistory, readUsage, usageLine, usedNow, weekSamples} from "./usage.js";
+import {byDay, pace, paceTable, readHistory, readUsage, usageLine, usedNow, weekSamples} from "./usage.js";
 
 const H = 3600_000, WEEK = 168 * H;
 const at = (used, hours) => ({used, resetsAt: 1_000 * WEEK + WEEK - hours * H, at: 0});
@@ -64,6 +64,19 @@ Deno.test("pace: the rate is what the last 1h added, not the week's average", ()
   // over 3h it is 2.5% from 45.5 at hour 47, 20%/day, 1.9 times
   assertEquals(pace(u, now, 3 * H).ratio.toFixed(1), "1.9");
   assertEquals(/^usage 48% \(2\.3x 1h, 1\.9x 3h pace - out /.test(usageLine(u, now).text), true);
+});
+
+Deno.test("paceTable: a row per window, 1h to 6h, each from now back", () => {
+  const u = {...at(48, 50), history: []};
+  u.history = [line(16, 10, u), line(44, 44, u), line(46, 48, u)];
+  const t = paceTable(u, now);
+  assertEquals(t.length, 7);
+  assertEquals(t[0], "last  added  pace  out");
+  assertEquals(/^  1h  \+1\.0%  2\.3x  \w{3} \d\d?[ap]m$/.test(t[1]), true);
+  assertEquals(t[3].startsWith("  3h  +2.5%  1.9x"), true);
+  // 6h back is hour 44: 4% added
+  assertEquals(t[6].startsWith("  6h  +4.0%"), true);
+  assertEquals(paceTable(at(3, 0.5), now), []);
 });
 
 Deno.test("pace: with no history the 1h rate is the average", () => {
