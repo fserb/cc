@@ -510,7 +510,7 @@ function items() {
   const n = nadyaRow();
   const nadyaHot = n && hasDialog(n);
   it.push({id: "nadya", d: nadyaHot ? "q" : n ? DOT[n.state] : "gray", hot: false, unread: unseen("nadya", n), title: "nadya",
-    ...(n ? sessionLine(n) : {sub: "not running", t: ""})});
+    ...(n ? {...sessionLine(n), sub: ""} : {sub: "not running", t: ""})});  // no goal line for nadya (user, 2026-10-14)
   if (!localStorage.cc_blog_seen && S.posts.length) localStorage.cc_blog_seen = Date.now();
   const seen = +localStorage.cc_blog_seen || 0, top = S.posts[0];
   const fresh = S.posts.filter((x) => Date.parse(x.time) > seen).length;
