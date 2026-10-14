@@ -1167,9 +1167,9 @@ $("#say").onsubmit = async (e) => {
   if (!to) return alert("Not sent: nadya isn't running");
   const p = {id: ++pendId, pid: to.pid, q, text, imgs, at: Date.now()};
   // a dialog takes the paste and the Enter (which can pick its first option), so the text never reaches the session
-  if (hasDialog(to)) p.err = `${to.name} waits on a dialog; answer it first`;
-  pending.push(p); e.target.q.value = p.err ? q : ""; setDraft(dk, e.target.q.value);
-  if (!p.err) { atts[dk] = []; drawAtts(); }
+  // it stays a bubble, out of the box: double-tap sends it once the dialog is answered, hold takes it back
+  if (hasDialog(to)) p.err = `${to.name} waits on a dialog; answer it, then double-tap to send`;
+  pending.push(p); e.target.q.value = ""; setDraft(dk, ""); atts[dk] = []; drawAtts();
   fit();
   setTimeout(() => drawView(true), 121e3);
   if (!r && cur !== "nadya") { cur = "nadya"; open(); } else drawView(true);
