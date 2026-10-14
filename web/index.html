@@ -443,25 +443,22 @@ function pace() {
   const p = S.usage?.pace; if (p?.ratio == null) return null;
   return {x: p.ratio, x6: S.usage.pace6?.ratio ?? null, out: p.out ? new Date(p.out) : null};
 }
-// the header's graph: weighted tokens per 5 min over the last 2h, every host (api/burn/series). The dotted line is
-// the even pace, set so the window's average sits at the header's 2h pace (x); the burn store's own reference
-// (ref, PER_PCT per %) only when the % has not moved. The top is twice the even pace or the peak, so a calm hour
-// stays low. Always drawn, empty without data, so the header keeps its width
+// the header's graph: usage, weighted tokens per 5 min over the last 2h, every host (api/burn/series), scaled to
+// the window's peak; no pace in it (user, Oct 14th). Always drawn, empty without data, so the header keeps its width
 function spark() {
   const s = S.series, n = s?.w.length ?? 24, W = 3 * n, H = 16;
   const svg = (body, label) => `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" ${label ? `role="img" aria-label="${esc(label)}"><title>${esc(label)}</title>` : `aria-hidden="true">`}${body}<line x1="0" y1="${H - 0.5}" x2="${W}" y2="${H - 0.5}"/></svg>`;
   if (!s) return svg("");
-  const sum = s.w.reduce((a, b) => a + b, 0), x = pace()?.x;
-  const even = x >= 0.05 && sum ? sum / n / x : s.ref ?? 0;
-  const top = Math.max(2 * even, ...s.w) || 1, y = (w) => H - w / top * H;
+  const sum = s.w.reduce((a, b) => a + b, 0);
+  const top = Math.max(...s.w) || 1, y = (w) => H - w / top * H;
   const M = (w) => `${(w / 1e6).toFixed(1)}M`;
   const t = (ms) => { const d = new Date(ms); return `${d.getHours() % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")}${d.getHours() < 12 ? "am" : "pm"}`; };
   const pk = s.w.indexOf(Math.max(...s.w));
-  const tip = `last ${n * s.step / 3600e3}h: ${M(sum)} weighted tokens; peak ${M(s.w[pk])} at ${t(s.from + pk * s.step)}-${t(s.from + (pk + 1) * s.step)}; the dotted line is the even pace`;
+  const tip = `last ${n * s.step / 3600e3}h: ${M(sum)} weighted tokens; peak ${M(s.w[pk])} at ${t(s.from + pk * s.step)}-${t(s.from + (pk + 1) * s.step)}`;
   // 24 points in 18 px read as spikes: draw a 3-bucket moving average
   const sm = s.w.map((_, i) => { const a = s.w.slice(Math.max(0, i - 1), i + 2); return a.reduce((p, q) => p + q, 0) / a.length; });
   const pts = sm.map((w, i) => `${(i * W / (n - 1)).toFixed(2)},${y(w).toFixed(2)}`).join(" L");
-  return svg(`<path d="M0,${H} L${pts} L${W},${H} Z"/>${even ? `<line class="ref" x1="0" y1="${y(even).toFixed(2)}" x2="${W}" y2="${y(even).toFixed(2)}"/>` : ""}`, tip);
+  return svg(`<path d="M0,${H} L${pts} L${W},${H} Z"/>`, tip);
 }
 // "Thu 8pm", rounded to the hour
 function day(d) {
