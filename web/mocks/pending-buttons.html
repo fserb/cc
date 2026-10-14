@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pending bubble buttons</title>
+<style>
+  :root { --text: #212529; --muted: #6c757d; --line: #e9ecef; --accent: #0b7bd3; --on-accent: #fff; --red: #d63939; --bubble: #f3f4f6; --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 var(--font); color: var(--text); }
+  header { padding: 1rem 1.2rem 0; } header h1 { font-size: 1.2rem; margin: 0; } header p { color: var(--muted); font-size: 0.88rem; margin: 0.2rem 0 0; max-width: 50rem; }
+  main { display: flex; flex-direction: column; gap: 1.5rem; padding: 1.2rem; }
+  section { border: 1px solid var(--line); border-radius: 8px; padding: 0.8rem 1rem 1rem; }
+  h2 { font-size: 1rem; margin: 0 0 0.2rem; } h2 + p { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.8rem; }
+  .frames { display: flex; flex-wrap: wrap; gap: 1.2rem; align-items: flex-start; }
+  .frame { flex: 1 1 30rem; border: 1px dashed var(--line); border-radius: 6px; padding: 1.2rem 1rem; }
+  .frame.phone { flex: 0 0 360px; max-width: 100%; }
+  .frame > h3 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: -0.6rem 0 0.8rem; font-weight: 400; }
+  .msgs { display: flex; flex-direction: column; gap: 0.5rem; }
+  .m { align-self: flex-start; max-width: 78%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--bubble); overflow-wrap: anywhere; }
+  .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); white-space: pre-wrap; }
+  .m small { display: block; text-align: left; font-size: 0.6rem; opacity: 0.7; margin-top: 0.15rem; } .m.me small { text-align: right; }
+
+  /* a pending bubble: the bubble fades, its buttons do not */
+  .pb { align-self: flex-end; max-width: 78%; position: relative; display: flex; flex-direction: column; align-items: flex-end; }
+  .pb .m { max-width: 100%; }
+  .pb.pend .m, .pb.stale .m { opacity: 0.5; } .pb.fail .m { background: var(--red); opacity: 0.85; }
+  .pb button { all: unset; cursor: pointer; position: relative; display: grid; place-items: center; color: var(--text); }
+  .pb button svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2.4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .pb button, .pb .bar { z-index: 1; }  /* over the bubble, whose opacity paints it on top otherwise */
+  .pb button::after { content: ""; position: absolute; inset: -10px; }  /* a 44px finger target around a 24px button */
+
+  /* A: X on the top-left corner, send on the top-right, round badges over the corners */
+  .A .pb { margin-top: 0.8rem; }
+  .A .pb button { position: absolute; top: -10px; width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 1px solid var(--line); box-shadow: 0 1px 3px #0002; }
+  .A .pb .x { left: -10px; } .A .pb .go { right: -10px; color: var(--accent); }
+  .A .pb.fail .go { color: var(--red); }
+
+  /* B: both on the top-right, one pill over the corner */
+  .B .pb { margin-top: 1.1rem; }
+  .B .pb .bar { position: absolute; top: -13px; right: -6px; display: flex; background: #fff; border: 1px solid var(--line); border-radius: 999px; box-shadow: 0 1px 3px #0002; }
+  .B .pb button { width: 34px; height: 26px; } .B .pb button + button { border-left: 1px solid var(--line); }
+  .B .pb button::after { inset: -9px 0; }
+  .B .pb .go { color: var(--accent); } .B .pb.fail .go { color: var(--red); }
+
+  /* C: a small bar above the bubble, icon and word */
+  .C .pb .bar { display: flex; gap: 0.4rem; margin-bottom: 0.2rem; }
+  .C .pb button { display: flex; gap: 0.25rem; align-items: center; font-size: 0.75rem; color: var(--muted); padding: 0.15rem 0.55rem; border: 1px solid var(--line); border-radius: 999px; min-height: 28px; }
+  .C .pb button svg { width: 12px; height: 12px; }
+  .C .pb .go { color: var(--accent); border-color: var(--accent); } .C .pb.fail .go { color: var(--red); border-color: var(--red); }
+  .C .pb button::after { inset: -8px -2px; }
+
+  /* D: beside the bubble, on its left, stacked */
+  .D .pb { flex-direction: row; align-items: center; gap: 0.4rem; }
+  .D .pb .bar { display: flex; flex-direction: column; gap: 0.3rem; flex: none; }
+  .D .pb button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); background: #fff; }
+  .D .pb .go { color: var(--accent); border-color: var(--accent); } .D .pb.fail .go { color: var(--red); border-color: var(--red); }
+  .D .pb button::after { inset: -4px -7px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>pending bubble: cancel and send-now buttons</h1>
+  <p>Each variant shows a sent message, then a pending one ("sending…"), a stale one (no ack after 2 min) and a failed one. ✕ takes it back into the box; ↑ sends it now. The buttons stay at full opacity while the bubble fades. Every button has a 44px touch area, larger than what it draws. The "hold to take back" notes are gone.</p>
+</header>
+<main id="main"></main>
+<template id="chat">
+  <div class="msgs">
+    <div class="m">done, the tests pass. want me to commit?</div>
+    <div class="m me">yes, commit it<small>14:02</small></div>
+    <div class="pb pend">%BAR%<div class="m me">and then reload cc<small>sending…</small></div></div>
+    <div class="pb stale">%BAR%<div class="m me">also check the phone width when you are at it, the header wraps on the pixel<small>not seen yet</small></div></div>
+    <div class="pb fail">%BAR%<div class="m me">ok<small>not sent: cc-a waits on a dialog; answer it, then send</small></div></div>
+  </div>
+</template>
+<script type="module">
+const X = `<svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>`;
+const UP = `<svg viewBox="0 0 16 16"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"/></svg>`;
+const btns = (words) => `<button class="x" aria-label="cancel, take back into the box">${X}${words ? "cancel" : ""}</button><button class="go" aria-label="send now">${UP}${words ? "send now" : ""}</button>`;
+const variants = [
+  ["A", "X top-left, send top-right", "Round badges over the two top corners. Far apart, so a miss doesn't hit the other one.", btns(false)],
+  ["B", "Both top-right", "One pill over the top-right corner, ✕ then ↑. Compact, but the two sit 34px apart and the pill covers the end of the first line.", `<span class="bar">${btns(false)}</span>`],
+  ["C", "A bar above the bubble", "Labelled buttons on their own line above the bubble. Clearest, takes one more line per pending message.", `<span class="bar">${btns(true)}</span>`],
+  ["D", "Beside the bubble, on its left", "Stacked to the left of the bubble, nothing over the text. Uses width, which the phone has little of.", `<span class="bar">${btns(false)}</span>`],
+];
+const chat = document.querySelector("#chat").innerHTML;
+const ICONS = [
+  ["↑ up", "the usual chat send (Messages, Gemini, ChatGPT); reads as 'send'", UP],
+  ["→ right", "'go'; also reads as 'next' or 'forward'", `<svg viewBox="0 0 16 16"><path d="M3 8h10M8.5 3.5L13 8l-4.5 4.5"/></svg>`],
+  ["↵ return", "the Enter key: 'submit it'. Send now does stop the turn first, which Enter doesn't", `<svg viewBox="0 0 16 16"><path d="M13 3v5H4M7 4.5L3.5 8 7 11.5"/></svg>`],
+  ["⏭ skip ahead", "'now, ahead of what runs': closest to what it does (stops the turn, sends the queue)", `<svg viewBox="0 0 16 16"><path d="M2.5 3.5L8 8l-5.5 4.5zM8 3.5L13.5 8 8 12.5zM13.5 3.5v9"/></svg>`],
+  ["↓ down", "'drop it in' to the session; rarely used for send, can read as 'download'", `<svg viewBox="0 0 16 16"><path d="M8 3v10M3.5 8.5L8 13l4.5-4.5"/></svg>`],
+];
+const pill = (svg) => `<span class="bar"><button class="x" aria-label="cancel">${X}</button><button class="go" aria-label="send now">${svg}</button></span>`;
+const iconRows = `<section class="B"><h2>Icon for send now (in B)</h2><p>The same pill with each candidate.</p><div class="msgs">${ICONS.map(([n, d, svg]) =>
+  `<div class="pb pend" style="max-width:100%">${pill(svg)}<div class="m me">${n}: ${d}<small>sending…</small></div></div>`).join("")}</div></section>`;
+document.querySelector("#main").innerHTML = iconRows + variants.map(([k, t, d, bar]) => `<section class="${k}"><h2>${k}: ${t}</h2><p>${d}</p><div class="frames">
+  <div class="frame"><h3>desktop</h3>${chat.replaceAll("%BAR%", bar)}</div>
+  <div class="frame phone"><h3>phone, 360px</h3>${chat.replaceAll("%BAR%", bar)}</div></div></section>`).join("");
+</script>
+</body>
+</html>

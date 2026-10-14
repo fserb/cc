@@ -70,8 +70,16 @@
   .msgs { display: flex; flex-direction: column; gap: 0.5rem; }
   .m { align-self: flex-start; max-width: 78%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--bubble); overflow-wrap: anywhere; } .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); } .m.me small { text-align: right; } .m .q { display: block; font-size: 0.75rem; opacity: 0.75; }
   .m a { color: var(--accent); } .m.me a { color: inherit; }
-  .m.me.pend { opacity: 0.5; } .m.me { white-space: pre-wrap; } .m.me.stale { opacity: 0.5; cursor: pointer; } .m.me.fail { background: var(--red); opacity: 0.85; cursor: pointer; }
-  @media (pointer: coarse) { .m[data-pend] { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; } }  /* a long press takes it back, not selects */
+  .m.me { white-space: pre-wrap; }
+  /* a bubble not in the log yet, with ✕ (take back) and ↑ (send now) in a pill over its corner; the bubble fades, the pill does not */
+  .pb { align-self: flex-end; max-width: 78%; margin-top: 0.6rem; position: relative; display: flex; flex-direction: column; align-items: flex-end; }
+  .pb .m { max-width: 100%; } .pb.pend .m, .pb.stale .m { opacity: 0.5; } .pb.fail .m { background: var(--red); opacity: 0.85; }
+  .pb .bar { position: absolute; z-index: 1; top: -13px; right: -6px; display: flex; background: #fff; border: 1px solid var(--line); border-radius: 999px; box-shadow: 0 1px 3px #0002; }
+  .pb button { all: unset; cursor: pointer; position: relative; width: 34px; height: 26px; display: grid; place-items: center; color: var(--text); -webkit-tap-highlight-color: transparent; }
+  .pb button + button { border-left: 1px solid var(--line); } .pb .go { color: var(--accent); } .pb.fail .go { color: var(--red); }
+  .pb button::after { content: ""; position: absolute; inset: -9px 0; }  /* a 44px tall finger target */
+  .pb button svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2.4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  @media (hover: hover) { .pb button:hover { background: var(--hover); } .pb button:first-child:hover { border-radius: 999px 0 0 999px; } .pb button:last-child:hover { border-radius: 0 999px 999px 0; } }
   .m small { display: block; text-align: left; font-size: 0.6rem; opacity: 0.7; margin-top: 0.15rem; }
   .m p { margin: 0 0 0.4rem; } .m p:last-of-type { margin: 0; } .m ul { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; } .m code { font: 0.88em var(--mono); }
   .typing { align-self: flex-start; display: flex; gap: 4px; padding: 0.75rem 0.9rem; border-radius: 12px; background: var(--bubble); }
@@ -784,8 +792,8 @@ function chat(r) {
   // sent from here, not in the log yet: kept below everything until the log shows it
   for (const p of pending.filter((x) => x.pid === r.pid)) {
     const stale = !p.err && Date.now() - p.at > 120e3;
-    const note = p.err ? `not sent: ${esc(p.err)} · hold to take back` : stale ? "not seen yet · hold to take back" : esc(p.note ?? "sending…");
-    out.push(`<div class="m me ${p.err ? "fail" : stale ? "stale" : "pend"}" data-pend="${p.id}">${thumbs((p.imgs ?? []).map((x) => x.url))}${esc(clip(p.text))}<small>${note}</small></div>`);
+    const note = p.err ? `not sent: ${esc(p.err)}` : stale ? "not seen yet" : esc(p.note ?? "sending…");
+    out.push(`<div class="pb ${p.err ? "fail" : stale ? "stale" : "pend"}" data-pend="${p.id}"><span class="bar">${PEND_BAR}</span><div class="m me">${thumbs((p.imgs ?? []).map((x) => x.url))}${esc(clip(p.text))}<small>${note}</small></div></div>`);
   }
   // the state turns idle before the log has the reply: keep the dots up to 5 s until the reply shows, so it grows out of them
   const said = msgs.filter((m) => m.body && !m.me).length;
@@ -1167,8 +1175,8 @@ $("#say").onsubmit = async (e) => {
   if (!to) return alert("Not sent: nadya isn't running");
   const p = {id: ++pendId, pid: to.pid, q, text, imgs, at: Date.now()};
   // a dialog takes the paste and the Enter (which can pick its first option), so the text never reaches the session
-  // it stays a bubble, out of the box: double-tap sends it once the dialog is answered, hold takes it back
-  if (hasDialog(to)) p.err = `${to.name} waits on a dialog; answer it, then double-tap to send`;
+  // it stays a bubble, out of the box: ↑ sends it once the dialog is answered, ✕ takes it back
+  if (hasDialog(to)) p.err = `${to.name} waits on a dialog; answer it, then send with ↑`;
   pending.push(p); e.target.q.value = ""; setDraft(dk, ""); atts[dk] = []; drawAtts();
   fit();
   setTimeout(() => drawView(true), 121e3);
@@ -1182,8 +1190,8 @@ $("#say").onsubmit = async (e) => {
     drawView(true);
   }
 };
-// a bubble not in the log yet: double-tap/double-click sends it now (Claude Code's ctrl+x ctrl+s: stops the turn, sends
-// the queue); hold 500 ms takes it back into the box (cchost's unqueue with {text} takes that one message out and answers
+// a bubble not in the log yet: ↑ sends it now (Claude Code's ctrl+x ctrl+s: stops the turn, sends
+// the queue); ✕ takes it back into the box (cchost's unqueue with {text} takes that one message out and answers
 // {kept}; an older cchost drops the whole queue and answers without it, so the other bubbles are typed again)
 const say = $("#say").q;
 const queued = (p) => !p.err;
@@ -1217,28 +1225,14 @@ async function unsend(p) {
     for (const o of pending.filter((x) => x.pid === p.pid && queued(x))) { o.at = Date.now(); await post(`${CCX}/s/${o.pid}/type`, await typed(o)); }
   } catch (err) { p.err = `not taken back: ${err.message}`; pending.push(p); drawView(true); }
 }
-let hold = null, lastTap = null;
-document.addEventListener("pointerdown", (e) => {
-  const b = e.target.closest(".m[data-pend]"); if (!b || e.button) return;
-  const p = pending.find((x) => x.id === +b.dataset.pend); if (!p) return;
-  hold = {p, x: e.clientX, y: e.clientY, t: setTimeout(() => { hold = null; lastTap = null; unsend(p); }, 500)};
-});
-document.addEventListener("pointermove", (e) => { if (hold && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 10) { clearTimeout(hold.t); hold = null; } });
-document.addEventListener("pointercancel", () => { if (hold) { clearTimeout(hold.t); hold = null; } });
-document.addEventListener("pointerup", () => {
-  if (!hold) return;
-  clearTimeout(hold.t);
-  const {p} = hold; hold = null;
-  if (lastTap?.p === p && Date.now() - lastTap.at < 400) { lastTap = null; getSelection()?.removeAllRanges(); sendNow(p); return; }
-  lastTap = {p, at: Date.now()};
-});
-document.addEventListener("contextmenu", (e) => { if (e.target.closest(".m[data-pend]")) e.preventDefault(); });
+const PEND_BAR = `<button class="x" aria-label="cancel, take back into the box"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg></button><button class="go" aria-label="send now"><svg viewBox="0 0 16 16"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"/></svg></button>`;
 // a bubble's thumbnail opens full size; a click anywhere or Escape closes it
 document.addEventListener("click", async (e) => {
   const pic = e.target.closest(".m img.att");
   if (pic) { $("#pic").firstChild.src = pic.src; $("#pic").showModal(); return; }
   if (e.target.closest("#pic")) { $("#pic").close(); return; }
-  if (e.target.closest(".m[data-pend]")) return;
+  const pb = e.target.closest(".pb button");
+  if (pb) { const p = pending.find((x) => x.id === +pb.closest(".pb").dataset.pend); if (p) (pb.classList.contains("go") ? sendNow : unsend)(p); return; }
   if (e.target.closest("#qbtn")) { cur = "quota"; push(); open(); loadBurn(); return; }
   const qt = e.target.closest("[data-qt]"); if (qt) { qTab = qt.dataset.qt; drawView(true); return; }
   if (e.target.closest("#add") && !narrow()) { openAdd(); return; }
