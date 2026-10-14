@@ -836,7 +836,7 @@ function todoRows(ts) {
 }
 function todoView() {
   const due = dueTodos(true);
-  return `<article><h1>plan</h1>${due.map((t) => `<div class="need"><b>${esc(t.text)}</b><p>due ${esc(t.date)} ${esc(t.time ?? "")}</p>${sent.has("todo:" + t.full) ? `<p class="done">✓ ${esc(sent.get("todo:" + t.full))}</p>` : `<div class="opts" data-todo="${esc(t.full)}" data-file="${t.file}" data-text="${esc(t.text)}" data-due="${esc(`${t.date} ${t.time ?? ""}`.trim())}"><button>done</button><button>snooze 1 h</button><button>send to nadya</button></div>`}</div>`).join("")}
+  return `<article><h1>plan</h1>${due.map((t) => `<div class="need"><b>${esc(t.text)}</b><p>due ${esc(t.date)} ${esc(t.time ?? "")}</p>${sent.has("todo:" + t.full) ? `<p class="done">✓ ${esc(sent.get("todo:" + t.full))}</p>` : `<div class="opts" data-todo="${esc(t.full)}" data-file="${t.file}" data-due="${esc(`${t.date} ${t.time ?? ""}`.trim())}"><button>done</button><button>snooze 1 h</button><button>send to nadya</button></div>`}</div>`).join("")}
     ${S.todo.length ? `<h2 class="h">todo</h2><ul class="rows">${todoRows(S.todo)}</ul>` : ""}
     <h2 class="h">ideas</h2><ul class="rows">${S.ideas.map((x) => `<li class="go" data-go="idea/${esc(x.file)}"><span>${esc(x.title)}</span></li>`).join("")}</ul>
     <details data-k="plan/reminders" ${qOpen.has("plan/reminders") ? "open" : ""}><summary class="h">reminders (${S.reminders.length})</summary><ul class="rows">${todoRows(S.reminders)}</ul></details></article>`;
@@ -1259,7 +1259,7 @@ document.addEventListener("click", async (e) => {
   const box = b.parentElement; [...box.children].forEach((x) => x.disabled = true);
   try {
     if (box.dataset.pick) await post(`${CCX}/s/${box.dataset.pick}/pick`, {i: +b.dataset.i, labels: JSON.parse(box.dataset.labels)});
-    else if (box.dataset.todo && b.textContent === "send to nadya") { await toNadya(`[cc plan] do this reminder: ${box.dataset.text.slice(0, 200)} (due ${box.dataset.due})`); sent.set("todo:" + box.dataset.todo, "sent to nadya"); }
+    else if (box.dataset.todo && b.textContent === "send to nadya") { setTimeout(loadTodo, 60e3); await toNadya(`[cc plan, ${box.dataset.file}] do this reminder, then mark it done: ${box.dataset.todo.slice(0, 200)} (due ${box.dataset.due})`); sent.set("todo:" + box.dataset.todo, "sent to nadya"); }
     else if (box.dataset.todo) { setTimeout(loadTodo, 60e3); await toNadya(`[cc, ${box.dataset.file}] ${b.textContent === "done" ? "mark done" : "snooze 1 h"}: ${box.dataset.todo.slice(0, 200)}`); sent.set("todo:" + box.dataset.todo, b.textContent === "done" ? "sent to nadya: done" : "sent to nadya: snooze 1 h"); }
     // a multi-select toggle stays in the dialog: the next screen read shows the box checked
     if (!box.classList.contains("multi")) box.outerHTML = box.dataset.pick ? `<p class="done">✓ ${esc(JSON.parse(box.dataset.labels)[b.dataset.i])}</p>` : "";
