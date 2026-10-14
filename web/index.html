@@ -517,8 +517,7 @@ function items() {
   it.push({id: "blog", d: fresh ? "green" : "", unread: fresh, title: "blog", sub: top?.title ?? "", t: top?.time ? `${fresh ? `${fresh} new · ` : ""}${ago(new Date(top.time.replace(" ", "T")) / 1000)}` : ""});
   const due = dueTodos();
   it.push({id: "plan", d: due.length ? "blue" : "", hot: due.length, title: "plan", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : "", t: ""});
-  const todo = projects().filter((x) => x.state === "todo").length;
-  it.push({id: "projects", d: "", title: "projects", sub: todo ? `${todo} todo` : "", t: ""});
+  it.push({id: "projects", d: "", title: "projects", sub: "", t: ""});
   const pk = S.packages, desk = pk?.desk.count ?? 0, onWay = pk?.packages.filter((x) => x.number && !x.unknown && !x.delivered).length ?? 0;
   // shown only while something is active: a package event in the last 24 h or a package at the desk (user, 2026-10-12)
   const pkActive = desk || pk?.packages.some((x) => Date.now() - Date.parse(x.last) < 86400e3);
