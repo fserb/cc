@@ -16,8 +16,8 @@ export const USAGE = `${HOME}/.claude/ccx-usage.json`;
 export const HISTORY = `${HOME}/.claude/ccx-usage.log`;
 const WEEK = 7 * 24 * 3600_000;
 const SETTLE = 3600_000;    // under an hour into a week the average rate is noise
-const RECENT = 2 * 3600_000; // the rate is what the last 2h added
-export const LONGER = 6 * 3600_000; // the second rate, over 6h (usageLine, api/usage pace6)
+const RECENT = 1 * 3600_000; // the rate is what the last 1h added
+export const LONGER = 3 * 3600_000; // the second rate, over 3h (usageLine, api/usage paceLong)
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 // {used, resetsAt, at, history} with every time in ms, `at` being when the file was
@@ -144,15 +144,15 @@ export function byDay(u, now = Date.now()) {
 }
 
 // Where the week stands at `now`: `even` is where an even spread over the 7 days would be,
-// `rate` what the last `window` (2h) added, in % per day, `ratio` that over what is left per day to
+// `rate` what the last `window` (1h) added, in % per day, `ratio` that over what is left per day to
 // the reset, `end` where that rate lands at the reset, and `out` the time it reaches 100% if that is before the reset. The week is taken to
 // start at 0, 7 days before `resets_at`. Past the reset the numbers belong to a week that
 // is over, so null.
 //
 // `u` itself is taken at `now`, not at when the file was written: no instance writing
 // means no instance calling, so the usage has not moved since. Use from claude.ai or another machine counts against the same limit and
-// is not seen until something here makes a call. With no history, or under 2h of it, the
-// 2h falls between the week's start and the first sample, so the rate is the average.
+// is not seen until something here makes a call. With no history, or under 1h of it, the
+// 1h falls between the week's start and the first sample, so the rate is the average.
 export function pace(u, now = Date.now(), window = RECENT) {
   if (!u || now >= u.resetsAt) return null;
   const start = u.resetsAt - WEEK, elapsed = Math.max(0, now - start);
@@ -176,15 +176,15 @@ function when(ms) {
   return `${DAYS[d.getDay()]} ${h % 12 || 12}${h < 12 ? "am" : "pm"}`;
 }
 
-// What a UI writes, `usage <used> (<2h ratio>x 2h, <6h ratio>x 6h pace - out <when>)`, the
-// `- out` part only when the 2h rate runs out before the reset, as {text, color}; 1.0x spends exactly what is left by the reset, or null with nothing to say. Orange when the rate runs
+// What a UI writes, `usage <used> (<1h ratio>x 1h, <3h ratio>x 3h pace - out <when>)`, the
+// `- out` part only when the 1h rate runs out before the reset, as {text, color}; 1.0x spends exactly what is left by the reset, or null with nothing to say. Orange when the rate runs
 // out before the reset; gold is kept for `wait`.
 export function usageLine(u, now = Date.now()) {
   const p = pace(u, now);
   if (!p) return null;
-  const p6 = pace(u, now, LONGER);
+  const pl = pace(u, now, LONGER);
   const pct = (n) => `${Math.round(n)}%`;
-  const parts = [p.ratio === null ? "" : `${p.ratio.toFixed(1)}x 2h, ${p6.ratio.toFixed(1)}x 6h pace`,
+  const parts = [p.ratio === null ? "" : `${p.ratio.toFixed(1)}x 1h, ${pl.ratio.toFixed(1)}x 3h pace`,
     p.out ? `out ${when(p.out)}` : ""].filter(Boolean);
   const rest = parts.length ? ` (${parts.join(" - ")})` : "";
   return {text: `usage ${pct(p.used)}${rest}`,

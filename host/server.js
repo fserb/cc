@@ -284,7 +284,7 @@ export class Server {
     if (url.searchParams.get("local")) return readUsage();
     return await this.cached("usage", async () => {
       const u = await mergedUsage();
-      return u && {...u, pace: pace(u), pace6: pace(u, Date.now(), LONGER), days: byDay(u)};
+      return u && {...u, pace: pace(u), paceLong: pace(u, Date.now(), LONGER), days: byDay(u)};
     });
   }
 
