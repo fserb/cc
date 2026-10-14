@@ -396,12 +396,18 @@ async function loadPath(path) {
   if (cur === `files/${path}` || (cur === "files" && path === "")) drawView(true);
 }
 let listing = null;
+// Claude Code deletes its session record on exit before the process is gone; cchost then lists the pid off ps
+// and the pane, with no name but its goal still kept. A pid seen with a record and now without one is closing
+const recorded = new Set();
 function listen() {
   listing?.close();
   const es = listing = new EventSource(`${CCX}/events?all=1`);
   es.addEventListener("list", (e) => {
     const d = JSON.parse(e.data), had = isPid(cur) && S.rows.some((r) => r.pid === cur);
-    S.rows = d.rows ?? []; S.offline = d.offline;
+    const rows = d.rows ?? [];
+    for (const r of rows) if (r.status) recorded.add(r.pid);
+    for (const p of recorded) if (!rows.some((r) => r.pid === p)) recorded.delete(p);
+    S.rows = rows.filter((r) => r.status || !recorded.has(r.pid)); S.offline = d.offline;
     // the open session ended (its host still answers): go to nadya, replacing the hash
     const up = S.up = d.up ?? [];
     if (had && !S.rows.some((r) => r.pid === cur) && up.includes(cur.split(".")[0])) { cur = "nadya"; if (history.state?.cc) history.replaceState({cc: cur}, ""); open(); return; }
