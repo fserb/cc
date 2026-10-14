@@ -444,14 +444,15 @@ function pace() {
   return {x: p.ratio, x6: S.usage.pace6?.ratio ?? null, out: p.out ? new Date(p.out) : null};
 }
 // the header's graph: usage, weighted tokens per 5 min over the last 2h, every host (api/burn/series), scaled to
-// the window's peak, at least 1M per 5 min; no pace in it (user, Oct 14th). Always drawn, empty without data, so the header keeps its width
+// the window's peak, at least 1.3M per 5 min (the 5-hour session limit's rate); no pace in it (user, Oct 14th). Always drawn, empty without data, so the header keeps its width
 function spark() {
   const s = S.series, n = s?.w.length ?? 24, W = 3 * n, H = 16;
   const svg = (body, label) => `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" ${label ? `role="img" aria-label="${esc(label)}"><title>${esc(label)}</title>` : `aria-hidden="true">`}${body}<line x1="0" y1="${H - 0.5}" x2="${W}" y2="${H - 0.5}"/></svg>`;
   if (!s) return svg("");
   const sum = s.w.reduce((a, b) => a + b, 0);
-  // the top is at least 1M weighted tokens per 5 min (about three busy agents), so a quiet window stays low
-  const top = Math.max(1e6, ...s.w), y = (w) => H - w / top * H;
+  // the top is at least 1.3M weighted tokens per 5 min: the rate that uses up the 5-hour session limit in 5 hours
+  // (estimated Oct 14th: 3.9M = 5% of a session, so ~78M per session; loose), so a quiet window stays low
+  const top = Math.max(1.3e6, ...s.w), y = (w) => H - w / top * H;
   const M = (w) => `${(w / 1e6).toFixed(1)}M`;
   const t = (ms) => { const d = new Date(ms); return `${d.getHours() % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")}${d.getHours() < 12 ? "am" : "pm"}`; };
   const pk = s.w.indexOf(Math.max(...s.w));
