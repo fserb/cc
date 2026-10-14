@@ -165,6 +165,7 @@
   #new button:disabled { opacity: 0.5; cursor: default; }
   #view iframe { display: block; width: 100%; height: 100%; border: 0; }
   #view:has(iframe) { overflow: hidden; }
+  .doc.page { max-width: none; height: 100%; display: flex; flex-direction: column; padding: 0; } .doc.page .crumbs { margin: 0; padding: 0.5rem 1rem; border-bottom: 1px solid var(--line); } .doc.page iframe { flex: 1; height: auto; background: #fff; }  /* an html file: the page itself, under its crumbs */
   @media (max-width: 760px) {
     body > header { gap: 0.5rem; padding: 0 0.6rem; } #qbtn .bar { width: 56px; } #qbtn .spark { width: 26px; }
     #home { display: block; position: relative; }
@@ -374,6 +375,7 @@ async function loadPath(path) {
       const list = await json(url, {headers: {accept: "application/json"}, cache: "no-cache"});
       got = {list: list.filter((x) => !x.name.startsWith("."))};  // boxer hides dotfiles: caddy lists them, they 404
     } else if (IMG.test(path)) got = {img: url};
+    else if (/\.html?$/i.test(path)) got = {page: url};
     else {
       const r = await fetch(url, {cache: "no-cache"});
       if (!r.ok) throw new Error(`${r.status}`);
@@ -883,6 +885,7 @@ function filesView(path) {
     const ls = [...f.list].sort((a, b) => b.is_dir - a.is_dir || a.name.localeCompare(b.name));
     return `<article class="doc">${head}<ul class="rows fl">${ls.map((x) => `<li class="go${x.is_dir ? " dir" : ""}" data-go="files/${esc(path + x.name)}"><span>${esc(x.name)}</span><small>${x.is_dir ? "" : `<i class="sz">${fsize(x.size)} · </i>`}${changed(x.mod_time)}</small></li>`).join("") || "<li><span class=meta>empty</span></li>"}</ul></article>`;
   }
+  if (f.page) return `<article class="doc page">${head}<iframe src="${esc(f.page)}" title="${esc(parts.at(-1))}" onload="this.contentDocument?.addEventListener('click', (e) => window.filesLink(e))"></iframe></article>`;
   if (f.img) return `<article class="doc">${head}<img src="${esc(f.img)}" alt="${esc(parts.at(-1))}"></article>`;
   if (f.text == null) return `<article class="doc">${head}<p><a href="${esc(raw)}" target="_blank" rel="noopener" data-out>open ${esc(parts.at(-1))}</a> <small class="meta">${f.size ? fsize(f.size) : ""}</small></p></article>`;
   if (/\.md$/i.test(path)) return `<article class="doc">${head}${md(f.text, {base: parts.slice(0, -1).map((x) => `${x}/`).join("")})}</article>`;
@@ -1277,11 +1280,12 @@ document.addEventListener("submit", async (e) => {
 });
 // a plain click on a link into ~/nadya (https://nadya.gum.ts.net/nadya/..., http://nadya/nadya/..., /nadya/...) opens it
 // in the files tab; ctrl/cmd/shift/middle-click still open a tab, and data-out links (the files tab's "open ↗") always do
-window.filesLink = filesLink;  // for the blog iframe's onload
+window.filesLink = filesLink;  // for the blog's and an html file's iframe onload
 function filesLink(e) {
   const a = e.target.closest?.("a[href]");
   if (!a || a.dataset.out != null || e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return false;
   const u = new URL(a.href, location.href);
+  if (u.hash && u.pathname === a.ownerDocument.location.pathname) return false;  // an anchor inside the page it's on
   if (![location.host, "nadya", "nadya.gum.ts.net"].includes(u.host) || !/^\/nadya(\/|$)/.test(u.pathname)) return false;
   e.preventDefault();
   const path = decodeURIComponent(u.pathname.replace(/^\/nadya\/?/, ""));
