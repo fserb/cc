@@ -30,6 +30,7 @@
   #qbtn .bar s { position: absolute; top: calc(100% + 1px); width: 0; height: 0; margin-left: -4px; border: 4px solid transparent; border-top: 0; border-bottom: 5px solid var(--qc); }
   #qbtn b { color: var(--text); font-weight: 600; min-width: 4ch; text-align: right; }
   #qbtn.out b, #qbtn.out em { color: var(--red); }
+  #qbtn .spark { width: 72px; height: 16px; flex: none; } #qbtn .spark rect { fill: var(--qc); } #qbtn .spark line { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; } #qbtn .spark .ref { stroke: var(--muted); stroke-dasharray: 2 2; opacity: 0.6; }
   #qbtn em { font-style: normal; } #qbtn .tr { display: inline-block; width: 1em; text-align: center; }
   #home { display: grid; grid-template-columns: 320px minmax(0, 1fr); min-height: 0; }
   #left { border-right: 1px solid var(--line); overflow: auto; padding: 0; display: flex; flex-direction: column; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
@@ -156,7 +157,7 @@
   #view iframe { display: block; width: 100%; height: 100%; border: 0; }
   #view:has(iframe) { overflow: hidden; }
   @media (max-width: 760px) {
-    body > header { gap: 0.5rem; padding: 0 0.6rem; } #qbtn .bar { width: 56px; }
+    body > header { gap: 0.5rem; padding: 0 0.6rem; } #qbtn .bar { width: 56px; } #qbtn .spark { width: 48px; }
     #home { display: block; position: relative; }
     #left, #center { position: absolute; inset: 0; } #center { display: none; }
     body.view #center { display: grid; } body.view #left { display: none; }
@@ -302,7 +303,9 @@ function nadyaRow() {
 }
 
 // ---------- data
-async function loadUsage() { S.usage = (await json(`${CCX}/usage`).catch(() => null))?.usage ?? S.usage; draw(); if (cur === "quota") loadBurn(); }
+async function loadUsage() {
+  const [u, s] = await Promise.all([json(`${CCX}/usage`).catch(() => null), json(`${CCX}/burn/series`).catch(() => null)]);
+  S.usage = u?.usage ?? S.usage; S.series = s?.w ? s : S.series; draw(); if (cur === "quota") loadBurn(); }
 async function loadBurn() {
   const [b, d] = await Promise.all([`${CCX}/burn`, `${CCX}/burn?hours=24`].map((u) => json(u).catch((e) => ({error: e.message}))));
   if (!b.error || !S.burn) S.burn = b;
@@ -440,6 +443,23 @@ function pace() {
   const p = S.usage?.pace; if (p?.ratio == null) return null;
   return {x: p.ratio, x6: S.usage.pace6?.ratio ?? null, out: p.out ? new Date(p.out) : null};
 }
+// the header's graph: weighted tokens per 5 min over the last 2h, every host (api/burn/series). The dotted line is
+// the even pace, set so the window's average sits at the header's 2h pace (x); the burn store's own reference
+// (ref, PER_PCT per %) only when the % has not moved. The top is twice the even pace or the peak, so a calm hour
+// stays low. Always drawn, empty without data, so the header keeps its width
+function spark() {
+  const s = S.series, n = s?.w.length ?? 24, W = 3 * n, H = 16;
+  const svg = (body, label) => `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" shape-rendering="crispEdges" ${label ? `role="img" aria-label="${esc(label)}"><title>${esc(label)}</title>` : `aria-hidden="true">`}${body}<line x1="0" y1="${H - 0.5}" x2="${W}" y2="${H - 0.5}"/></svg>`;
+  if (!s) return svg("");
+  const sum = s.w.reduce((a, b) => a + b, 0), x = pace()?.x;
+  const even = x >= 0.05 && sum ? sum / n / x : s.ref ?? 0;
+  const top = Math.max(2 * even, ...s.w) || 1, y = (w) => H - w / top * H;
+  const M = (w) => `${(w / 1e6).toFixed(1)}M`;
+  const t = (ms) => { const d = new Date(ms); return `${d.getHours() % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")}${d.getHours() < 12 ? "am" : "pm"}`; };
+  const pk = s.w.indexOf(Math.max(...s.w));
+  const tip = `last ${n * s.step / 3600e3}h: ${M(sum)} weighted tokens; peak ${M(s.w[pk])} at ${t(s.from + pk * s.step)}-${t(s.from + (pk + 1) * s.step)}; the dotted line is the even pace`;
+  return svg(`${s.w.map((w, i) => w ? `<rect x="${3 * i}" y="${y(w).toFixed(2)}" width="2" height="${(H - y(w)).toFixed(2)}"/>` : "").join("")}${even ? `<line class="ref" x1="0" y1="${y(even).toFixed(2)}" x2="${W}" y2="${y(even).toFixed(2)}"/>` : ""}`, tip);
+}
 // "Thu 8pm", rounded to the hour
 function day(d) {
   const h = new Date(Math.round(d / 3600e3) * 3600e3);
@@ -519,7 +539,7 @@ function draw() {
   // the bar: % used; the tick: where the even pace would be by now
   const even = u ? Math.min(100, Math.max(0, (Math.min(Date.now(), u.resetsAt) - (u.resetsAt - 7 * 86400e3)) / (7 * 86400e3) * 100)) : 0;
   const tip = u ? `quota ${u.used}% used${p ? `, ${paces(p)} the pace that lasts to the reset` : ""}${p?.out ? `, runs out ${day(p.out)}` : ""}; reset ${day(new Date(u.resetsAt))}` : "no usage data";
-  $("#sum").innerHTML = `<button id="qbtn" class="${p?.out ? "out" : p?.x > 1 ? "hi" : ""}" title="${esc(tip)}" aria-label="${esc(tip)}">${p?.out ? `<em>out ${day(p.out)}</em>` : ""}<span class="bar"><i style="width:${u?.used ?? 0}%"></i>${u ? `<s style="left:${even.toFixed(1)}%"></s>` : ""}</span><b>${u ? u.used + "%" : "?"}</b>${p ? `<em>${p.x.toFixed(1)}x<span class="tr">${trend(p)}</span></em>` : ""}</button>`;
+  $("#sum").innerHTML = `<button id="qbtn" class="${p?.out ? "out" : p?.x > 1 ? "hi" : ""}" title="${esc(tip)}" aria-label="${esc(tip)}">${p?.out ? `<em>out ${day(p.out)}</em>` : ""}<span class="bar"><i style="width:${u?.used ?? 0}%"></i>${u ? `<s style="left:${even.toFixed(1)}%"></s>` : ""}</span><b>${u ? u.used + "%" : "?"}</b>${spark()}${p ? `<em>${p.x.toFixed(1)}x<span class="tr">${trend(p)}</span></em>` : ""}</button>`;
   if (["nadya", "plan", "projects", "quota"].includes(cur) || isPid(cur) || isDoc(cur)) drawView(true);
 }
 

@@ -24,8 +24,8 @@ import {unqueue} from "./queue.js";
 import {close, expandDir, homeRel, paneIn, spawn} from "./spawn.js";
 import {sendPeer} from "./peer.js";
 import {byDay, LONGER, pace, readUsage} from "./usage.js";
-import {localRows} from "./burn.js";
-import {base, burnReport, call, HOSTS, mergedUsage, SELF} from "./remote.js";
+import {localRows, series} from "./burn.js";
+import {base, burnReport, burnSeries, call, HOSTS, mergedUsage, SELF} from "./remote.js";
 import {STATES} from "./subs.js";
 import {chatLog, mergeChats, PAIR_WINDOW, sameMessage, watchChat} from "./chat.js";
 import {Online} from "./online.js";
@@ -726,6 +726,13 @@ export class Server {
       const n = (k) => Number(url.searchParams.get(k));
       if (!(n("from") < n("to"))) return json({error: "from < to, in ms"}, 400);
       return json({rows: await localRows(n("from"), n("to"))});
+    }
+    if (get && path === "/api/burn/series") {
+      // n steps of `step` ms, 24 x 5 min by default; `local=1` this host's alone
+      const n = Math.min(288, Number(url.searchParams.get("n")) || 24);
+      const step = Math.max(60_000, Number(url.searchParams.get("step")) || 300_000);
+      if (url.searchParams.get("local")) return json(await series(n, step, Number(url.searchParams.get("at")) || Date.now()));
+      return json(await this.cached(`series ${n} ${step}`, () => burnSeries(n, step)));
     }
     if (get && path === "/api/burn") return json(await this.burn(Number(url.searchParams.get("hours")) || 0));
     if (post && path === "/api/relay") {

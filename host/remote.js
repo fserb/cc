@@ -2,7 +2,7 @@
 // usage and burn, and the list stream it follows for the relay and api/list?all=1.
 
 import {readUsage, usedAt, usedNow, weekSamples} from "./usage.js";
-import {breakdown, group} from "./burn.js";
+import {breakdown, group, PER_PCT, series} from "./burn.js";
 
 export const PORT = 7681;
 export const SELF = Deno.env.get("CCX_SELF") ?? Deno.hostname().split(".")[0];
@@ -88,6 +88,24 @@ export async function burnReport(hours, local, now = Date.now()) {
   const s = weekSamples(u, now);
   const used = from >= start ? usedAt(s, now) - usedAt(s, from) : null;
   return {at: now, from, to: now, hours, ...group(rows, used), down};
+}
+
+// What /api/burn/series answers: every host's weighted tokens per `step` over the last `n`
+// steps, summed, and `ref`, the tokens a step would take at the even pace (the rest of the
+// week spread evenly to the reset, PER_PCT per %), which is 1.0x on the header
+export async function burnSeries(n, step, now = Date.now()) {
+  const q = `/api/burn/series?local=1&n=${n}&step=${step}&at=${now}`;
+  const [mine, rest, u] = await Promise.all([series(n, step, now),
+    Promise.all(others().map((h) => call(h, q, undefined, 10_000))), mergedUsage()]);
+  const down = [];
+  others().forEach((h, i) => {
+    const [body, err] = rest[i];
+    if (err || body.from !== mine.from) return down.push([h, err ?? "buckets differ"]);
+    body.w.forEach((w, j) => mine.w[j] += w);
+  });
+  const left = u && u.resetsAt > now ? u.resetsAt - now : 0;
+  const ref = left ? Math.round(Math.max(0, 100 - u.used) * PER_PCT / left * step) : null;
+  return {...mine, ref, down};
 }
 
 // Follow `host`'s api/events: onList(rows, body) on each list, onList(null, null, why)

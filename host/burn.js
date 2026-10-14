@@ -189,8 +189,9 @@ export function projectOf(cwd, name) {
 }
 
 // [from, to) of this host's transcripts as rows {h, p, n, w, out, cw, cr, in, m}: h the
-// hour (ms) a message's timestamp falls in, p the project, n the session's name
-export async function scan(from, to) {
+// hour (ms) a message's timestamp falls in (the `step` one, if given), p the project, n
+// the session's name
+export async function scan(from, to, step = HOUR) {
   const live = liveNames(), seen = new Set(), sessions = new Map();
   for await (const path of walk(ROOT)) {
     let st;
@@ -238,7 +239,7 @@ export async function scan(from, to) {
     const n = live.get(s.id) ?? s.title ?? s.agent ?? s.id.slice(0, 8);
     const p = projectOf(s.cwd, n);
     for (const { u, model, at } of s.msgs) {
-      const h = Math.floor(at / HOUR) * HOUR, key = `${h}\t${p}\t${n}`;
+      const h = Math.floor(at / step) * step, key = `${h}\t${p}\t${n}`;
       if (!rows.has(key)) {
         rows.set(key, { h, p, n, w: 0, out: 0, cw: 0, cr: 0, in: 0, m: 0 });
       }
@@ -349,6 +350,14 @@ export async function localRows(
     return out.concat(live.rows);
   }
   return out.concat(await scan(b, to));
+}
+
+// This host's weighted tokens per `step` ms, `n` buckets ending with the one in progress,
+// scanned from the transcripts each time (2h on nadya, 255 logs: ~60ms)
+export async function series(n, step, now = Date.now()) {
+  const from = (Math.floor(now / step) - n + 1) * step, w = Array(n).fill(0);
+  for (const r of await scan(from, now, step)) w[(r.h - from) / step] += r.w;
+  return { from, step, w };
 }
 
 // ---------- grouping
