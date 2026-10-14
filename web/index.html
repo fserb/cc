@@ -83,7 +83,7 @@
   .pb button + button { border-left: 1px solid var(--line); } .pb .go { color: var(--accent); } .pb.fail .go { color: var(--red); }
   .pb button::after { content: ""; position: absolute; inset: -9px 0; }  /* a 44px tall finger target */
   .pb button svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2.4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
-  @media (hover: hover) { .pb:not(:hover, :focus-within) .bar { visibility: hidden; } }  /* on desktop only while the pointer is on it; the phone always shows it */
+  @media (hover: hover) { .pb:not(:hover, :focus-within) .bar, body.still .pb:not(:focus-within) .bar { visibility: hidden; } }  /* on desktop only while the pointer is on it; the phone always shows it. Not after a send until the pointer moves: the new bubble can land under a still pointer (user) */
   @media (hover: hover) { .pb button:hover { background: var(--hover); } .pb button:first-child:hover { border-radius: 999px 0 0 999px; } .pb button:last-child:hover { border-radius: 0 999px 999px 0; } }
   .m small { display: block; text-align: left; font-size: 0.6rem; opacity: 0.7; margin-top: 0.15rem; }
   .m p { margin: 0 0 0.4rem; } .m p:last-of-type { margin: 0; } .m ul { margin: 0.2rem 0 0.4rem; padding-left: 1.2rem; } .m code { font: 0.88em var(--mono); }
@@ -602,6 +602,7 @@ const replyAts = (v) => [...v.querySelectorAll(".m:not(.me)[data-at]")].map((m) 
 // a redraw while a finger or button is down on the view would take the link or the selection from under it: wait for the release
 let held = false, missed = false;
 $("#view").addEventListener("pointerdown", () => { held = true; });
+document.addEventListener("pointermove", (e) => { if (e.movementX || e.movementY) document.body.classList.remove("still"); });
 function release() { held = false; if (missed) { missed = false; setTimeout(() => drawView(true)); } }
 addEventListener("pointerup", release);
 addEventListener("pointercancel", release);
@@ -1178,6 +1179,7 @@ $("#say").q.onkeydown = (e) => {
 };
 $("#say").onsubmit = async (e) => {
   e.preventDefault();
+  document.body.classList.add("still");
   const q = e.target.q.value.trim(), dk = draftKey, imgs = attsOf(dk); if (!q && !imgs.length) return;
   const r = isPid(cur) ? S.rows.find((x) => x.pid === cur) : null;
   const c = context(), text = r || !c ? q : `[cc, ${c}] ${q}`, to = r ?? nadyaRow();
