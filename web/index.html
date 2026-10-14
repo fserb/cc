@@ -813,7 +813,7 @@ function todoRows(ts) {
 function todoView() {
   const due = dueTodos();
   return `<article><h1>plan</h1>${due.map((t) => `<div class="need"><b>${esc(t.text)}</b><p>due ${esc(t.date)} ${esc(t.time ?? "")}</p>${sent.has("todo:" + t.full) ? `<p class="done">✓ ${esc(sent.get("todo:" + t.full))}</p>` : `<div class="opts" data-todo="${esc(t.full)}" data-file="${t.file}"><button>done</button><button>snooze 1 h</button></div>`}</div>`).join("")}
-    <h2 class="h">todo</h2><ul class="rows">${todoRows(S.todo)}</ul>
+    ${S.todo.length ? `<h2 class="h">todo</h2><ul class="rows">${todoRows(S.todo)}</ul>` : ""}
     <h2 class="h">ideas</h2><ul class="rows">${S.ideas.map((x) => `<li class="go" data-go="idea/${esc(x.file)}"><span>${esc(x.title)}</span></li>`).join("")}</ul>
     <details data-k="plan/reminders" ${qOpen.has("plan/reminders") ? "open" : ""}><summary class="h">reminders (${S.reminders.length})</summary><ul class="rows">${todoRows(S.reminders)}</ul></details></article>`;
 }
