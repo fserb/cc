@@ -839,8 +839,8 @@ const answers = (t) => [...(t ?? "").matchAll(/"([^]*?)"="([^]*?)(?:"(?=, "|\. Y
 // chat or terminal (the pane text); each session opens in chat
 let term = false;
 const metaLine = (r) => `<p class="meta">${esc(r.pid)} · ${esc(r.path)} · ${r.state} ${ago(r.since)}</p>`;
-// the bar's colour for who typed a prompt in: the watchdog orange, ccx teal, a session slate
-const BY_COLOR = {watchdog: "#e8590c", ccx: "#0c8599", "": "#5c6b7e"};
+// the bar's colour for who typed a prompt in: the watchdog orange, ccx teal, nadya the red of its star, a session slate
+const BY_COLOR = {watchdog: "#e8590c", ccx: "#0c8599", nadya: "#d81212", "": "#5c6b7e"};
 function chat(r) {
   if (term) return `<pre class="term">${esc(S.screens[r.pid]?.text ?? "loading…")}</pre>`;
   const log = stream?.pid === r.pid ? S.log : [];
