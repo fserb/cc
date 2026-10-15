@@ -25,7 +25,6 @@
   .sum { margin-left: auto; color: var(--muted); font-size: 0.82rem; white-space: nowrap; }
   #qbtn { all: unset; cursor: pointer; display: flex; align-items: center; gap: 0.55rem; padding: 0.3rem 0.6rem; border-radius: 999px; font-variant-numeric: tabular-nums; } #qbtn:hover { background: var(--hover); }
   #qbtn .bar { position: relative; width: 84px; height: 6px; border-radius: 3px; background: var(--line); }
-  #qbtn { --qc: var(--accent); } #qbtn.hi { --qc: var(--yel); } #qbtn.out { --qc: var(--red); }
   #qbtn .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--qc); }
   #qbtn .bar s { position: absolute; top: calc(100% + 1px); width: 0; height: 0; margin-left: -4px; border: 4px solid transparent; border-top: 0; border-bottom: 5px solid var(--qc); }
   #qbtn b { color: var(--text); font-weight: 600; min-width: 4ch; text-align: right; }
@@ -493,6 +492,8 @@ function spark() {
   const pts = sm.map((w, i) => `${(i * W / (n - 1)).toFixed(2)},${y(w).toFixed(2)}`).join(" L");
   return svg(`<path d="M0,${H} L${pts} L${W},${H} Z"/>`, tip);
 }
+// the quota's colour, the header's and the quota view's alike: red once it runs out, yellow over the pace, else the accent
+function qcolor(p) { return p?.out ? "var(--red)" : p?.x > 1 ? "var(--yel)" : "var(--accent)"; }
 // "Thu 8pm", rounded to the hour
 function day(d) {
   const h = new Date(Math.round(d / 3600e3) * 3600e3);
@@ -610,7 +611,7 @@ function draw() {
   // the bar: % used; the tick: where the even pace would be by now
   const even = u ? Math.min(100, Math.max(0, (Math.min(Date.now(), u.resetsAt) - (u.resetsAt - 7 * 86400e3)) / (7 * 86400e3) * 100)) : 0;
   const tip = u ? `quota ${u.used}% used${p ? `, ${paces(p)} the pace that lasts to the reset` : ""}${p?.out ? `, runs out ${day(p.out)}` : ""}; reset ${day(new Date(u.resetsAt))}` : "no usage data";
-  $("#sum").innerHTML = `<button id="qbtn" class="${p?.out ? "out" : p?.x > 1 ? "hi" : ""}" title="${esc(tip)}" aria-label="${esc(tip)}">${p?.out ? `<em>out ${day(p.out)}</em>` : ""}<span class="bar"><i style="width:${u?.used ?? 0}%"></i>${u ? `<s style="left:${even.toFixed(1)}%"></s>` : ""}</span><b>${u ? u.used + "%" : "?"}</b>${spark()}${p ? `<em>${p.x.toFixed(1)}x<span class="tr">${trend(p)}</span></em>` : ""}</button>`;
+  $("#sum").innerHTML = `<button id="qbtn" class="${p?.out ? "out" : ""}" style="--qc:${qcolor(p)}" title="${esc(tip)}" aria-label="${esc(tip)}">${p?.out ? `<em>out ${day(p.out)}</em>` : ""}<span class="bar"><i style="width:${u?.used ?? 0}%"></i>${u ? `<s style="left:${even.toFixed(1)}%"></s>` : ""}</span><b>${u ? u.used + "%" : "?"}</b>${spark()}${p ? `<em>${p.x.toFixed(1)}x<span class="tr">${trend(p)}</span></em>` : ""}</button>`;
   if (["nadya", "plan", "projects", "quota"].includes(cur) || isPid(cur) || isDoc(cur)) drawView(true);
 }
 
@@ -1086,7 +1087,7 @@ function quotaView() {
   const pts = [...h, {at: now, used: u.used}].map((x) => `${(X(x.at)).toFixed(1)},${(H - x.used / 100 * H).toFixed(1)}`).join(" ");
   return `<article><h1>quota</h1><div class="meta">${p ? `${paces(p)} the pace that lasts to the reset · ` : ""}${p?.out ? `<b class="err">runs out ${day(p.out)}</b> · ` : ""}reset ${day(new Date(u.resetsAt))}</div>
     <div class="big" style="color:${p?.out ? "var(--red)" : "inherit"}">${u.used}%</div>
-    <figure class="qg" style="--qc:${p?.out ? "var(--red)" : "var(--accent)"}"><div class="qm"><div class="meter"><i style="width:${u.used}%;background:var(--qc)"></i></div><s style="left:${X(now) / W * 100}%"></s></div><svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible" aria-label="quota used this week">${days.map((d) => `<line x1="${X(d).toFixed(1)}" y1="0" x2="${X(d).toFixed(1)}" y2="${H}" stroke="var(--gray)" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join("")}<line x1="0" y1="${H}" x2="${W}" y2="0" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/>${pts ? `<circle cx="${pts.split(" ").at(-1).split(",")[0]}" cy="${pts.split(" ").at(-1).split(",")[1]}" r="3.5" fill="var(--accent)"/>` : ""}</svg>
+    <figure class="qg" style="--qc:${qcolor(p)}"><div class="qm"><div class="meter"><i style="width:${u.used}%;background:var(--qc)"></i></div><s style="left:${X(now) / W * 100}%"></s></div><svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible" aria-label="quota used this week">${days.map((d) => `<line x1="${X(d).toFixed(1)}" y1="0" x2="${X(d).toFixed(1)}" y2="${H}" stroke="var(--gray)" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join("")}<line x1="0" y1="${H}" x2="${W}" y2="0" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/><polyline points="${pts}" fill="none" stroke="var(--qc)" stroke-width="2" vector-effect="non-scaling-stroke"/>${pts ? `<circle cx="${pts.split(" ").at(-1).split(",")[0]}" cy="${pts.split(" ").at(-1).split(",")[1]}" r="3.5" fill="var(--qc)"/>` : ""}</svg>
     <div class="qd">${days.map((d) => `<span style="left:${(X(d) / W * 100).toFixed(2)}%">${d.toLocaleDateString(undefined, { weekday: "short" })}</span>`).join("")}</div></figure>
     <p class="meta">The dashed line is the even pace from the start of the week to the reset.</p>${burnView()}</article>`;
 }
