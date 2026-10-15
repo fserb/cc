@@ -22,8 +22,9 @@ export const SENDER = "user";
 // since it tells the receiver which permission mode the sender is in and ccx is not in one.
 // `from-name` is the part that gets displayed, and it is the only part we can answer for.
 //
-// `ccx` names the notify daemon, the only other sender ccx has.
-export const SENDERS = [SENDER, "ccx"];
+// `ccx` names the notify daemon; `trig` the trigger engine (~/ai/trig), which sends
+// through api/s/<id>/send.
+export const SENDERS = [SENDER, "ccx", "trig"];
 
 export function envelope(text, from = SENDER) {
   return `<${TAG} from-name="${from}">\n${text}\n</${TAG}>`;

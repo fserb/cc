@@ -253,6 +253,8 @@ export class Server {
     this.sessions = new Set();            // api/s/<pid>/events clients
     this.proxied = new Set();             // api/s/<host>.<pid>/events of another host
     this.chats = new Set();               // api/chat/events clients
+    this.changes = null;                  // a Changes, under `cchost`
+    this.changeClients = new Set();       // api/changes clients
     this.chatRoot = undefined;            // ~/.claude for chat.js, unless a test sets one
     this.lastList = "";
     this.lastAll = "";
@@ -343,7 +345,7 @@ export class Server {
   stop() {
     clearInterval(this.timer);
     for (const c of [...this.lists, ...this.allLists, ...this.sessions, ...this.proxied,
-      ...this.chats]) c.close();
+      ...this.chats, ...this.changeClients]) c.close();
   }
 
   // the list to its streams if it changed; `cchost` also calls it after each poll, and
@@ -451,6 +453,36 @@ export class Server {
     set.add(c);
     c.send("list", all ? this.mergedBody() : this.listBody());
     return c.response;
+  }
+
+  // api/changes: `ready` {id, host} once caught up, then each change as it comes. With
+  // `since` (Last-Event-ID or ?since=), first a `lost` {host, since} for each host whose
+  // changes this cannot replay, then every change after it
+  changeStream(all, since) {
+    if (!this.changes) return json({error: "no changes here; they run under cchost"}, 409);
+    const c = stream(() => this.changeClients.delete(c));
+    c.all = all;
+    if (since !== null) {
+      const {lost, items} = this.changes.after(since, all, this.allHosts());
+      for (const host of lost) c.send("lost", {host, since});
+      for (const e of items) this.sendChange(c, e);
+    }
+    c.send("ready", {id: this.changes.last, host: this.self}, this.changes.last);
+    this.changeClients.add(c);
+    return c.response;
+  }
+
+  useChanges(changes) {
+    this.changes = changes;
+    changes.on((e) => {
+      for (const c of this.changeClients) this.sendChange(c, e);
+    });
+  }
+
+  sendChange(c, e) {
+    if (!c.all && e.host !== this.self) return;
+    if (e.what === "lost") c.send("lost", e, e.id);
+    else c.send("change", e, e.id);
   }
 
   // `from` is the byte offset the page already has, from api/s/<pid>/log or Last-Event-ID
@@ -723,6 +755,10 @@ export class Server {
     const all = url.searchParams.get("all") === "1";
     if (get && path === "/api/list") return json(all ? this.mergedBody() : this.listBody());
     if (get && path === "/api/events") return this.listEvents(all);
+    if (get && path === "/api/changes") {
+      const since = url.searchParams.get("since") ?? req.headers.get("last-event-id");
+      return this.changeStream(all, since !== null && /^\d+$/.test(since) ? Number(since) : null);
+    }
     if (get && path === "/api/usage") return json({usage: await this.usage(url)});
     if (get && path === "/api/burn/rows") {
       const n = (k) => Number(url.searchParams.get(k));
@@ -883,9 +919,10 @@ export class Server {
 // Start serving. {server, stop} or {error}: a port already taken is reported, not thrown,
 // so a caller can say why.
 export function runServer({source, port = PORT, hostname = "127.0.0.1", relay = null,
-  subs = null, goals = null}) {
+  subs = null, goals = null, changes = null}) {
   const s = new Server(source, port, relay, subs);
   s.goals = goals;
+  if (changes) s.useChanges(changes);
   let http;
   try {
     http = Deno.serve({port, hostname, onListen() {}}, (req, info) => s.handle(req, info).catch((e) =>

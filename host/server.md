@@ -96,6 +96,7 @@ All JSON, all under `api/`.
                                    since tmux gives them as strings
     GET  api/events                SSE; `list` with the same body at once, then whenever
                                    it changes
+    GET  api/changes[?all=1][&since=ID]  SSE of session changes, below
     GET  api/s/<pid>/log?before=N  {events, start, end}: the page ending before byte N,
                                    the tail with no N. `start` is the next N back. A
                                    `user` event with `images` carries `img`, its line's
@@ -399,6 +400,34 @@ arrives.
 record yet, so the new pid cannot come from one until it is answered. Its options parse
 (bare, `❯ No, exit` first), and a client shows it like any other dialog. Tapping the first
 option exits claude, so the button order on the card has to read clearly.
+
+## Session changes (changes.js, 2026-10-14)
+
+`GET api/changes` streams each session change as it happens, for the trigger engine `trig`
+(~/ai/trig, its format agreed with trig-a) and anything else that would poll api/list.
+`/api/events` was taken by the list stream, hence the name.
+
+- `event: change`, `id: <id>`, data `{id, host, pid: "<host>.<pid>", name, dir:
+  "<host>:~/...", cwd, sessionId, from, to, what, asking, waitsOn, summary, goal, context,
+  at}` (at in epoch s). `what` is cchost's word for it: `new` (first sight), `busy`, `done`
+  (busy to a plain wait), `wait` (any other plain wait), `asking` (a wait on a dialog,
+  `asking` names it), `hold`, `free`, `gone` (ended from anything but busy), `crashed`
+  (ended while busy, so a `ccx delete` of a busy session is one too), `context` (its
+  context crossed a 100k mark upward, `over` the mark; from and to the unchanged state)
+- ids are ms since the epoch, or one past the last, so they go up across restarts. The last
+  2000 changes are kept in memory. `since` (or Last-Event-ID) replays every change after it,
+  first with `event: lost` {host, since} for each host whose changes may be missing: the id
+  is from before this daemon started, or older than the buffer. Then `event: ready` {id,
+  host}, and the stream is live
+- a restart does not announce the sessions already running as `new`: changes start after
+  the first poll, as for `any is new`. What happened while cchost was down is not seen
+- `all=1`: every host's. Each cchost follows every other's `api/changes` (remote.js
+  `followChanges`), and puts each change in its own buffer under an id of its own; a
+  reconnect asks with the last id it got, so a dropped link loses nothing the other host
+  still holds, and a `lost` from it (it restarted) is passed on as a buffered `lost` entry
+- tried live on nadya with a scratch server: `ccx new` then `ccx delete` gave `new` (free),
+  `gone`, and nadya's own `busy`, `done` in between; `since` replayed them, `since=5` said
+  `lost` first
 
 ## Notifications
 

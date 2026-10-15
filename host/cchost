@@ -17,6 +17,7 @@ import {Subs} from "./subs.js";
 import {HOME} from "./sh.js";
 import {sendPeer} from "./peer.js";
 import {settle} from "./burn.js";
+import {Changes} from "./changes.js";
 
 function usage() {
   console.error("usage: cchost [serve] [--port N]");
@@ -37,6 +38,10 @@ async function serve(args) {
   // 1.5s as before. Also every 1.5s while a subagent runs: one stopping writes no record
   const goals = new Goals();
   let instances = [], polling = false, again = false, timer = 0, server = null;
+  // api/changes: the clock's events of each poll, read with the goals set. Null until the
+  // first poll is done, so the sessions running at a start are not `new`
+  let changes = null;
+  const pending = [];
   const poll = async () => {
     if (polling) {
       again = true;
@@ -50,6 +55,7 @@ async function serve(args) {
       } while (again);
       for (const i of instances) i.goal = goals.get(i.pid);
       goals.prune(instances.map((i) => i.pid));
+      changes?.update(pending.splice(0), instances);
       server?.tick().catch((e) => console.error(e));
     } finally {
       polling = false;
@@ -80,11 +86,14 @@ async function serve(args) {
   clock.on((events) => subs.onEvents(events));
   await repoll();
   subs.load(instances.map((i) => i.pid));
+  changes = new Changes(remote.SELF);
+  changes.update([], instances);
+  clock.on((events) => pending.push(...events));
   clearStandIns(remote.SELF);
   const relay = new Relay(remote.SELF, async (host, body) =>
     (await remote.call(host, "/api/relay", body))[1]);
   const r = runServer({source: () => ({instances, net}), port, hostname: "0.0.0.0", relay,
-    subs, goals});
+    subs, goals, changes});
   if (r.error) {
     console.error(`cchost: ${r.error}`);
     Deno.exit(1);
@@ -96,6 +105,7 @@ async function serve(args) {
     relay.sync(h, rows);
     server.peer(h, body, why);
   }));
+  stops.push(...remote.others().map((h) => remote.followChanges(h, changes)));
   const quit = () => {
     for (const stop of stops) stop();
     relay.close();

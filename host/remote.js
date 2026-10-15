@@ -146,3 +146,48 @@ export function follow(host, onList, retry = 5000) {
     ctl?.abort();
   };
 }
+
+// Follow `host`'s api/changes into `changes` (changes.js), each under an id of ours. A
+// reconnect asks for what came after the last one it saw, so a dropped stream loses
+// nothing that host still holds; what it cannot replay comes as `lost`, which is passed on.
+// The first reconnect with no position yet (no `ready` came) is one `lost` here
+export function followChanges(host, changes, retry = 5000) {
+  let alive = true, ctl = null, pos = null, tries = 0;
+  (async () => {
+    while (alive) {
+      ctl = new AbortController();
+      try {
+        if (pos === null && tries++ === 1) changes.lost(host);
+        const r = await fetch(`${base(host)}/api/changes${pos === null ? "" : `?since=${pos}`}`,
+          {signal: ctl.signal});
+        if (!r.ok) throw new Error(`answered ${r.status}`);
+        let buf = "";
+        for await (const chunk of r.body.pipeThrough(new TextDecoderStream())) {
+          buf += chunk;
+          let cut;
+          while ((cut = buf.indexOf("\n\n")) >= 0) {
+            const frame = buf.slice(0, cut);
+            buf = buf.slice(cut + 2);
+            const event = frame.match(/^event: (.*)$/m)?.[1];
+            const data = frame.match(/^data: (.*)$/m)?.[1];
+            if (!data) continue;
+            const body = JSON.parse(data);
+            if (event === "ready") pos = body.id;
+            else if (event === "lost") changes.lost(host);
+            else if (event === "change") {
+              pos = body.id;
+              changes.remote(body);
+            }
+          }
+        }
+      } catch {
+        // down, refused or aborted: try again
+      }
+      if (alive) await new Promise((ok) => setTimeout(ok, retry));
+    }
+  })();
+  return () => {
+    alive = false;
+    ctl?.abort();
+  };
+}
