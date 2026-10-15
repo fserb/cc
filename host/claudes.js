@@ -525,6 +525,10 @@ export class StateClock {
 // loose: `less ~/notes/claude` matched and drew a row.
 export const IS_CLAUDE = /^(\S*\/)?claude(\s|$)|^\S+\s+\S*\.claude\/local\/\S*cli\.js(\s|$)/;
 const DAEMON = /^\S+\s+(daemon|bg-pty-host|bg-spare)(\s|$)/;
+// `claude -p` and the Agent SDK's stream-json child, by argv: their record (`sdk-cli`) is
+// not written for the first ~0.5s and is deleted just before exit, and in those windows
+// the row walked up to the launching pane, read its spinner as busy and ended `crashed`
+export const IS_PRINT = /\s(-p|--print)(\s|=|$)|\s--(input|output)-format(=|\s)/;
 const PS_LINE = /^\s*(\d+)\s+(\d+)\s+(.*)$/;
 
 // pid -> [ppid, command]. `strict` throws when ps fails instead of answering an empty
@@ -657,6 +661,7 @@ export async function discover() {
     let rec = records[pid] ?? {};
     // the daemon, its pty hosts and unclaimed spares; a claimed spare has a record
     if (!records[pid] && DAEMON.test(cmd)) continue;
+    if (!records[pid] && IS_PRINT.test(cmd)) continue;
     if (rec.kind === "bg" && parked.has(rec.jobId)) continue;
     rec = jobs.get(rec.parkedJobId) ?? rec;
     // `claude -p` walks up to whatever pane launched it, so it is a phantom second row.

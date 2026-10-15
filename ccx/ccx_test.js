@@ -2,7 +2,7 @@
 // tmux, no ~/.claude. The library is imported, the renderer is driven as a subprocess, and
 // the icon is pure.
 
-import {fmtAge, Instance, IS_CLAUDE, openSubscriptions, paneState, processes, StateClock,
+import {fmtAge, Instance, IS_CLAUDE, IS_PRINT, openSubscriptions, paneState, processes, StateClock,
   summaryOf, waitsOn} from "../host/claudes.js";
 import {fuzzy, NUMBERS, PALETTE, rank, SORTS, STATE} from "../host/view.js";
 import {baseFromSettings, Online, pickBase} from "../host/online.js";
@@ -501,6 +501,13 @@ Deno.test("processes: a failed ps throws for discover(), and is an empty table f
     ok(threw.startsWith(`ps: exit ${r.code}: `), threw);
     eq((await processes(false, ps(r))).size, 0);
   }
+});
+
+Deno.test("IS_PRINT: -p, --print and the SDK's stream-json, not a TUI", () => {
+  for (const cmd of ["claude -p hi", "claude --print hi", "/usr/bin/claude -p --input-format stream-json",
+    "claude --output-format stream-json --verbose --input-format stream-json"]) ok(IS_PRINT.test(cmd), cmd);
+  for (const cmd of ["claude", "claude -n piproxy-a", "claude --resume abc", "claude -n ccx-print", "claude -pfoo"])
+    ok(!IS_PRINT.test(cmd), cmd);
 });
 
 Deno.test("IS_CLAUDE: argv0 or the local cli.js, not a path anywhere in the line", () => {
