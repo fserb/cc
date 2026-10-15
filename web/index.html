@@ -564,7 +564,7 @@ function sessionLine(r) {
   return {sub: r.goal || (r.summary !== r.name ? r.summary : "") || "\u00a0", at: `${host === "nadya" ? "" : `${host}:`}${path || "~"}`,
     tags: `${r.agents ? `<span class="tag">+${r.agents}</span>` : ""}${k >= 300 ? `<span class="tag" style="color:color-mix(in oklab, var(--red) ${Math.min(100, (k - 300) / 3).toFixed(0)}%, #f08c00)">${k}k</span>` : ""}`};
 }
-// a session row slides in from the right and out to the right, and the rows around it move to their new place
+// a session row slides in from the left edge and out to the right, both left to right, and the rows around it move to their new place
 // (user, 2026-10-14). Only between two draws of a loaded list, so the first load moves nothing; a redraw of the
 // same rows finds every row where it was. Rows are keyed by data-id, the section titles by their text
 let slid = false;
@@ -584,7 +584,7 @@ function slide(left, was) {
   for (const [k, n] of now) {
     const o = was.get(k);
     if (o) { if (o.x !== n.x || o.y !== n.y) n.e.animate([{transform: `translate(${o.x - n.x}px, ${o.y - n.y}px)`}, {transform: "none"}], SLIDE); continue; }
-    if (k.includes(".")) n.e.animate([{transform: "translateX(100%)", opacity: 0}, {transform: "none", opacity: 1}], SLIDE);
+    if (k.includes(".")) n.e.animate([{transform: "translateX(-100%)", opacity: 0}, {transform: "none", opacity: 1}], SLIDE);
   }
   for (const [k, o] of was) {
     if (now.has(k) || !k.includes(".")) continue;
