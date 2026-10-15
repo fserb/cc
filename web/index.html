@@ -881,6 +881,8 @@ function nadyaView() {
 }
 // the question tool's free-text option, opened into a text box: {pid, i, labels, value}
 let freeText = null;
+// what is in the free-text field: the pane draws `Type something` until it holds text, then the text
+const typedIn = (o) => /^Type something\.?$/.test(o.label) ? null : o.label;
 function dialogBox(r) {
   const dg = r.state === "wait" && stream?.pid === r.pid ? S.screens[r.pid]?.dialog : null;
   if (!dg?.options?.length) return r.state === "wait" && r.asking ? `<div class="need"><b>Waiting: ${esc(r.asking)}</b><p>Reading the dialog from the pane…</p></div>` : "";
@@ -890,7 +892,7 @@ function dialogBox(r) {
   const ft = freeText?.pid === r.pid && JSON.stringify(freeText.labels) === JSON.stringify(labels) ? freeText : null;
   const opt = (o, k) => ft?.i === k
     ? `<form class="free" data-i="${k}"><input name="a" value="${esc(ft.value)}" placeholder="Type something." autocomplete="off" enterkeyhint="send"><button>send</button></form>`
-    : `<button data-i="${k}"${o.free ? " data-free" : ""}${o.checked !== null ? ` aria-pressed="${o.checked}"` : ""}>${o.checked ? "✓ " : ""}${esc(o.free ? "Type something…" : ask?.options[k]?.label ?? o.label)}${(ask?.options[k]?.description ?? o.detail) ? `<small>${esc(ask?.options[k]?.description ?? o.detail)}</small>` : ""}</button>`;
+    : `<button data-i="${k}"${o.free ? " data-free" : ""}${o.checked !== null ? ` aria-pressed="${o.checked}"` : ""}>${o.checked ? "✓ " : ""}${esc(o.free ? (typedIn(o) ?? "Type something…") : ask?.options[k]?.label ?? o.label)}${(ask?.options[k]?.description ?? o.detail) ? `<small>${esc(ask?.options[k]?.description ?? o.detail)}</small>` : ""}</button>`;
   // the question tool: cchost sends its text as written (ask, from askhook.sh), the pane says only which one is up
   const ask = dg.ask;
   // several questions: their tabs, ☒ once answered; the current one is known only from ask; a pick moves to the next
@@ -1320,7 +1322,8 @@ document.addEventListener("click", async (e) => {
   // the free-text option opens a text box; its answer goes with the pick (the form's submit)
   if (b.dataset.free != null) {
     const box = b.parentElement;
-    freeText = {pid: box.dataset.pick, i: +b.dataset.i, labels: JSON.parse(box.dataset.labels), value: ""};
+    const labels = JSON.parse(box.dataset.labels);
+    freeText = {pid: box.dataset.pick, i: +b.dataset.i, labels, value: typedIn({label: labels[b.dataset.i]}) ?? ""};
     lastView = null; drawView(true); $("#view .free input")?.focus(); return;
   }
   const box = b.parentElement; [...box.children].forEach((x) => x.disabled = true);
@@ -1343,7 +1346,9 @@ document.addEventListener("submit", async (e) => {
   try {
     await post(`${CCX}/s/${box.dataset.pick}/pick`, {i: +f.dataset.i, labels: JSON.parse(box.dataset.labels), text});
     freeText = null;
-    box.outerHTML = `<p class="done">✓ ${esc(text)}</p>`;
+    // a multi-select's text only ticks its box: the dialog stays for the rest and Next
+    if (box.classList.contains("multi")) { lastView = null; [...box.querySelectorAll("button, input")].forEach((x) => x.disabled = false); }
+    else box.outerHTML = `<p class="done">✓ ${esc(text)}</p>`;
     draw(); drawView(true);
   } catch (err) { box.insertAdjacentHTML("afterend", `<p class="err">${esc(err.message)}</p>`); [...box.querySelectorAll("button, input")].forEach((x) => x.disabled = false); }
 });

@@ -29,8 +29,14 @@
 // - **the question tool's free-text option is the one above `Chat about this`**, a field
 //   that reads `Type something.` until it holds text, then the text. Its digit moves the
 //   cursor onto it and focuses it; with the cursor there every key is text, so a second
-//   `3` types `3` (2.1.296). It is answered with its digit unless already focused, ctrl+u
-//   to clear it, a bracketed paste, Enter. Only single-select: a multi-select's is a box
+//   `3` types `3` (2.1.296). It is answered with its digit unless already focused, ctrl+e
+//   ctrl+u to clear it (ctrl+u alone deletes only back from the field's cursor, which arrows
+//   leave at its start), a bracketed paste, Enter
+// - **a multi-select's free-text option is its last box** `[ ] Type something`, above the bare
+//   `Next`/`Submit`. Its digit only ticks the box and leaves the cursor where it was; arrows
+//   onto it focus the field, typing ticks the box, clearing it unticks it, Enter
+//   toggles it (2.1.296). So arrows, the clear, the paste and no Enter; with the cursor in the
+//   field every other option goes by arrows and Enter, as a digit would be typed
 // - **several questions draw a tab row** (2.1.296), `←  ☐ Design  ☐ Storage  ✔ Submit  →`, ✔
 //   ☒ once answered (Submit's ✔ is its icon). Which tab is current is only a background colour, which `capture-pane -p`
 //   drops, so `tabs` says only which are answered; a pick moves to the next question
@@ -109,6 +115,11 @@ export function parseDialog(text) {
   const bareChat = options[chat]?.bare;
   if (bareChat) delete options[chat].bare;
   else if (chat > 1 && free.n !== null && options.every((o) => o.checked === null)) free.free = true;
+  // a multi-select's: the last box, above its bare Next or Submit
+  else if (chat > 1) {
+    const box = options.findLast((o, k) => k < chat && o.checked !== null);
+    if (box) box.free = true;
+  }
   let top = from - 1;
   while (top >= 0 && !RULE.test(lines[top])) top--;
   // no rule above: the dialog is taller than the screen, its top cut off, so all of what shows
@@ -302,18 +313,26 @@ export function dialogRefusal(text) {
 }
 
 // The tmux keys that pick option `i`: its digit if it has one, else arrows from the cursor
-// and Enter. The free-text option takes `text` after its keys, which pick() pastes.
+// and Enter. The free-text option takes `text` after its keys, which pick() pastes; it is
+// cleared with ctrl+e ctrl+u, as arrows leave the field's cursor at its start. Once the
+// cursor is in the free-text field a digit is typed into it, so then arrows for every option.
+// A multi-select's digit only ticks its free-text box, so arrows reach that field, and typing
+// in it ticks the box.
 export function pickKeys(dialog, i) {
   const opt = dialog.options[i];
-  if (opt.free) return [...opt.current ? [] : [String(opt.n)], "C-u"];
-  if (opt.n !== null && opt.n >= 1 && opt.n <= 9) return dialog.digitMoves ? [String(opt.n), "Enter"] : [String(opt.n)];
-  const d = i - dialog.options.findIndex((o) => o.current);
-  return [...Array(Math.abs(d)).fill(d < 0 ? "Up" : "Down"), "Enter"];
+  const at = dialog.options.findIndex((o) => o.current), d = i - at;
+  const arrows = Array(Math.abs(d)).fill(d < 0 ? "Up" : "Down");
+  if (opt.free) return [...opt.current ? [] : isMulti(dialog) ? arrows : [String(opt.n)], "C-e", "C-u"];
+  if (opt.n !== null && opt.n >= 1 && opt.n <= 9 && !dialog.options[at]?.free) return dialog.digitMoves ? [String(opt.n), "Enter"] : [String(opt.n)];
+  return [...arrows, "Enter"];
 }
+
+const isMulti = (dialog) => dialog.options.some((o) => o.checked !== null);
 
 // Pick option `i` of the dialog up on the instance's pane, if its labels are still
 // `labels`: the screen is read again first, so a tap never lands on a dialog other than the
-// one it was drawn from. `answer` answers the free-text option and is refused on any other.
+// one it was drawn from. `answer` answers the free-text option and is refused on any other;
+// in a multi-select it is typed with no Enter, which would untick it, and Next is its own pick.
 // An error message, or null when it worked.
 export async function pick(inst, i, labels, answer) {
   if (!inst.pane) return `pid ${inst.pid} is not inside tmux`;
@@ -331,15 +350,15 @@ export async function pick(inst, i, labels, answer) {
   if (!dialog.options[i].free) return `option ${i} takes no text`;
   if (!String(answer).trim()) return "no text";
   // the digit first and on its own: the field takes keys once it has focus, a render later
-  const keys = pickKeys(dialog, i), clear = keys.pop();
+  const keys = pickKeys(dialog, i), clear = keys.splice(-2);
   if (keys.length) {
     const err = await sendKeys(inst, keys);
     if (err) return err;
     await new Promise((res) => setTimeout(res, 300));
   }
   const buf = `ccx-${inst.pid}`, t = inst.pane;
-  const r = await run("tmux", "send-keys", "-t", t, clear, ";",
+  const r = await run("tmux", "send-keys", "-t", t, ...clear, ";",
     "set-buffer", "-b", buf, "--", String(answer), ";",
-    "paste-buffer", "-p", "-d", "-b", buf, "-t", t, ";", "send-keys", "-t", t, "Enter");
+    "paste-buffer", "-p", "-d", "-b", buf, "-t", t, ...isMulti(dialog) ? [] : [";", "send-keys", "-t", t, "Enter"]);
   return r.code === 0 ? null : `tmux: ${r.err.trim() || `exit ${r.code}`}`;
 }

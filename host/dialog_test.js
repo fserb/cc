@@ -64,10 +64,10 @@ Deno.test("parseDialog: a multi-select, its boxes and its bare Submit", () => {
     [1, "apple", true, true, "1"],
     [2, "pear", false, false, "2"],
     [3, "plum", false, true, "3"],
-    [4, "Type something", false, false, "4"],
+    [4, "Type something", false, false, "Down Down Down C-e C-u"],
     [null, "Submit", false, null, "Down Down Down Down Enter"],
     [5, "Chat about this", false, null, "5"],
-  ], "checked state, and Submit by arrows");
+  ], "checked state, Submit by arrows, the free-text field by arrows");
   eq(parseDialog(fixture("question-multi-checked")).options[0].detail, "Apple",
     "the description sits past the box");
 });
@@ -135,10 +135,31 @@ Deno.test("typeInto: refused on a pane showing a dialog, typed with force", asyn
 Deno.test("parseDialog: the question tool's free-text option", () => {
   const d = parseDialog(fixture("question"));
   eq(d.options.map((o) => !!o.free), [false, false, false, true, false], "Type something.");
-  eq(pickKeys(d, 3), ["4", "C-u"], "its digit, then clear");
+  eq(pickKeys(d, 3), ["4", "C-e", "C-u"], "its digit, then clear");
   d.options[3].current = true;
-  eq(pickKeys(d, 3), ["C-u"], "no digit once focused: it would be typed");
-  eq(parseDialog(fixture("question-multi")).options.some((o) => o.free), false, "not multi");
+  eq(pickKeys(d, 3), ["C-e", "C-u"], "no digit once focused: it would be typed");
+  d.options[3].current = false;
+  d.options[0].current = true;
+  const m = parseDialog(fixture("question-multi"));
+  eq(m.options.map((o) => !!o.free), [false, false, false, true, false, false], "multi: its last box");
+  eq(pickKeys(m, 3), ["Down", "Down", "Down", "C-e", "C-u"], "multi: arrows onto the field, its digit only ticks the box");
+  eq(pickKeys(m, 0), ["1"], "multi: a box by its digit");
+});
+
+// question-multi-free: a scratch session on nadya (2.1.296), "fig tree" typed into the
+// multi-select's field, the cursor still on it
+Deno.test("parseDialog: the cursor in the free-text field, every option by arrows", () => {
+  const d = parseDialog(fixture("question-multi-free"));
+  eq(d.options.map((o) => [o.label, o.checked, !!o.free, o.current]), [
+    ["apple", false, false, false], ["pear", false, false, false], ["plum", false, false, false],
+    ["fig tree", true, true, true], ["Next", null, false, false], ["Chat about this", null, false, false],
+  ], "the typed text is the label, its box ticked");
+  eq(pickKeys(d, 3), ["C-e", "C-u"], "focused: clear");
+  eq(pickKeys(d, 0), ["Up", "Up", "Up", "Enter"], "apple: a digit would be typed");
+  eq(pickKeys(d, 4), ["Down", "Enter"], "Next");
+  const q = parseDialog(fixture("question"));
+  q.options.forEach((o, k) => o.current = k === 3);
+  eq(pickKeys(q, 0), ["Up", "Up", "Up", "Enter"], "single-select too");
 });
 
 Deno.test("imageParts: each image where its mark is, the unmarked first", () => {

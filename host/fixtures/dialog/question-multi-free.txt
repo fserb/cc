@@ -1,0 +1,24 @@
+
+❯ Use the AskUserQuestion tool once, with three questions: first "Pick a
+  colour" single-select with options red, green, blue; second "Pick fruits"
+  multiSelect with options apple, pear, plum; third "Pick a size" single-select
+  with options small, big. Then just report the answers verbatim.
+────────────────────────────────────────────────────────────────────────────────
+←  ☒ Colour  ☒ Fruits  ☐ Size  ✔ Submit  →
+
+Pick fruits
+
+  1. [ ] apple
+         apple
+  2. [ ] pear
+         pear
+  3. [ ] plum
+         plum
+❯ 4. [✔] fig tree
+     Next
+────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · ctrl+g to edit in Nvim · Esc to
+cancel
+───────────────────────────────────────────────────────────────────── cc-a-ask ─
