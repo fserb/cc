@@ -107,7 +107,9 @@ All JSON, all under `api/`.
                                    row, `log` {events, end, reset?} with `end` as its id,
                                    `screen` {text}, `dialog` (parsed, or null), `gone`
                                    when the pid leaves the poll. No N: the tail, as a reset
-    GET  api/s/<pid>/screen        {text, dialog}, once
+    GET  api/s/<pid>/screen        {text, input, dialog}, once; input is what is typed in
+                                   the input box, "" if empty or only a dim suggestion,
+                                   null with no box (a dialog)
     POST api/s/<pid>/type   {text, images?}  typeInto(). `images` [{type, data}], data base64,
                                            png/jpeg/gif/webp, at most 4 of 10 MB: written
                                            to /tmp/cc-img (gone after a day), each path

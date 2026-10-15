@@ -16,11 +16,11 @@
 //   which a page on another origin cannot send without a CORS preflight this server never
 //   answers
 
-import {byCodePoint, HOME} from "./sh.js";
+import {byCodePoint, HOME, run} from "./sh.js";
 import {imageAt, logPath, readFrom, readPage} from "./transcript.js";
 import {parseDialog, pendingAsk, pick, screen, withAsk} from "./dialog.js";
 import {attachSession, select, sendKeys, show, tmuxBackground, typeInto} from "./jump.js";
-import {unqueue} from "./queue.js";
+import {inputBox, unqueue} from "./queue.js";
 import {close, expandDir, homeRel, paneIn, spawn} from "./spawn.js";
 import {sendPeer} from "./peer.js";
 import {byDay, LONGER, pace, readUsage} from "./usage.js";
@@ -872,9 +872,13 @@ export class Server {
     }
     if (get && verb === "screen") {
       if (!inst.pane) return json({error: `pid ${pid} is not inside tmux`}, 409);
-      const text = await screen(inst.pane);
+      const [text, raw] = await Promise.all([screen(inst.pane),
+        run("tmux", "capture-pane", "-p", "-e", "-t", inst.pane)]);
+      // the typed text only: a prompt suggestion is drawn dim in the same place
+      const box = raw.code === 0 ? inputBox(raw.out) : null;
+      const input = box ? (box.state === "text" ? box.lines.join("\n").trim() : "") : null;
       return text === null ? json({error: "tmux: capture failed"}, 502)
-        : json({text, dialog: inst.state === "wait" ? withAsk(parseDialog(text),
+        : json({text, input, dialog: inst.state === "wait" ? withAsk(parseDialog(text),
           pendingAsk(inst.sessionId, inst.sessionId && logPath(inst.cwd, inst.sessionId))) : null});
     }
     if (!post) return json({error: "not found"}, 404);
