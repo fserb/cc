@@ -535,14 +535,16 @@ function items() {
   const due = dueTodos();
   it.push({id: "plan", d: due.length ? "blue" : "", hot: due.length, title: "plan", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : "", t: ""});
   it.push({id: "projects", d: "", title: "projects", sub: "", t: ""});
-  // shown only while something is active (user, 2026-10-14): a parcel at the desk or known to be on its way, an
-  // Uber Eats order until 1 h after it is delivered (its `last` is the delivery time)
+  // shown only while something is active (user, 2026-10-14): a parcel at the desk or not yet delivered, with a
+  // tracking number or not (an order the tracker read from a shop's mail), an Uber Eats order until 1 h after it
+  // is delivered (its `last` is the delivery time)
   const pk = S.packages, desk = pk?.desk.count ?? 0, parcels = pk?.packages.filter((x) => x.carrier !== "ubereats") ?? [];
-  const onWay = parcels.filter((x) => x.number && !x.unknown && !x.delivered).length;
+  const undelivered = parcels.filter((x) => !x.unknown && !x.delivered), ordered = undelivered.filter((x) => x.status === "ordered").length;
+  const onWay = undelivered.length - ordered;
   const food = pk?.packages.filter((x) => x.carrier === "ubereats" && (!x.delivered || Date.now() - Date.parse(x.last) < 3600e3)) ?? [];
   const eating = food.filter((x) => !x.delivered).length, ate = food.length - eating;
-  if (desk || onWay || food.length || cur === "packages") it.push({id: "packages", d: desk ? "blue" : "", title: "packages",
-    sub: pk ? [desk && `${desk} at the front desk`, (onWay || !food.length) && `${onWay} on the way`, eating && "Uber Eats on the way", ate && "Uber Eats delivered"].filter(Boolean).join(" · ") : "",
+  if (desk || undelivered.length || food.length || cur === "packages") it.push({id: "packages", d: desk ? "blue" : "", title: "packages",
+    sub: pk ? [desk && `${desk} at the front desk`, (onWay || !ordered && !food.length) && `${onWay} on the way`, ordered && `${ordered} ordered`, eating && "Uber Eats on the way", ate && "Uber Eats delivered"].filter(Boolean).join(" · ") : "",
     t: pk ? ago(Date.parse(pk.updated) / 1000) : ""});
   it.push({id: "files", d: "", title: "files", sub: "", t: ""});
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, dialog: !!waitsOnYou(r)}));
