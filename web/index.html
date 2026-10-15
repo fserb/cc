@@ -48,7 +48,7 @@
   .it.hot .tx div, .it.unread .tx div { font-weight: 600; }
   .it:has(.t1) { grid-template-columns: 10px minmax(0, 1fr); }
   .it .tx .t1 { display: flex; gap: 0.5rem; align-items: baseline; font-weight: 400; } .it .t1 b { font-weight: inherit; flex: none; } .it.hot .t1 b, .it.unread .t1 b { font-weight: 600; }
-  .it .t1 .tag { font-size: 0.75rem; color: var(--muted); flex: none; }
+  .it .tag { font-size: 0.75rem; color: var(--muted); font-weight: 400; } .it .t1 .tag { flex: none; } .it .tx div:not(.t1) .tag { margin-left: 0.5rem; }  /* small grey text after a row's name (tags) */
   .it .t1 .at { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; direction: rtl; font: 0.66rem var(--mono); color: var(--muted); }  /* rtl cuts the start of a long path, so its last part stays */
   .it time { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
   #center { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
@@ -545,8 +545,8 @@ function items() {
   const onWay = undelivered.length - ordered;
   const food = pk?.packages.filter((x) => x.carrier === "ubereats" && (!x.delivered || Date.now() - Date.parse(x.last) < 3600e3)) ?? [];
   const eating = food.filter((x) => !x.delivered).length, ate = food.length - eating;
-  if (desk || undelivered.length || food.length || cur === "packages") it.push({id: "packages", d: desk ? "blue" : "", title: "packages",
-    sub: pk ? [desk && `${desk} at the front desk`, (onWay || !ordered && !food.length) && `${onWay} on the way`, ordered && `${ordered} ordered`, eating && "Uber Eats on the way", ate && "Uber Eats delivered"].filter(Boolean).join(" · ") : "",
+  if (desk || undelivered.length || food.length || cur === "packages") it.push({id: "packages", d: desk ? "blue" : "", title: "packages", sub: "",
+    tags: pk ? `<span class="tag">${esc([desk && `${desk} at desk`, onWay && `${onWay} coming`, ordered && `${ordered} ordered`, eating && "food coming", ate && "food here"].filter(Boolean).join(" · "))}</span>` : "",
     t: pk ? ago(Date.parse(pk.updated) / 1000) : ""});
   it.push({id: "files", d: "", title: "files", sub: "", t: ""});
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, dialog: !!waitsOnYou(r)}));
@@ -600,7 +600,7 @@ function draw() {
   let sec = null, html = "";
   for (const i of all) {
     if ((i.sec ?? "") !== sec) { sec = i.sec ?? ""; if (sec) html += `<div class="sec">${sec}</div>`; }
-    html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""}" data-id="${esc(i.id)}" aria-current="${i.id === (isDoc(cur) ? docParent(cur) : isFiles(cur) ? "files" : cur)}"><span class="d ${i.d}">${i.d === "q" ? "?" : ""}</span><span class="tx">${i.at === undefined ? `<div>${esc(i.title)}</div>` : `<div class="t1"><b>${esc(i.title)}</b>${i.tags}<span class="at">\u200e${esc(i.at)}\u200e</span></div>`}<small>${esc(i.sub)}</small></span>${i.at === undefined ? `<time>${esc(i.t)}</time>` : ""}</div>`;
+    html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""}" data-id="${esc(i.id)}" aria-current="${i.id === (isDoc(cur) ? docParent(cur) : isFiles(cur) ? "files" : cur)}"><span class="d ${i.d}">${i.d === "q" ? "?" : ""}</span><span class="tx">${i.at === undefined ? `<div>${esc(i.title)}${i.tags ?? ""}</div>` : `<div class="t1"><b>${esc(i.title)}</b>${i.tags}<span class="at">\u200e${esc(i.at)}\u200e</span></div>`}<small>${esc(i.sub)}</small></span>${i.at === undefined ? `<time>${esc(i.t)}</time>` : ""}</div>`;
   }
   if (S.offline) html += `<p class="meta" style="padding:0 1.1rem">${esc(S.offline)}</p>`;
   // the addbar stays put across redraws, so the desktop's new-session input keeps its text and focus
