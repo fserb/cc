@@ -526,10 +526,15 @@ function items() {
   const due = dueTodos();
   it.push({id: "plan", d: due.length ? "blue" : "", hot: due.length, title: "plan", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : "", t: ""});
   it.push({id: "projects", d: "", title: "projects", sub: "", t: ""});
-  const pk = S.packages, desk = pk?.desk.count ?? 0, onWay = pk?.packages.filter((x) => x.number && !x.unknown && !x.delivered).length ?? 0;
-  // shown only while something is active: a package event in the last 24 h or a package at the desk (user, 2026-10-12)
-  const pkActive = desk || pk?.packages.some((x) => Date.now() - Date.parse(x.last) < 86400e3);
-  if (pkActive || cur === "packages") it.push({id: "packages", d: desk ? "blue" : "", title: "packages", sub: pk ? [desk && `${desk} at the front desk`, `${onWay} on the way`].filter(Boolean).join(" · ") : "", t: pk ? ago(Date.parse(pk.updated) / 1000) : ""});
+  // shown only while something is active (user, 2026-10-14): a parcel at the desk or known to be on its way, an
+  // Uber Eats order until 1 h after it is delivered (its `last` is the delivery time)
+  const pk = S.packages, desk = pk?.desk.count ?? 0, parcels = pk?.packages.filter((x) => x.carrier !== "ubereats") ?? [];
+  const onWay = parcels.filter((x) => x.number && !x.unknown && !x.delivered).length;
+  const food = pk?.packages.filter((x) => x.carrier === "ubereats" && (!x.delivered || Date.now() - Date.parse(x.last) < 3600e3)) ?? [];
+  const eating = food.filter((x) => !x.delivered).length, ate = food.length - eating;
+  if (desk || onWay || food.length || cur === "packages") it.push({id: "packages", d: desk ? "blue" : "", title: "packages",
+    sub: pk ? [desk && `${desk} at the front desk`, (onWay || !food.length) && `${onWay} on the way`, eating && "Uber Eats on the way", ate && "Uber Eats delivered"].filter(Boolean).join(" · ") : "",
+    t: pk ? ago(Date.parse(pk.updated) / 1000) : ""});
   it.push({id: "files", d: "", title: "files", sub: "", t: ""});
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, dialog: !!hasDialog(r)}));
   ss.sort((a, b) => b.dialog - a.dialog);
