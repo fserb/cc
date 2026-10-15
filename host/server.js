@@ -248,6 +248,7 @@ export class Server {
     this.relay = relay;                   // a Relay, under `cchost`
     this.subs = subs;                     // a Subs, under `cchost`
     this.goals = null;                    // a Goals, under `cchost`
+    this.typed = null;                    // a Typed, under `cchost`
     this.lists = new Set();               // api/events clients
     this.allLists = new Set();            // api/events?all=1 clients
     this.sessions = new Set();            // api/s/<pid>/events clients
@@ -404,6 +405,11 @@ export class Server {
     }
   }
 
+  // a log read with each prompt typed for someone else tagged `by` (typed.js)
+  tagged(pid, r) {
+    return this.typed ? {...r, events: this.typed.tag(pid, r.events)} : r;
+  }
+
   // What changed for one session client since its last tick: the row, the log, the screen
   // and the dialog read off it.
   async follow(c, inst, text) {
@@ -420,15 +426,15 @@ export class Server {
       if (first) {
         const r = readFrom(path, c.end);
         c.end = r.end;
-        c.send("log", r, r.end);
+        c.send("log", this.tagged(inst.pid, r), r.end);
       } else {
         const p = path ? readPage(path) : {events: [], start: 0, end: 0};
         c.end = p.end;
-        c.send("log", {...p, reset: true}, p.end);
+        c.send("log", {...this.tagged(inst.pid, p), reset: true}, p.end);
       }
     } else if (path) {
       const r = readFrom(path, c.end);
-      if (r.events.length || r.reset) c.send("log", r, r.end);
+      if (r.events.length || r.reset) c.send("log", this.tagged(inst.pid, r), r.end);
       c.end = r.end;
     }
     if (text === null) return;
@@ -849,7 +855,7 @@ export class Server {
     if (get && verb === "log") {
       if (!inst.sessionId) return json({events: [], start: 0, end: 0});
       const before = url.searchParams.get("before");
-      return json(readPage(logPath(inst.cwd, inst.sessionId), before === null ? null : Number(before)));
+      return json(this.tagged(pid, readPage(logPath(inst.cwd, inst.sessionId), before === null ? null : Number(before))));
     }
     // the i-th image of the prompt whose line starts at byte `at`, the `img` of its event
     if (get && verb === "img") {
@@ -883,7 +889,12 @@ export class Server {
       }
       const paths = await saveImages(images);
       if (typeof paths === "string") return json({error: paths}, 400);
-      return answer(await typeInto(inst, body.text, {force: body.force === true, images: paths}));
+      // written down before it is typed, so no tick reads its log line untagged
+      const by = typeof body.by === "string" ? body.by.trim() : "";
+      const t = by ? this.typed?.add(pid, by, body.text) : null;
+      const err = await typeInto(inst, body.text, {force: body.force === true, images: paths});
+      if (err && t) this.typed.drop(t);
+      return answer(err);
     }
     if (verb === "pick") {
       if (!Array.isArray(body.labels)) return json({error: "no labels"}, 400);
@@ -919,9 +930,10 @@ export class Server {
 // Start serving. {server, stop} or {error}: a port already taken is reported, not thrown,
 // so a caller can say why.
 export function runServer({source, port = PORT, hostname = "127.0.0.1", relay = null,
-  subs = null, goals = null, changes = null}) {
+  subs = null, goals = null, typed = null, changes = null}) {
   const s = new Server(source, port, relay, subs);
   s.goals = goals;
+  s.typed = typed;
   if (changes) s.useChanges(changes);
   let http;
   try {

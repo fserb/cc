@@ -11,6 +11,7 @@ import {discover, StateClock, watchSessions} from "./claudes.js";
 import {Online} from "./online.js";
 import {PORT, runServer} from "./server.js";
 import {Goals} from "./goals.js";
+import {Typed} from "./typed.js";
 import {clearStandIns, Relay} from "./relay.js";
 import * as remote from "./remote.js";
 import {Subs} from "./subs.js";
@@ -93,7 +94,7 @@ async function serve(args) {
   const relay = new Relay(remote.SELF, async (host, body) =>
     (await remote.call(host, "/api/relay", body))[1]);
   const r = runServer({source: () => ({instances, net}), port, hostname: "0.0.0.0", relay,
-    subs, goals, changes});
+    subs, goals, typed: new Typed(), changes});
   if (r.error) {
     console.error(`cchost: ${r.error}`);
     Deno.exit(1);

@@ -1278,12 +1278,13 @@ const sendLine = (verb, who, where, what) =>
 // Exits on usage; returns what `spec` named and what it did not
 async function targets(cmd, spec, text) {
   if (!spec || !text.trim()) usage();
-  const {found, missed} = resolveTargets(await listing(), spec, selfPid());
+  const rows = await listing();
+  const {found, missed} = resolveTargets(rows, spec, selfPid());
   if (!found.length) {
     for (const t of missed) console.error(`${cmd}: no instance matches ${JSON.stringify(t)}`);
     usage();
   }
-  return {found, missed};
+  return {found, missed, rows};
 }
 
 // One line per target in the order written, and exit 1 if any of them failed. The errs are
@@ -1306,17 +1307,26 @@ async function cmdSend(spec, ...words) {
     (await api(`/api/s/${i.id}/send`, {text}))[1])));
 }
 
-// ccx user [--force] <target>[,<target>...] <text...>
+// ccx user [--force] [--as <who>] <target>[,<target>...] <text...>
 // Typed into the instance's prompt as its own user and submitted, so `/clear` clears it;
 // `send` puts a message from a peer on its queue, which no slash command survives. Refused
-// on a pane showing a dialog, which the Enter would answer, unless --force
+// on a pane showing a dialog, which the Enter would answer, unless --force. cchost notes
+// who typed it, so cc does not draw it as the user's (typed.js): --as, else the session
+// running ccx, else `ccx`
 async function cmdUser(...args) {
-  const force = args[0] === "--force";
-  const [spec, ...words] = force ? args.slice(1) : args;
+  let force = false, as = "";
+  for (;;) {
+    if (args[0] === "--force") force = !!args.shift();
+    else if (args[0] === "--as" && args[1]?.trim()) as = args.splice(0, 2)[1].trim();
+    else break;
+  }
+  const [spec, ...words] = args;
   const text = words.join(" ");
-  const {found, missed} = await targets("user", spec, text);
+  const {found, missed, rows} = await targets("user", spec, text);
+  const self = selfPid();
+  const by = as || (self && rows.find((i) => !i.host && i.pid === self)?.name) || "ccx";
   report("typed", found, missed, await Promise.all(found.map(async (i) =>
-    (await api(`/api/s/${i.id}/type`, {text, force}, 10_000))[1])));
+    (await api(`/api/s/${i.id}/type`, {text, force, by}, 10_000))[1])));
 }
 
 // ccx goal <target>[,<target>...] <text...>
@@ -1522,6 +1532,7 @@ const HELP = [
   ["  send <target> <message...>", "a chat message to one or more instances"],
   ["  user [--force] <target> <text...>", "typed into an instance as its user, /commands included;"],
   ["", "refused while it shows a dialog, which the Enter would answer, unless --force"],
+  ["    --as <who>", "who cc names as having typed it (default: the calling session, else ccx)"],
   ["  goal <target> <text...>", "set what cc shows under its name, in place of Claude's summary"],
   ["  chat [--no-follow] [--here]", "what the agents in this dir have said to each other, on every"],
   ["", "host (the same path under its home); --here this host's only"],
