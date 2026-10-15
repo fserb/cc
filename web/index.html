@@ -474,13 +474,14 @@ function spark() {
   const sum = s.w.reduce((a, b) => a + b, 0);
   // the top is at least 1.3M weighted tokens per 5 min: the rate that uses up the 5-hour session limit in 5 hours
   // (estimated Oct 14th: 3.9M = 5% of a session, so ~78M per session; loose), so a quiet window stays low
-  const top = Math.max(1.3e6, ...s.w), y = (w) => H - w / top * H;
   const M = (w) => `${(w / 1e6).toFixed(1)}M`;
   const t = (ms) => { const d = new Date(ms); return `${d.getHours() % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")}${d.getHours() < 12 ? "am" : "pm"}`; };
   const pk = s.w.indexOf(Math.max(...s.w));
   const tip = `last ${n * s.step / 3600e3}h: ${M(sum)} weighted tokens; peak ${M(s.w[pk])} at ${t(s.from + pk * s.step)}-${t(s.from + (pk + 1) * s.step)}`;
   // 24 points in 18 px read as spikes: draw a 3-bucket moving average
   const sm = s.w.map((_, i) => { const a = s.w.slice(Math.max(0, i - 1), i + 2); return a.reduce((p, q) => p + q, 0) / a.length; });
+  // scaled to the drawn (averaged) peak, so the busiest stretch reaches the top (user, Oct 14th)
+  const top = Math.max(1.3e6, ...sm), y = (w) => H - w / top * H;
   const pts = sm.map((w, i) => `${(i * W / (n - 1)).toFixed(2)},${y(w).toFixed(2)}`).join(" L");
   return svg(`<path d="M0,${H} L${pts} L${W},${H} Z"/>`, tip);
 }
