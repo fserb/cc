@@ -175,3 +175,17 @@ Deno.test("Server: api/changes replays after Last-Event-ID, then streams", async
   }]], "from before the start");
   s.stop();
 });
+
+Deno.test("Changes: gone keeps the name, dir, goal of a session whose record went first", () => {
+  const c = new Changes("nadya", clock());
+  const i = {pid: 9, name: "t", cwd: `${HOME}/t`, path: `${HOME}/t`, sessionId: "s1", summary: "x",
+    goal: "g", context: 5, state: "wait"};
+  c.update([], [i]);
+  c.update([], [{pid: 9, name: "", cwd: "", path: "", sessionId: "", summary: "", goal: "", context: 0,
+    state: "wait"}]);
+  c.update([{pid: 9, name: "", cwd: "", sessionId: "", from: "busy", to: "gone"}], []);
+  const e = c.buf.at(-1);
+  eq([e.what, e.name, e.dir, e.sessionId, e.summary, e.goal, e.context],
+    ["crashed", "t", "nadya:~/t", "s1", "x", "g", 5], "the last known");
+  eq(c.known.size, 0, "forgotten once gone");
+});

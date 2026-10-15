@@ -27,6 +27,8 @@ export function whatOf(ev) {
   return ev.to;
 }
 
+const KEEP = ["name", "cwd", "path", "sessionId", "summary", "goal", "context"];
+
 export class Changes {
   // self: this host's name. now() in ms, for the ids
   constructor(self, now = Date.now, size = SIZE) {
@@ -39,6 +41,7 @@ export class Changes {
     this.start = this.last; // what came before this is not here: a restart
     this.dropped = 0; // the id of the last entry trimmed off the buffer
     this.marks = new Map(); // pid -> the context mark it is past
+    this.known = new Map(); // pid -> its last non-empty name, cwd, path, sessionId, summary, goal, context
     this.listeners = new Set();
   }
 
@@ -75,9 +78,21 @@ export class Changes {
   // `context` change, and a drop (a /clear) lowers the mark so the next crossing counts
   update(events, instances) {
     const by = new Map(instances.map((i) => [i.pid, i]));
+    // a session's record goes before its process, so the poll before its `gone` can see it
+    // with no name: each field keeps the last value it had
+    for (const i of instances) {
+      const k = this.known.get(i.pid) ?? {};
+      for (const f of KEEP) if (i[f]) k[f] = i[f];
+      this.known.set(i.pid, k);
+    }
     for (const ev of events) {
-      const i = by.get(ev.pid);
-      this.push(this.change(ev, whatOf(ev), i));
+      const k = this.known.get(ev.pid) ?? {};
+      const full = {...ev};
+      for (const f of KEEP) full[f] = ev[f] || by.get(ev.pid)?.[f] || k[f] || "";
+      this.push(this.change(full, whatOf(ev), full));
+    }
+    for (const pid of [...this.known.keys()]) {
+      if (!by.has(pid)) this.known.delete(pid);
     }
     for (const i of instances) {
       const mark = Math.floor((i.context || 0) / CONTEXT_STEP) * CONTEXT_STEP;
@@ -124,8 +139,8 @@ export class Changes {
       asking: ev.asking ?? "",
       waitsOn: ev.waitsOn ?? "",
       summary: ev.summary ?? "",
-      goal: i?.goal ?? "",
-      context: i?.context ?? 0,
+      goal: i?.goal || "",
+      context: i?.context || 0,
       ...extra,
       at: Math.round(this.now() / 1000),
     };
