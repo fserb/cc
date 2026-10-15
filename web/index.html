@@ -76,6 +76,9 @@
   .m { align-self: flex-start; max-width: 78%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--bubble); overflow-wrap: anywhere; } .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); } .m.me small { text-align: right; } .m .q { display: block; font-size: 0.75rem; opacity: 0.75; }
   .m a { color: var(--accent); } .m.me a { color: inherit; }
   .m.me { white-space: pre-wrap; }
+  /* a prompt typed in by ccx user (watchdog, nadya, a script), not by you: a bar on its edge, the source above */
+  .m.me.by { background: none; color: #495057; border-radius: 0; border-right: 3px solid var(--by); padding: 0.15rem 0.7rem; font-size: 0.9rem; text-align: right; }
+  .m.me.by .who { display: block; color: var(--by); font-size: 0.72rem; font-weight: 600; }
   /* a bubble not in the log yet, with ✕ (take back) and ↑ (send now) in a pill over its corner; the bubble fades, the pill does not */
   .pb { align-self: flex-end; max-width: 78%; margin-top: 0.6rem; position: relative; display: flex; flex-direction: column; align-items: flex-end; }
   .pb .m { max-width: 100%; } .pb.pend .m, .pb.stale .m { opacity: 0.5; } .pb.fail .m { background: var(--red); opacity: 0.85; }
@@ -832,6 +835,8 @@ const answers = (t) => [...(t ?? "").matchAll(/"([^]*?)"="([^]*?)(?:"(?=, "|\. Y
 // chat or terminal (the pane text); each session opens in chat
 let term = false;
 const metaLine = (r) => `<p class="meta">${esc(r.pid)} · ${esc(r.path)} · ${r.state} ${ago(r.since)}</p>`;
+// the bar's colour for who typed a prompt in: the watchdog orange, ccx teal, a session slate
+const BY_COLOR = {watchdog: "#e8590c", ccx: "#0c8599", "": "#5c6b7e"};
 function chat(r) {
   if (term) return `<pre class="term">${esc(S.screens[r.pid]?.text ?? "loading…")}</pre>`;
   const log = stream?.pid === r.pid ? S.log : [];
@@ -842,9 +847,11 @@ function chat(r) {
       if (qa.length) msgs.push({at: e.at, me: true, body: qa.map(([q, a]) => `<span class="q">${esc(q.length > 80 ? q.slice(0, 80) + "…" : q)}</span>${autolink(esc(a))}`).join("<br>"), small: hhmm(e.at)});
     }
     if ((e.type !== "user" && e.type !== "text") || blank(e)) continue;
-    msgs.push({at: e.at, me: e.type === "user", body: e.type === "user" ? thumbs(picsOf(r.pid, e)) + autolink(esc(clip(unpic(unpaste(e.text)).trim()))) : md(e.text), small: hhmm(e.at)});
+    // typed by ccx user for someone else (cchost's typed.js), shown whole
+    const by = e.type === "user" && e.by ? `<span class="who">${esc(e.by)}</span>` : "";
+    msgs.push({at: e.at, me: e.type === "user", by: e.by, body: e.type === "user" ? by + thumbs(picsOf(r.pid, e)) + autolink(esc(by ? unpic(unpaste(e.text)).trim() : clip(unpic(unpaste(e.text)).trim()))) : md(e.text), small: hhmm(e.at)});
   }
-  const out = msgs.map((m) => `<div class="m ${m.me ? "me" : ""}" data-at="${m.at}">${m.body}<small>${m.small}</small></div>`);
+  const out = msgs.map((m) => `<div class="m ${m.me ? "me" : ""}${m.by ? ` by" style="--by:${BY_COLOR[m.by] ?? BY_COLOR[""]}` : ""}" data-at="${m.at}">${m.body}<small>${m.small}</small></div>`);
   // sent from here, not in the log yet: kept below everything until the log shows it
   for (const p of pending.filter((x) => x.pid === r.pid)) {
     const stale = !p.err && Date.now() - p.at > 120e3;
