@@ -1166,11 +1166,27 @@ let draftKey = null;
 function setDraft(k, t) {
   if (t) drafts[k] = {t, at: Date.now()}; else delete drafts[k];
   localStorage.cc_drafts = JSON.stringify(drafts);
+  tellDraft();
 }
+// cchost hears what the box holds for the session it would go to, so nadya does not close a helper being typed to.
+// it forgets it 30s unrefreshed; hidden or empty says "" at once
+let told = null;  // {pid, text, at}, the last post
+function tellDraft(bye = false) {
+  const q = $("#say").q.value.trim(), t = bye || document.hidden ? "" : q || (attsOf().length ? IMAGE : "");
+  const pid = t ? (isPid(draftKey) ? draftKey : nadyaRow()?.pid) : null;
+  const send = (to, text) => fetch(`${CCX}/s/${to}/draft`, {method: "POST", keepalive: true,
+    headers: {"content-type": "application/json"}, body: JSON.stringify({text})}).catch(() => {});
+  if (told && told.pid !== pid) { send(told.pid, ""); told = null; }
+  if (!pid || told?.text === t && Date.now() - told.at < 10e3 || told && told.text !== t && Date.now() - told.at < 2e3) return;
+  told = {pid, text: t, at: Date.now()}; send(pid, t);
+}
+setInterval(tellDraft, 2e3);
+document.addEventListener("visibilitychange", () => tellDraft());
+addEventListener("pagehide", () => tellDraft(true));
 function loadDraft() {
   const k = cur ?? "nadya"; if (k === draftKey) return;
   const t = drafts[k]?.t ?? "";
-  draftKey = k; $("#say").q.value = attsOf(k).length ? t : t.replaceAll(IMAGE, ""); drawAtts(); fit();
+  draftKey = k; $("#say").q.value = attsOf(k).length ? t : t.replaceAll(IMAGE, ""); drawAtts(); fit(); tellDraft();
 }
 // images pasted or dropped into the box, per session like the drafts but not kept: {type, data (base64), url, ready}.
 // Each is a 🖼 in the text, at the cursor when it came, in the same order: cchost pastes the image's path where its 🖼 is,

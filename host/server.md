@@ -109,7 +109,10 @@ All JSON, all under `api/`.
                                    when the pid leaves the poll. No N: the tail, as a reset
     GET  api/s/<pid>/screen        {text, input, dialog}, once; input is what is typed in
                                    the input box, "" if empty or only a dim suggestion,
-                                   null with no box (a dialog)
+                                   null with no box (a dialog); draft is what cc's chat
+                                   box holds for it, "" if nothing
+    POST api/s/<pid>/draft  {text}  cc's chat box text for it ("" clears); kept 30s, cc
+                                    re-posts every 10s while it lasts
     POST api/s/<pid>/type   {text, images?}  typeInto(). `images` [{type, data}], data base64,
                                            png/jpeg/gif/webp, at most 4 of 10 MB: written
                                            to /tmp/cc-img (gone after a day), each path

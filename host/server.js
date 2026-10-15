@@ -31,6 +31,7 @@ import {chatLog, mergeChats, PAIR_WINDOW, sameMessage, watchChat} from "./chat.j
 import {Online} from "./online.js";
 
 export const PORT = 7681;
+const DRAFT_TTL = 30e3;      // cc re-posts its box's text every 10s while it has some
 const TICK = 500;            // the open sessions' panes are read this often, for the screen and its dialog
 const KEEPALIVE = 15000;     // an SSE comment this often, so no proxy calls it idle
 const PASS = ["content-type", "sec-fetch-site", "last-event-id"];   // what a proxied call keeps
@@ -249,6 +250,7 @@ export class Server {
     this.subs = subs;                     // a Subs, under `cchost`
     this.goals = null;                    // a Goals, under `cchost`
     this.typed = null;                    // a Typed, under `cchost`
+    this.drafts = new Map();              // pid -> {text, at}: cc's chat box for it, api/s/<pid>/draft
     this.lists = new Set();               // api/events clients
     this.allLists = new Set();            // api/events?all=1 clients
     this.sessions = new Set();            // api/s/<pid>/events clients
@@ -641,6 +643,14 @@ export class Server {
   }
 
   // api/s/<host>.<pid>/<verb> of another host, as it answered
+  // what cc's box holds for pid, "" if nothing or not refreshed for DRAFT_TTL
+  draft(pid) {
+    const d = this.drafts.get(pid);
+    if (d && Date.now() - d.at < DRAFT_TTL) return d.text;
+    this.drafts.delete(pid);
+    return "";
+  }
+
   async proxy(req, host, pid, verb, search) {
     if (verb === "events") return this.proxyEvents(req, host, pid, search);
     try {
@@ -846,7 +856,7 @@ export class Server {
       tag = host;
       path = `/api/s/${pid}/${verb}`;
     }
-    const m = path.match(/^\/api\/s\/(\d+)\/(log|img|events|type|pick|now|unqueue|screen|send|select|close|goal)$/);
+    const m = path.match(/^\/api\/s\/(\d+)\/(log|img|events|type|pick|now|unqueue|screen|send|select|close|goal|draft)$/);
     if (!m) return json({error: "not found"}, 404);
     const [, pidText, verb] = m, pid = Number(pidText);
     // the pid has to be a claude in the current poll: a pane whose claude exited types
@@ -878,7 +888,7 @@ export class Server {
       const box = raw.code === 0 ? inputBox(raw.out) : null;
       const input = box ? (box.state === "text" ? box.lines.join("\n").trim() : "") : null;
       return text === null ? json({error: "tmux: capture failed"}, 502)
-        : json({text, input, dialog: inst.state === "wait" ? withAsk(parseDialog(text),
+        : json({text, input, draft: this.draft(pid), dialog: inst.state === "wait" ? withAsk(parseDialog(text),
           pendingAsk(inst.sessionId, inst.sessionId && logPath(inst.cwd, inst.sessionId))) : null});
     }
     if (!post) return json({error: "not found"}, 404);
@@ -921,6 +931,13 @@ export class Server {
         session: inst.session});
     }
     if (verb === "close") return answer(await close(inst));
+    // cc's chat box holds text for it: kept DRAFT_TTL, so a page that goes away stops saying so
+    if (verb === "draft") {
+      if (typeof body.text !== "string") return json({error: "no text"}, 400);
+      if (body.text.trim()) this.drafts.set(pid, {text: body.text, at: Date.now()});
+      else this.drafts.delete(pid);
+      return json({ok: true});
+    }
     if (verb === "goal") {
       if (!this.goals) return json({error: "no goals here; they run under cchost"}, 409);
       if (typeof body.goal !== "string") return json({error: "no goal"}, 400);
