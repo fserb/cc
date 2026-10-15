@@ -1,7 +1,8 @@
 // The other machines' daemons, as cchost reaches them: the host list, a call, the merged
 // usage and burn, and the list stream it follows for the relay and api/list?all=1.
 
-import {readUsage, tokenPace as tokenPaceOf, usedAt, usedNow, weekSamples} from "./usage.js";
+import {calibrate, CALIB_SPANS, readUsage, tokenPace as tokenPaceOf, usedAt, usedNow, weekSamples}
+  from "./usage.js";
 import {breakdown, group, localRows, PER_PCT, series} from "./burn.js";
 
 export const PORT = 7681;
@@ -87,16 +88,18 @@ export async function burnReport(hours, local, now = Date.now()) {
   const from = now - hours * 3600_000, {rows, down} = await allRows(from, now, local);
   const s = weekSamples(u, now);
   const used = from >= start ? usedAt(s, now) - usedAt(s, from) : null;
-  return {at: now, from, to: now, hours, ...group(rows, used), down};
+  const per = used == null ? (await measured(u, now)).perPct : PER_PCT;
+  return {at: now, from, to: now, hours, ...group(rows, used, per), perPct: per, down};
 }
 
 // What /api/burn/series answers: every host's weighted tokens per `step` over the last `n`
 // steps, summed, and `ref`, the tokens a step would take at the even pace (the rest of the
-// week spread evenly to the reset, PER_PCT per %), which is 1.0x on the header
+// week spread evenly to the reset, at the measured tokens per %), which is 1.0x on the header
 export async function burnSeries(n, step, now = Date.now()) {
   const [{down, ...mine}, u] = await Promise.all([allSeries(n, step, now), mergedUsage()]);
   const left = u && u.resetsAt > now ? u.resetsAt - now : 0;
-  const ref = left ? Math.round(Math.max(0, 100 - u.used) * PER_PCT / left * step) : null;
+  const per = left ? (await measured(u, now)).perPct : 0;
+  const ref = left ? Math.round(Math.max(0, 100 - u.used) * per / left * step) : null;
   return {...mine, ref, down};
 }
 
@@ -114,19 +117,33 @@ async function allSeries(n, step, now) {
   return {...mine, down};
 }
 
+// Weighted tokens per 1% of the week, every host's burn rows against the merged log
+// (usage.js calibrate: the last 1, 3 or 7 days, the first where the log added 3%+), so it
+// follows the plan's quota as it changes: 5.5M-6.0M on 2026-10-14 over 1h to 47h, where
+// PER_PCT, fitted on 2026-10-07, says 14M. PER_PCT when no span has 3% (`calib` null).
+// Re-measured at most every 10 min
+const MEASURE_EVERY = 10 * 60_000;
+let lastMeasure = null;
+export async function measured(u, now = Date.now()) {
+  if (lastMeasure && now - lastMeasure.at < MEASURE_EVERY && lastMeasure.resetsAt === u.resetsAt) {
+    return lastMeasure;
+  }
+  const oldest = Math.ceil((now - CALIB_SPANS.at(-1)) / 3600_000) * 3600_000;
+  const {rows, down} = await allRows(oldest, now, localRows);
+  const c = calibrate(u, rows, now);
+  const m = {at: now, resetsAt: u.resetsAt, perPct: c?.perPct ?? PER_PCT,
+    calib: c && {from: c.from, added: c.added, w: c.w}};
+  if (!down.length) lastMeasure = m;
+  return m;
+}
+
 // The pace over the last 15 min (`short`) and 1h (`long`) from every host's weighted tokens
-// (usage.js tokenPace), which cc's header shows (user, 2026-10-14). Tokens per % is what the
-// last 24h of the log added against the tokens over it (5.5M-6.0M per % over 1h to 47h on
-// 2026-10-14, where PER_PCT says 14M), PER_PCT when the log added under 3% (`calib` null).
-// Each window is whole minutes back from the one in progress, so a window is up to 1 min long.
+// (usage.js tokenPace), which cc's header shows (user, 2026-10-14), at measured()'s tokens
+// per %. Each window is whole minutes back from the one in progress, so a window is up to
+// 1 min long.
 export async function tokenPace(u, now = Date.now()) {
   if (!u || now >= u.resetsAt) return null;
-  const from = Math.max(now - 24 * 3600_000, u.resetsAt - 7 * 24 * 3600_000);
-  const [{rows}, s] = await Promise.all([allRows(from, now, localRows), allSeries(60, 60_000, now)]);
-  const samples = weekSamples(u, now), added = usedAt(samples, now) - usedAt(samples, from);
-  const w = rows.reduce((n, r) => n + r.w, 0);
-  const calib = added >= 3 && w > 0 ? {from, added, w} : null;
-  const perPct = calib ? w / added : PER_PCT;
+  const [{perPct, calib}, s] = await Promise.all([measured(u, now), allSeries(60, 60_000, now)]);
   const win = (mins) => {
     const k = s.w.length - mins;
     return tokenPaceOf(u, s.w.slice(k).reduce((a, b) => a + b, 0), now - (s.from + k * s.step), perPct, now);

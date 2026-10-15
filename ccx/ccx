@@ -997,8 +997,9 @@ async function cmdList() {
 }
 
 // ccx usage
-// The seven-day line, the pace over each of the last 1h to 6h, then the week so far a
-// local day per row, every host's log merged
+// The seven-day line, the weighted tokens per 1% cchost measured and over what, the pace
+// over each of the last 1h to 6h, then the week so far a local day per row, every host's
+// log merged
 async function cmdUsage() {
   const [body, err] = await api("/api/usage", undefined, 30_000);
   if (err) fail("usage", err);
@@ -1009,6 +1010,12 @@ async function cmdUsage() {
     return Deno.exit(1);
   }
   console.log(`${line.text}\n`);
+  const t = u.paceTokens, when = (ms) => new Date(ms).toLocaleString("en-US",
+    {weekday: "short", hour: "numeric", minute: "2-digit"});
+  if (t) console.log(t.calib ? `${(t.perPct / 1e6).toFixed(1)}M weighted tokens per 1%, measured ` +
+    `since ${when(t.calib.from)}: ${(t.calib.w / 1e6).toFixed(0)}M for +${Math.round(t.calib.added)}%\n`
+    : `${(t.perPct / 1e6).toFixed(1)}M weighted tokens per 1%, the fixed fallback: ` +
+      "the log added under 3% in the last 7 days\n");
   const table = paceTable(u);
   if (table.length) console.log(`${table.join("\n")}\n`);
   for (const d of byDay(u)) {
@@ -1043,7 +1050,7 @@ async function cmdBurn(...args) {
     minute: "2-digit"});
   if (hours) {
     console.log(`burn ${hours}h (${when(r.from)} - ${when(r.to)}): ${tok(r.w)} weighted tok, ` +
-      (r.used == null ? `~${pct(r.est)} of the week at 14M/% (no log for this window)`
+      (r.used == null ? `~${pct(r.est)} of the week at ${tok(r.perPct ?? 14e6)}/% (no log for this window)`
         : `the log added ${pct(r.used)} of the week`));
     const row = (name, t) => console.log(`${(t.q == null ? `${pct(t.share)}*` : pct(t.q))
       .padStart(6)}  ${name.padEnd(22)} out ` +

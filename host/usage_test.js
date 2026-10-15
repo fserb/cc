@@ -1,5 +1,5 @@
 import {assertEquals} from "jsr:@std/assert";
-import {byDay, pace, paceTable, readHistory, readUsage, tokenPace, usageLine, usedNow, weekSamples} from "./usage.js";
+import {addedSince, byDay, calibrate, pace, paceTable, readHistory, readUsage, tokenPace, usageLine, usedNow, weekSamples} from "./usage.js";
 
 const H = 3600_000, WEEK = 168 * H;
 const at = (used, hours) => ({used, resetsAt: 1_000 * WEEK + WEEK - hours * H, at: 0});
@@ -180,4 +180,19 @@ Deno.test("tokenPace: a window's tokens at the measured tokens per % make the ra
   assertEquals(+tokenPace(u, even * 2, H, per, now).ratio.toFixed(6), 2);
   assertEquals(tokenPace(u, 0, H / 4, per, now).ratio, 0);
   assertEquals(tokenPace(u, even, H, 0, now), null);
+});
+
+Deno.test("calibrate: the shortest span the log added 3%+ over, across a reset", () => {
+  const H = 3600_000, D = 24 * H, now = 1_000 * D, resetsAt = now + 6 * D, start = resetsAt - 7 * D;
+  const rows = [{h: now - 2 * H, w: 10e6}, {h: now - 2 * D, w: 20e6}, {h: start - 3 * H, w: 30e6}];
+  // this week (a day in) added 1%, the last two days of last week 4%
+  const history = [{at: start - 2 * D, used: 50, resetsAt: start}, {at: start - H, used: 54, resetsAt: start},
+    {at: now - 3 * H, used: 1, resetsAt}];
+  const u = {used: 1, resetsAt, history};
+  const c = calibrate(u, rows, now);
+  assertEquals(c.from, now - 3 * D);
+  assertEquals(c.added, 5);
+  assertEquals(c.w, 60e6);
+  assertEquals(calibrate({used: 1, resetsAt, history: history.slice(2)}, rows, now), null);
+  assertEquals(addedSince({used: 1, resetsAt, history: history.slice(2)}, now - 3 * D, now), null);
 });

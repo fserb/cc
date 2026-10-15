@@ -32,7 +32,9 @@ import { HOME } from "./sh.js";
 import { usedAt, weekSamples } from "./usage.js";
 
 export const STORE = `${HOME}/.claude/ccx-burn.jsonl`;
-export const PER_PCT = 14e6; // weighted tokens per 1% of the 7-day quota (calibration above)
+// weighted tokens per 1% of the 7-day quota (calibration above); the fallback for
+// remote.js measured(), which re-measures it from the log (5.5M-6.0M on 2026-10-14)
+export const PER_PCT = 14e6;
 const ROOT = `${HOME}/.claude/projects`;
 const HOUR = 3600_000, DAY = 24 * HOUR, WEEK = 7 * DAY;
 const SETTLE = 5 * 60_000; // an hour goes into the store this long after it ends
@@ -372,10 +374,10 @@ function add(a, b) {
 
 // Rows (each with its host) summed per project and session, biggest first. Each has
 // `share`, its % of the weighted tokens, and `q`, that share of `used`, the % the log added
-// over them: the % of the limit it took. With no log `q` is null: the estimate w / PER_PCT
-// (`est`, the total's only) put week Sep 28 - Oct 5 at 184%, so it is not to be trusted
-// across weeks
-export function group(rows, used = null) {
+// over them: the % of the limit it took. With no log `q` is null and `est`, the total's
+// only, is w / `perPct` (remote.js measured); PER_PCT put week Sep 28 - Oct 5 at 184%, so
+// it is not to be trusted across weeks
+export function group(rows, used = null, perPct = PER_PCT) {
   const projects = new Map(), all = blank();
   for (const r of rows) {
     const name = projectName(r.p);
@@ -397,7 +399,7 @@ export function group(rows, used = null) {
   return {
     ...all,
     used: used == null ? null : Math.round(used * 100) / 100,
-    est: Math.round(100 * all.w / PER_PCT) / 100,
+    est: Math.round(100 * all.w / perPct) / 100,
     projects: sorted(projects).map((p) => ({
       ...p,
       q: q(p.w),

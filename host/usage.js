@@ -9,13 +9,13 @@
 // numbers carry no time of their own, so an instance idle since an older response can put
 // older numbers back for a moment.
 
-import {HOME} from "./sh.js";
-import {PALETTE} from "./view.js";
+import { HOME } from "./sh.js";
+import { PALETTE } from "./view.js";
 
 export const USAGE = `${HOME}/.claude/ccx-usage.json`;
 export const HISTORY = `${HOME}/.claude/ccx-usage.log`;
 const WEEK = 7 * 24 * 3600_000;
-const SETTLE = 3600_000;    // under an hour into a week the average rate is noise
+const SETTLE = 3600_000; // under an hour into a week the average rate is noise
 const RECENT = 1 * 3600_000; // the rate is what the last 1h added
 export const LONGER = 3 * 3600_000; // the second rate, over 3h (usageLine, api/usage paceLong)
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -25,10 +25,14 @@ const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export function readUsage(path = USAGE, log = HISTORY) {
   try {
     const at = Deno.statSync(path).mtime?.getTime() ?? 0;
-    const week = JSON.parse(Deno.readTextFileSync(path))?.rate_limits?.seven_day;
-    const used = Number(week?.used_percentage), resets = Number(week?.resets_at);
-    if (!Number.isFinite(used) || !Number.isFinite(resets) || !resets) return null;
-    return {used, resetsAt: resets * 1000, at, history: readHistory(log)};
+    const week = JSON.parse(Deno.readTextFileSync(path))?.rate_limits
+      ?.seven_day;
+    const used = Number(week?.used_percentage),
+      resets = Number(week?.resets_at);
+    if (!Number.isFinite(used) || !Number.isFinite(resets) || !resets) {
+      return null;
+    }
+    return { used, resetsAt: resets * 1000, at, history: readHistory(log) };
   } catch {
     return null;
   }
@@ -47,7 +51,7 @@ export function readHistory(path = HISTORY) {
   for (const line of text.split("\n")) {
     const [at, used, resets] = line.split(" ").map(Number);
     if (!at || !Number.isFinite(used) || !resets) continue;
-    out.push({at: at * 1000, used, resetsAt: resets * 1000});
+    out.push({ at: at * 1000, used, resetsAt: resets * 1000 });
   }
   return out;
 }
@@ -57,7 +61,8 @@ export function usedAt(samples, t) {
   let prev = samples[0];
   for (const s of samples) {
     if (s.at >= t) {
-      return s.at === prev.at ? s.used
+      return s.at === prev.at
+        ? s.used
         : prev.used + (s.used - prev.used) * (t - prev.at) / (s.at - prev.at);
     }
     prev = s;
@@ -79,7 +84,7 @@ export function weekSamples(u, now) {
   const start = u.resetsAt - WEEK, raw = [];
   for (const h of u.history ?? []) {
     if (h.resetsAt !== u.resetsAt || h.at <= start || h.at >= now) continue;
-    raw.push({at: h.at, used: h.used});
+    raw.push({ at: h.at, used: h.used });
   }
   raw.sort((a, b) => a.at - b.at);
   const drops = new Map(), skip = new Set();
@@ -95,11 +100,15 @@ export function weekSamples(u, now) {
       j -= 2;
     }
     drops.set(j, top);
-    top = Math.max(...raw.slice(j, i + 1).filter((_, k) => !skip.has(j + k)).map((s) => s.used));
+    top = Math.max(
+      ...raw.slice(j, i + 1).filter((_, k) => !skip.has(j + k)).map((s) =>
+        s.used
+      ),
+    );
   }
   const last = [...drops.values()].at(-1);
-  if (last === undefined || u.used < last) raw.push({at: now, used: u.used});
-  const samples = [{at: start, used: 0}];
+  if (last === undefined || u.used < last) raw.push({ at: now, used: u.used });
+  const samples = [{ at: start, used: 0 }];
   samples.drops = [];
   let base = 0;
   top = 0;
@@ -107,11 +116,11 @@ export function weekSamples(u, now) {
     if (skip.has(i)) return;
     if (drops.has(i)) {
       base += drops.get(i);
-      samples.drops.push({at: s.at, by: drops.get(i)});
+      samples.drops.push({ at: s.at, by: drops.get(i) });
       top = 0;
     }
     top = Math.max(top, s.used);
-    samples.push({at: s.at, used: base + top});
+    samples.push({ at: s.at, used: base + top });
   });
   return samples;
 }
@@ -135,9 +144,11 @@ export function byDay(u, now = Date.now()) {
     const next = new Date(from);
     next.setHours(24, 0, 0, 0);
     const to = Math.min(next.getTime(), now), used = usedNow(samples, to);
-    const n = samples.filter((s) => s.at > start && s.at >= from && s.at < to).length;
+    const n = samples.filter((s) =>
+      s.at > start && s.at >= from && s.at < to
+    ).length;
     const total = usedAt(samples, to);
-    out.push({day: from, used, added: total - before, samples: n});
+    out.push({ day: from, used, added: total - before, samples: n });
     [from, before] = [next.getTime(), total];
   }
   return out;
@@ -157,16 +168,26 @@ export function pace(u, now = Date.now(), window = RECENT) {
   if (!u || now >= u.resetsAt) return null;
   const start = u.resetsAt - WEEK, elapsed = Math.max(0, now - start);
   const even = 100 * elapsed / WEEK;
-  const samples = weekSamples(u, now), used = usedNow(samples), total = samples.at(-1).used;
+  const samples = weekSamples(u, now),
+    used = usedNow(samples),
+    total = samples.at(-1).used;
   if (elapsed < SETTLE || used <= 0) {
-    return {used, even, rate: null, ratio: null, end: null, out: null, added: null};
+    return {
+      used,
+      even,
+      rate: null,
+      ratio: null,
+      end: null,
+      out: null,
+      added: null,
+    };
   }
   const span = Math.min(window, elapsed);
   const added = total - usedAt(samples, now - span), perMs = added / span;
   const end = used + perMs * (u.resetsAt - now);
   const out = end > 100 ? now + (100 - used) / perMs : null;
   const ratio = used < 100 ? perMs * (u.resetsAt - now) / (100 - used) : null;
-  return {used, even, rate: perMs * 24 * 3600_000, ratio, end, out, added};
+  return { used, even, rate: perMs * 24 * 3600_000, ratio, end, out, added };
 }
 
 // `Thu 4pm` for 16:53: the hour it falls in
@@ -182,9 +203,13 @@ function when(ms) {
 export function paceTable(u, now = Date.now()) {
   const rows = [1, 2, 3, 4, 5, 6].map((h) => [h, pace(u, now, h * 3600_000)]);
   if (rows[0][1]?.ratio == null) return [];
-  return ["last  added  pace  out", ...rows.map(([h, p]) =>
-    `${`${h}h`.padStart(4)}  ${`+${p.added.toFixed(1)}%`.padStart(5)}  ` +
-    `${`${p.ratio.toFixed(1)}x`.padStart(4)}  ${p.out ? when(p.out) : "-"}`)];
+  return [
+    "last  added  pace  out",
+    ...rows.map(([h, p]) =>
+      `${`${h}h`.padStart(4)}  ${`+${p.added.toFixed(1)}%`.padStart(5)}  ` +
+      `${`${p.ratio.toFixed(1)}x`.padStart(4)}  ${p.out ? when(p.out) : "-"}`
+    ),
+  ];
 }
 
 // What a UI writes, `usage <used> (<1h ratio>x 1h, <3h ratio>x 3h pace - out <when>)`, the
@@ -195,11 +220,48 @@ export function usageLine(u, now = Date.now()) {
   if (!p) return null;
   const pl = pace(u, now, LONGER);
   const pct = (n) => `${Math.round(n)}%`;
-  const parts = [p.ratio === null ? "" : `${p.ratio.toFixed(1)}x 1h, ${pl.ratio.toFixed(1)}x 3h pace`,
-    p.out ? `out ${when(p.out)}` : ""].filter(Boolean);
+  const parts = [
+    p.ratio === null
+      ? ""
+      : `${p.ratio.toFixed(1)}x 1h, ${pl.ratio.toFixed(1)}x 3h pace`,
+    p.out ? `out ${when(p.out)}` : "",
+  ].filter(Boolean);
   const rest = parts.length ? ` (${parts.join(" - ")})` : "";
-  return {text: `usage ${pct(p.used)}${rest}`,
-    color: p.out ? PALETTE.warn : PALETTE.mauve};
+  return {
+    text: `usage ${pct(p.used)}${rest}`,
+    color: p.out ? PALETTE.warn : PALETTE.mauve,
+  };
+}
+
+// The % the log added from `from` to `now`, across one reset, last week read as burn.js
+// breakdown reads it; null when the span reaches into a last week with no log
+export function addedSince(u, from, now = Date.now()) {
+  const start = u.resetsAt - WEEK, s = weekSamples(u, now);
+  if (from >= start) return usedAt(s, now) - usedAt(s, from);
+  const last = weekSamples(
+    { resetsAt: start, history: u.history, used: 0 },
+    start,
+  );
+  if (!last.some((x) => x.used > 0)) return null;
+  return usedAt(last, start) - usedAt(last, Math.max(from, start - WEEK)) +
+    usedAt(s, now);
+}
+
+// Weighted tokens per 1% of the week, measured: `rows` (burn rows, {h, w}) against what the
+// log added, over the last 1, 3 or 7 days, the first in which the log added CALIB_MIN% or
+// more (the log is whole percents, +-1 each). {perPct, from, added, w}, or null when none did
+export const CALIB_SPANS = [1, 3, 7].map((d) => d * 24 * 3600_000),
+  CALIB_MIN = 3;
+export function calibrate(u, rows, now = Date.now()) {
+  for (const span of CALIB_SPANS) {
+    const from = Math.ceil((now - span) / 3600_000) * 3600_000,
+      added = addedSince(u, from, now);
+    const w = rows.reduce((n, r) => r.h >= from ? n + r.w : n, 0);
+    if (added >= CALIB_MIN && w > 0) {
+      return { perPct: w / added, from, added, w };
+    }
+  }
+  return null;
 }
 
 // The pace from weighted tokens (burn.js), which move continuously where the log moves in
@@ -212,6 +274,16 @@ export function tokenPace(u, w, span, perPct, now = Date.now()) {
   const added = w / perPct, perMs = added / span;
   const end = p.used + perMs * (u.resetsAt - now);
   const out = end > 100 ? now + (100 - p.used) / perMs : null;
-  const ratio = p.used < 100 ? perMs * (u.resetsAt - now) / (100 - p.used) : null;
-  return {used: p.used, even: p.even, rate: perMs * 24 * 3600_000, ratio, end, out, added};
+  const ratio = p.used < 100
+    ? perMs * (u.resetsAt - now) / (100 - p.used)
+    : null;
+  return {
+    used: p.used,
+    even: p.even,
+    rate: perMs * 24 * 3600_000,
+    ratio,
+    end,
+    out,
+    added,
+  };
 }
