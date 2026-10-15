@@ -455,6 +455,8 @@ async function older(want) {
 
 // ---------- what waits on the user
 function hasDialog(r) { return r.state === "wait" && (r.asking || (stream?.pid === r.pid && S.screens[r.pid]?.dialog)); }
+// waits on you: a dialog, or a turn that ended on a question in plain text (cchost's `question`), which takes typing as usual
+function waitsOnYou(r) { return hasDialog(r) || (r.state === "wait" && !!r.question); }
 function dueTodos(withSent) { const soon = Date.now() + 3600e3; return [...S.reminders, ...S.todo].filter((t) => t.due && t.due.getTime() <= soon && (withSent || !sent.has("todo:" + t.full))); }
 // the pace is ccx's (api/usage, every host's log merged), so the page and `ccx usage` agree: x over the last 1h, xl over
 // the last 3h (null from an older cchost); out is the 1h one's
@@ -516,7 +518,7 @@ function items() {
   if (!seenAt && S.rows.length) { seenAt = Object.fromEntries(S.rows.map((r) => [r.pid, r.since])); localStorage.cc_seen = JSON.stringify(seenAt); }
   const it = [];
   const n = nadyaRow();
-  const nadyaHot = n && hasDialog(n);
+  const nadyaHot = n && waitsOnYou(n);
   it.push({id: "nadya", d: nadyaHot ? "q" : n ? DOT[n.state] : "gray", hot: false, unread: unseen("nadya", n), title: "nadya",
     ...(n ? {...sessionLine(n), sub: ""} : {sub: "not running", t: ""})});  // no goal line for nadya (user, 2026-10-14)
   if (!localStorage.cc_blog_seen && S.posts.length) localStorage.cc_blog_seen = Date.now();
@@ -536,7 +538,7 @@ function items() {
     sub: pk ? [desk && `${desk} at the front desk`, (onWay || !food.length) && `${onWay} on the way`, eating && "Uber Eats on the way", ate && "Uber Eats delivered"].filter(Boolean).join(" · ") : "",
     t: pk ? ago(Date.parse(pk.updated) / 1000) : ""});
   it.push({id: "files", d: "", title: "files", sub: "", t: ""});
-  const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, dialog: !!hasDialog(r)}));
+  const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, dialog: !!waitsOnYou(r)}));
   ss.sort((a, b) => b.dialog - a.dialog);
   for (const {r, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "q" : DOT[r.state] ?? "gray", hot: false, unread: unseen(r.pid, r),
     title: r.name, ...sessionLine(r)});
@@ -544,7 +546,7 @@ function items() {
 }
 // a session row (user, 2026-10-14; web/mocks/sessions.html, H): the second line is always its goal, else Claude's
 // summary; beside the name its agents and, from 300k, its context size, orange getting red by 600k; on the right
-// host:path, no host for nadya's and no ~/. A dialog shows only as the ?
+// host:path, no host for nadya's and no ~/. A dialog or a question shows only as the ?
 function sessionLine(r) {
   const [host, path] = [r.pid.split(".")[0], r.path.slice(r.path.indexOf(":") + 1).replace(/^~\/?/, "")];
   const k = Math.round((r.context ?? 0) / 1000);

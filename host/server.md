@@ -150,7 +150,8 @@ Every row has these fields and no others (`ROW` in server.js, pinned by a test; 
 - `goal` (goals.js, "" with none) and `context` (tokens in its context at its last reply,
   read off the session log; 0 with none), since 2026-10-14
 - `state` wait | busy | hold | free, `since` (epoch s), `summary`, `asking` (the dialog a
-  wait is on), `waitsOn` (the peer a hold is on), `agents` (its subagents running now,
+  wait is on), `question` (2026-10-14: a wait whose last reply ends in a question mark,
+  that reply's last line; "" otherwise), `waitsOn` (the peer a hold is on), `agents` (its subagents running now,
   0 unless busy; claudes.js `subagentsRunning`)
 - `hasPane`, `pane`, `session`, `window`, `paneIndex`, `tab`: where it is in tmux
 - the session record's own, `""`/`0`/`[]` when there is none (a session read off the
@@ -411,7 +412,8 @@ option exits claude, so the button order on the card has to read clearly.
   "<host>:~/...", cwd, sessionId, from, to, what, asking, waitsOn, summary, goal, context,
   at}` (at in epoch s). `what` is cchost's word for it: `new` (first sight), `busy`, `done`
   (busy to a plain wait), `wait` (any other plain wait), `asking` (a wait on a dialog,
-  `asking` names it), `hold`, `free`, `gone` (ended from anything but busy), `crashed`
+  `asking` names it; or a turn that ended on a plain-text question, `question` holds its
+  last line), `hold`, `free`, `gone` (ended from anything but busy), `crashed`
   (ended while busy, so a `ccx delete` of a busy session is one too), `context` (its
   context crossed a 100k mark upward, `over` the mark; from and to the unchanged state)
 - ids are ms since the epoch, or one past the last, so they go up across restarts. The last

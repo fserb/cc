@@ -17,6 +17,7 @@ export class Instance {
     this.context = 0;         // tokens in its context at its last reply (sessionTitle)
     this.state = "";          // "" until StateClock fills it in
     this.asking = "";         // the record's waitingFor: a dialog is up, and which one
+    this.question = "";       // a wait whose last reply ends in a question: its last line (readTitle)
     this.waitsOn = "";        // hold on a peer: the name of the session it waits for
     this.agents = 0;          // subagents running now (subagentsRunning)
     this.name = "";           // the session's own name, what a peer addresses it by
@@ -201,13 +202,13 @@ const TITLES = new Map();          // session log -> [size when read, {title, co
 // has grown, which is what carries a /rename onto the next poll. With it, the context size
 // at the last reply: that message's input tokens, cached or not.
 function sessionTitle(cwd, sessionId) {
-  if (!cwd || !sessionId) return {title: "", context: 0};
+  if (!cwd || !sessionId) return {title: "", context: 0, question: ""};
   const path = `${projectDir(cwd)}/${sessionId}.jsonl`;
   let size;
   try {
     size = Deno.statSync(path).size;
   } catch {
-    return {title: "", context: 0};
+    return {title: "", context: 0, question: ""};
   }
   const [sizeRead, cached] = TITLES.get(path) ?? [-1, null];
   if (size === sizeRead) return cached;
@@ -240,12 +241,15 @@ function readTail(path, size, tail = TITLE_TAIL) {
   }
 }
 
-// The last title in the tail of a session log, /rename's winning over the AI one, and the
-// context size at the last reply in it (0 with none).
-function readTitle(path, size) {
+// The last title in the tail of a session log, /rename's winning over the AI one, the
+// context size at the last reply in it (0 with none), and `question`: the last line of the
+// last reply when that reply is text ending in a question mark, a turn that ended by asking
+// you something in plain words. A reply can be a non-blank `thinking` block (2.1.296), and
+// one with a tool_use is not the end of a turn
+export function readTitle(path, size) {
   const text = readTail(path, size);
   const found = {};
-  let context = 0;
+  let context = 0, last = "";
   for (const line of text.split("\n")) {
     const usage = line.includes('"type":"assistant"') && line.includes('"usage":');
     if (!usage && !line.includes('"type":"ai-title"') && !line.includes('"type":"custom-title"')) continue;
@@ -255,12 +259,19 @@ function readTitle(path, size) {
         const u = rec.message?.usage ?? {};
         const n = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
         if (n) context = n;
+        const blocks = Array.isArray(rec.message?.content) ? rec.message.content : [];
+        if (blocks.some((b) => b.type === "tool_use")) last = "";
+        const said = blocks.map((b) => b.type === "text" ? b.text : b.type === "thinking" ? b.thinking : "")
+          .filter((t) => t?.trim()).join("\n").trim();
+        if (said) last = said;
       } else found[rec.type] = rec.customTitle ?? rec.aiTitle ?? "";
     } catch {
       continue;
     }
   }
-  return {title: found["custom-title"] ?? found["ai-title"] ?? "", context};
+  const end = last.split("\n").filter((l) => l.trim()).at(-1)?.trim() ?? "";
+  const question = /\?[\s*_)`"'”]*$/.test(end) ? end.slice(-200) : "";
+  return {title: found["custom-title"] ?? found["ai-title"] ?? "", context, question};
 }
 
 // How many of this session's subagents are running now. Each has its own log,
@@ -432,7 +443,7 @@ export function waitsOn(rec, recs, subs = subscriptions(rec.cwd ?? "", rec.sessi
 export class StateClock {
   constructor(host = "") {
     this.host = host;
-    this.seen = new Map();  // pid -> {state, since, asking, waitsOn, name, sessionId, cwd}
+    this.seen = new Map();  // pid -> {state, since, asking, question, waitsOn, name, sessionId, cwd, recorded}
     this.woke = [];         // instances that went busy -> wait during the last update
     this.listeners = [];
     this.seq = 0;
@@ -449,6 +460,14 @@ export class StateClock {
     const events = [];
     for (const i of instances) {
       const prev = this.seen.get(i.pid);
+      // Claude Code deletes its record on exit before the process is gone, so a pid seen with
+      // a record and now without one is closing: it keeps what it was until it goes, or its
+      // screen, read as a wait, would be one more change just before the `gone`
+      if (prev?.recorded && !i.peer) {
+        Object.assign(i, {state: prev.state, asking: prev.asking, question: prev.question,
+          waitsOn: prev.waitsOn, name: i.name || prev.name, sessionId: i.sessionId || prev.sessionId,
+          cwd: i.cwd || prev.cwd});
+      }
       // a screen we could not read is not a transition: an empty capture would otherwise
       // read as wait and ring every instance at once. || not ??, since 0 and "" mean absent
       i.state = i.state || (prev ? prev.state : "wait");
@@ -465,17 +484,18 @@ export class StateClock {
       }
       // only busy -> wait rings; first sight is not a transition, so startup is silent
       if (prev && prev.state === "busy" && i.state === "wait") this.woke.push(i);
-      if (!prev || prev.state !== i.state || prev.asking !== i.asking) {
+      if (!prev || prev.state !== i.state || prev.asking !== i.asking || prev.question !== i.question) {
         events.push(this.event(i, prev?.state ?? "", i.state, now));
       }
-      this.seen.set(i.pid, {state: i.state, since: i.since, asking: i.asking,
-        waitsOn: i.waitsOn, name: i.name, sessionId: i.sessionId, cwd: i.cwd});
+      this.seen.set(i.pid, {state: i.state, since: i.since, asking: i.asking, question: i.question,
+        waitsOn: i.waitsOn, name: i.name, sessionId: i.sessionId, cwd: i.cwd,
+        recorded: Boolean(i.peer) || Boolean(prev?.recorded)});
     }
     const live = new Set(instances.map((i) => i.pid));
     for (const [pid, prev] of [...this.seen]) {
       if (live.has(pid)) continue;
       this.seen.delete(pid);
-      events.push(this.event({pid, ...prev, asking: "", waitsOn: "", since: now},
+      events.push(this.event({pid, ...prev, asking: "", question: "", waitsOn: "", since: now},
         prev.state, "gone", now));
     }
     if (events.length) {
@@ -493,6 +513,7 @@ export class StateClock {
   event(i, from, to, at) {
     return {seq: ++this.seq, host: this.host, pid: i.pid, name: i.name ?? "",
       sessionId: i.sessionId ?? "", cwd: i.cwd ?? "", from, to, asking: i.asking ?? "",
+      question: i.question ?? "",
       waitsOn: i.waitsOn ?? "", since: i.since, at, source: "poll", path: i.path ?? "",
       // with no record the summary is the pane title, which is the hostname until claude sets it
       summary: i.sessionId ? i.summary ?? "" : "",
@@ -655,11 +676,13 @@ export async function discover() {
       if (!procs.has(cur)) break;
       cur = procs.get(cur)[0];
     }
-    const {title, context} = sessionTitle(rec.cwd ?? "", rec.sessionId ?? "");
+    const {title, context, question: asked} = sessionTitle(rec.cwd ?? "", rec.sessionId ?? "");
+    // a turn that ended asking you something; a dialog is `asking`, a hold waits on a peer
+    const question = state === "wait" && rec.status === "idle" ? asked : "";
     const agents = subagentsRunning(rec);
     if (!pane) {                                   // nothing to focus, but the record knows
       found.push(new Instance({pid, summary: title || cmd, path: rec.cwd ?? "",
-        state, agents, context, asking: rec.status === "waiting" ? (rec.waitingFor ?? "") : "", waitsOn: holdFor,
+        state, agents, context, question, asking: rec.status === "waiting" ? (rec.waitingFor ?? "") : "", waitsOn: holdFor,
         name: rec.name ?? "", nameDue: nameDue(rec), sock: rec.messagingSocketPath ?? "", statusSince: since,
         sessionId: rec.sessionId ?? "", cwd: rec.cwd ?? "", peer: peerOf(rec)}));
       continue;
@@ -680,6 +703,7 @@ export async function discover() {
       state,                       // "" with no record; the scrape below fills it in
       asking: rec.status === "waiting" ? (rec.waitingFor ?? "") : "",
       waitsOn: holdFor,
+      question,
       agents,
       context,
       name: rec.name ?? "",

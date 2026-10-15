@@ -12,13 +12,14 @@ export const CONTEXT_STEP = 100_000;
 const tilde = (p) => p && p.startsWith(HOME) ? `~${p.slice(HOME.length)}` : p;
 
 // The one word for a StateClock event: `crashed` ended while busy (a turn or delegated
-// work in flight), `gone` ended otherwise; `asking` a wait on a dialog, `done` a turn
+// work in flight), `gone` ended otherwise; `asking` a wait on a dialog or on a question
+// its last reply ended with (`question`), `done` a turn
 // that finished into a plain wait, `wait` any other plain wait; `new` first sight
 export function whatOf(ev) {
   if (ev.to === "gone") return ev.from === "busy" ? "crashed" : "gone";
   if (!ev.from) return "new";
   if (ev.to === "wait") {
-    return ev.asking
+    return ev.asking || ev.question
       ? "asking"
       : ev.from === "busy"
       ? "done"
@@ -110,6 +111,7 @@ export class Changes {
             from: i.state,
             to: i.state,
             asking: i.asking,
+            question: i.question,
             waitsOn: i.waitsOn,
             summary: i.summary,
           },
@@ -137,6 +139,7 @@ export class Changes {
       to: ev.to,
       what,
       asking: ev.asking ?? "",
+      question: ev.question ?? "",
       waitsOn: ev.waitsOn ?? "",
       summary: ev.summary ?? "",
       goal: i?.goal || "",

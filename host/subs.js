@@ -60,6 +60,8 @@ export function noticeText(host, sub, ev) {
   }
   const why = ev.to === "wait" && ev.asking
     ? ` (${ev.asking})`
+    : ev.to === "wait" && ev.question
+    ? ` (asks: ${ev.question})`
     : ev.to === "hold" && ev.waitsOn
     ? ` (on ${ev.waitsOn})`
     : "";

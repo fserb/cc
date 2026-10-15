@@ -189,3 +189,28 @@ Deno.test("Changes: gone keeps the name, dir, goal of a session whose record wen
     ["crashed", "t", "nadya:~/t", "s1", "x", "g", 5], "the last known");
   eq(c.known.size, 0, "forgotten once gone");
 });
+
+Deno.test("readTitle: a turn that ended on a question, not one with a tool after it", async () => {
+  const {readTitle} = await import("./claudes.js");
+  const say = (content) => JSON.stringify({type: "assistant", message: {content, usage: {input_tokens: 1}}});
+  const log = (...lines) => {
+    const p = Deno.makeTempFileSync();
+    Deno.writeTextFileSync(p, lines.join("\n") + "\n");
+    return readTitle(p, Deno.statSync(p).size).question;
+  };
+  eq(log(say([{type: "text", text: "Done.\n\nWant me to **commit it?**"}])), "Want me to **commit it?**", "text");
+  eq(log(say([{type: "thinking", thinking: "Delete them too?"}])), "Delete them too?", "a thinking reply");
+  eq(log(say([{type: "text", text: "Is it?"}]), say([{type: "tool_use", name: "Bash"}])), "", "a tool after it");
+  eq(log(say([{type: "text", text: "Why? Because.\nDone."}])), "", "a statement");
+});
+
+Deno.test("StateClock: a closing session keeps its state, and a question is a change", async () => {
+  const {StateClock} = await import("./claudes.js");
+  const c = new StateClock("nadya"), got = [];
+  c.on((evs) => got.push(...evs.map((e) => [e.from, e.to, whatOf(e)])));
+  c.update([{pid: 1, name: "a", state: "busy", peer: {status: "busy"}}]);
+  c.update([{pid: 1, name: "a", state: "wait", question: "Go?", peer: {status: "idle"}}]);
+  c.update([{pid: 1, name: "", state: "wait", peer: null}]);
+  c.update([]);
+  eq(got, [["", "busy", "new"], ["busy", "wait", "asking"], ["wait", "gone", "gone"]], "no wait before gone");
+});

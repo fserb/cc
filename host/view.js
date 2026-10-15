@@ -66,10 +66,10 @@ export const STATE = {
 
 // The STATE entry a row draws with. `ask` is a fourth glyph and not a fourth state: it
 // sorts, counts and rings as `wait`, and separates a dialog holding the screen from the
-// turn merely being over. ◆ U+25C6 is East Asian Ambiguous like ●, so kitty draws it
+// turn merely being over, and so does a turn that ended on a question to you (`question`). ◆ U+25C6 is East Asian Ambiguous like ●, so kitty draws it
 // narrow and `◆ wait` is 6 cells; a Wide glyph would push the whole row one cell out.
 export function stateOf(inst) {
-  if (inst.state === "wait" && inst.asking) return STATE.ask;
+  if (inst.state === "wait" && (inst.asking || inst.question)) return STATE.ask;
   return STATE[inst.state] ?? STATE.free;
 }
 

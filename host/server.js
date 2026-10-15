@@ -85,14 +85,14 @@ export function tmuxOrder(instances) {
 // are the session record's, as Claude Code wrote it: the relay builds its stand-ins from
 // them, and `status` tells `shell` from a peer hold where `state` says `hold` for both.
 // Empty or 0 when there is no record (a session read off the pane)
-export const ROW = ["pid", "name", "path", "cwd", "state", "asking", "waitsOn", "agents",
+export const ROW = ["pid", "name", "path", "cwd", "state", "asking", "question", "waitsOn", "agents",
   "summary", "goal", "context", "since", "hasPane", "pane", "session", "window", "paneIndex", "tab", "sessionId", "sock",
   "status", "startedAt", "version", "peerFeatures", "statusUpdatedAt"];
 
 export function rowOf(i) {
   const p = i.peer ?? {};
   return {pid: i.pid, name: i.name, path: tilde(i.path), cwd: i.cwd, state: i.state,
-    asking: i.asking, waitsOn: i.waitsOn, agents: i.agents, summary: i.summary, goal: i.goal, context: i.context, since: i.since,
+    asking: i.asking, question: i.question, waitsOn: i.waitsOn, agents: i.agents, summary: i.summary, goal: i.goal, context: i.context, since: i.since,
     hasPane: Boolean(i.pane), pane: i.pane, session: i.session, window: i.window,
     paneIndex: i.paneIndex, tab: i.tab, sessionId: i.sessionId, sock: i.sock,
     status: p.status ?? "", startedAt: p.startedAt ?? 0, version: p.version ?? "",
