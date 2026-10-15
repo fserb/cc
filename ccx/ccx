@@ -1018,12 +1018,13 @@ async function cmdUsage() {
       "the log added under 3% in the last 7 days\n");
   const table = paceTable(u);
   if (table.length) console.log(`${table.join("\n")}\n`);
-  for (const d of byDay(u)) {
+  const days = byDay(u);
+  days.forEach((d, i) => {
     const day = new Date(d.day).toLocaleDateString("en-US", {weekday: "short"});
+    const note = i === days.length - 1 ? "  so far" : d.samples ? "" : "  interpolated";
     console.log(`${day}  ${`${Math.round(d.used)}%`.padStart(4)}  ` +
-      `${`+${Math.round(d.added)}%`.padStart(4)}  ` +
-      (d.samples ? `${d.samples} samples` : "no samples, interpolated"));
-  }
+      `${`+${Math.round(d.added)}%`.padStart(4)}${note}`);
+  });
 }
 
 // ccx burn [hours] [--top N] [--json]
