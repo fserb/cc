@@ -1,7 +1,7 @@
 // `deno test -A --ext js changes_test.js`. The change words, the context marks, the replay
 // after an id, and api/changes as a client sees it.
 
-import { Changes, whatOf } from "./changes.js";
+import { Changes, quitByHand, whatOf } from "./changes.js";
 import { Server } from "./server.js";
 import { HOME } from "./sh.js";
 
@@ -213,4 +213,26 @@ Deno.test("StateClock: a closing session keeps its state, and a question is a ch
   c.update([{pid: 1, name: "", state: "wait", peer: null}]);
   c.update([]);
   eq(got, [["", "busy", "new"], ["busy", "wait", "asking"], ["wait", "gone", "gone"]], "no wait before gone");
+});
+
+Deno.test("quitByHand: /exit or /quit as the session's last prompt, under a minute old", () => {
+  const path = Deno.makeTempFileSync();
+  const t = 1_792_040_932_888;
+  const line = (display, sessionId, timestamp = t) => JSON.stringify({display, pastedContents: {},
+    timestamp, project: "/p", sessionId});
+  Deno.writeTextFileSync(path, [line("hi", "a"), line("/quit", "a"), line("/exit ", "b"),
+    line("/quit", "c"), line("more", "c"), line("/exit", "d", t - 120_000), line("/exits", "e"),
+    ""].join("\n"));
+  const q = (id) => quitByHand(id, t + 2000, path);
+  eq(["a", "b", "c", "d", "e", "z", ""].map(q), [true, true, false, false, false, false, false], "per session");
+  eq(quitByHand("a", t, "/nonexistent"), false, "no history");
+  Deno.removeSync(path);
+});
+
+Deno.test("Changes: busy -> gone after /exit is gone, not crashed", () => {
+  const c = new Changes("nadya", clock(), 2000, (id) => id === "s1");
+  c.update([], [{pid: 9, name: "t", cwd: "/t", sessionId: "s1", state: "busy"},
+    {pid: 8, name: "u", cwd: "/u", sessionId: "s2", state: "busy"}]);
+  c.update([{pid: 9, from: "busy", to: "gone"}, {pid: 8, from: "busy", to: "gone"}], []);
+  eq(c.buf.slice(-2).map((e) => e.what), ["gone", "crashed"], "quit, crash");
 });

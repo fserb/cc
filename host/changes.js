@@ -9,14 +9,57 @@ import { HOME } from "./sh.js";
 const SIZE = 2000;
 export const CONTEXT_STEP = 100_000;
 
+// Whether a session ended on purpose: Claude Code puts no line in the transcript for /exit
+// (alias /quit), but its prompt history does, `{"display":"/quit",...,"timestamp":<ms>,
+// "sessionId":...}` (2.1.300). The slash command runs as a short busy, so without this its
+// end read as `crashed`. True when that session's last history line is one, under a minute old
+const HISTORY = `${HOME}/.claude/history.jsonl`;
+export function quitByHand(sessionId, now = Date.now(), path = HISTORY) {
+  if (!sessionId) return false;
+  let text;
+  try {
+    const f = Deno.openSync(path);
+    try {
+      const size = f.statSync().size;
+      const n = Math.min(size, 65536);
+      f.seekSync(size - n, Deno.SeekMode.Start);
+      const buf = new Uint8Array(n);
+      let got = 0;
+      while (got < n) {
+        const r = f.readSync(buf.subarray(got));
+        if (!r) break;
+        got += r;
+      }
+      text = new TextDecoder().decode(buf.subarray(0, got));
+    } finally {
+      f.close();
+    }
+  } catch {
+    return false;
+  }
+  const lines = text.split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (!lines[i].includes(sessionId)) continue;
+    let h;
+    try {
+      h = JSON.parse(lines[i]);
+    } catch {
+      continue;
+    }
+    if (h.sessionId !== sessionId) continue;
+    return /^\/(exit|quit)(\s|$)/.test((h.display ?? "").trim()) && now - h.timestamp < 60_000;
+  }
+  return false;
+}
+
 const tilde = (p) => p && p.startsWith(HOME) ? `~${p.slice(HOME.length)}` : p;
 
 // The one word for a StateClock event: `crashed` ended while busy (a turn or delegated
-// work in flight), `gone` ended otherwise; `asking` a wait on a dialog or on a question
+// work in flight) and not by /exit (`quit`), `gone` ended otherwise; `asking` a wait on a dialog or on a question
 // its last reply ended with (`question`), `done` a turn
 // that finished into a plain wait, `wait` any other plain wait; `new` first sight
 export function whatOf(ev) {
-  if (ev.to === "gone") return ev.from === "busy" ? "crashed" : "gone";
+  if (ev.to === "gone") return ev.from === "busy" && !ev.quit ? "crashed" : "gone";
   if (!ev.from) return "new";
   if (ev.to === "wait") {
     return ev.asking || ev.question
@@ -32,8 +75,10 @@ const KEEP = ["name", "cwd", "path", "sessionId", "summary", "goal", "context"];
 
 export class Changes {
   // self: this host's name. now() in ms, for the ids
-  constructor(self, now = Date.now, size = SIZE) {
+  // quit(sessionId): whether it ended by /exit, asked only of a busy -> gone
+  constructor(self, now = Date.now, size = SIZE, quit = quitByHand) {
     this.self = self;
+    this.quit = quit;
     this.now = now;
     this.size = size;
     this.buf = [];
@@ -90,7 +135,8 @@ export class Changes {
       const k = this.known.get(ev.pid) ?? {};
       const full = {...ev};
       for (const f of KEEP) full[f] = ev[f] || by.get(ev.pid)?.[f] || k[f] || "";
-      this.push(this.change(full, whatOf(ev), full));
+      if (ev.to === "gone" && ev.from === "busy") full.quit = this.quit(full.sessionId);
+      this.push(this.change(full, whatOf(full), full));
     }
     for (const pid of [...this.known.keys()]) {
       if (!by.has(pid)) this.known.delete(pid);
