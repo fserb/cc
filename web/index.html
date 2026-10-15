@@ -546,7 +546,7 @@ function items() {
   const food = pk?.packages.filter((x) => x.carrier === "ubereats" && (!x.delivered || Date.now() - Date.parse(x.last) < 3600e3)) ?? [];
   const eating = food.filter((x) => !x.delivered).length, ate = food.length - eating;
   if (desk || undelivered.length || food.length || cur === "packages") it.push({id: "packages", d: desk ? "blue" : "", title: "packages", sub: "",
-    tags: pk ? `<span class="tag">${esc([desk && `${desk} at desk`, onWay && `${onWay} coming`, ordered && `${ordered} ordered`, eating && "food coming", ate && "food here"].filter(Boolean).join(" · "))}</span>` : "",
+    tags: pk ? `<span class="tag">${esc([desk && `${desk} at desk`, (onWay || ordered) && (ordered ? `${onWay}+${ordered}` : `${onWay}`), eating && "food coming", ate && "food here"].filter(Boolean).join(" · "))}</span>` : "",
     t: pk ? ago(Date.parse(pk.updated) / 1000) : ""});
   it.push({id: "files", d: "", title: "files", sub: "", t: ""});
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, dialog: !!waitsOnYou(r)}));
