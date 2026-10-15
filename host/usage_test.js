@@ -1,5 +1,5 @@
 import {assertEquals} from "jsr:@std/assert";
-import {byDay, pace, paceTable, readHistory, readUsage, usageLine, usedNow, weekSamples} from "./usage.js";
+import {byDay, pace, paceTable, readHistory, readUsage, tokenPace, usageLine, usedNow, weekSamples} from "./usage.js";
 
 const H = 3600_000, WEEK = 168 * H;
 const at = (used, hours) => ({used, resetsAt: 1_000 * WEEK + WEEK - hours * H, at: 0});
@@ -171,4 +171,13 @@ Deno.test("weekSamples: one low reading between highs is an older number, not a 
 `;
   const s = weekSamples(await resetUsage(9, lines), 1791862000_000);
   assertEquals([s.drops, usedNow(s)], [[], 9]);
+});
+
+Deno.test("tokenPace: a window's tokens at the measured tokens per % make the ratio", () => {
+  const u = at(50, 84); // half used, half the week left: 1.0x is 50% over 84h
+  const per = 1e6, even = 50 / 84 * 1e6; // tokens per hour at 1.0x
+  assertEquals(+tokenPace(u, even / 4, H / 4, per, now).ratio.toFixed(6), 1);
+  assertEquals(+tokenPace(u, even * 2, H, per, now).ratio.toFixed(6), 2);
+  assertEquals(tokenPace(u, 0, H / 4, per, now).ratio, 0);
+  assertEquals(tokenPace(u, even, H, 0, now), null);
 });

@@ -25,7 +25,7 @@ import {close, expandDir, homeRel, paneIn, spawn} from "./spawn.js";
 import {sendPeer} from "./peer.js";
 import {byDay, LONGER, pace, readUsage} from "./usage.js";
 import {localRows, series} from "./burn.js";
-import {base, burnReport, burnSeries, call, HOSTS, mergedUsage, SELF} from "./remote.js";
+import {base, burnReport, burnSeries, call, HOSTS, mergedUsage, SELF, tokenPace} from "./remote.js";
 import {STATES} from "./subs.js";
 import {chatLog, mergeChats, PAIR_WINDOW, sameMessage, watchChat} from "./chat.js";
 import {Online} from "./online.js";
@@ -287,7 +287,8 @@ export class Server {
     if (url.searchParams.get("local")) return readUsage();
     return await this.cached("usage", async () => {
       const u = await mergedUsage();
-      return u && {...u, pace: pace(u), paceLong: pace(u, Date.now(), LONGER), days: byDay(u)};
+      return u && {...u, pace: pace(u), paceLong: pace(u, Date.now(), LONGER), days: byDay(u),
+        paceTokens: await tokenPace(u)};
     });
   }
 

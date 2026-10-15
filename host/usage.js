@@ -201,3 +201,17 @@ export function usageLine(u, now = Date.now()) {
   return {text: `usage ${pct(p.used)}${rest}`,
     color: p.out ? PALETTE.warn : PALETTE.mauve};
 }
+
+// The pace from weighted tokens (burn.js), which move continuously where the log moves in
+// whole percents, so a window under 1h still says something: `w` tokens over the last
+// `span` ms, at `perPct` tokens per 1%. Same shape as pace(), `added` in %. The weights
+// are a price model, so `perPct` is measured against the log (remote.js tokenPace).
+export function tokenPace(u, w, span, perPct, now = Date.now()) {
+  const p = pace(u, now);
+  if (!p || p.ratio === null || !(span > 0) || !(perPct > 0)) return null;
+  const added = w / perPct, perMs = added / span;
+  const end = p.used + perMs * (u.resetsAt - now);
+  const out = end > 100 ? now + (100 - p.used) / perMs : null;
+  const ratio = p.used < 100 ? perMs * (u.resetsAt - now) / (100 - p.used) : null;
+  return {used: p.used, even: p.even, rate: perMs * 24 * 3600_000, ratio, end, out, added};
+}

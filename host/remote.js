@@ -1,8 +1,8 @@
 // The other machines' daemons, as cchost reaches them: the host list, a call, the merged
 // usage and burn, and the list stream it follows for the relay and api/list?all=1.
 
-import {readUsage, usedAt, usedNow, weekSamples} from "./usage.js";
-import {breakdown, group, PER_PCT, series} from "./burn.js";
+import {readUsage, tokenPace as tokenPaceOf, usedAt, usedNow, weekSamples} from "./usage.js";
+import {breakdown, group, localRows, PER_PCT, series} from "./burn.js";
 
 export const PORT = 7681;
 export const SELF = Deno.env.get("CCX_SELF") ?? Deno.hostname().split(".")[0];
@@ -94,18 +94,44 @@ export async function burnReport(hours, local, now = Date.now()) {
 // steps, summed, and `ref`, the tokens a step would take at the even pace (the rest of the
 // week spread evenly to the reset, PER_PCT per %), which is 1.0x on the header
 export async function burnSeries(n, step, now = Date.now()) {
+  const [{down, ...mine}, u] = await Promise.all([allSeries(n, step, now), mergedUsage()]);
+  const left = u && u.resetsAt > now ? u.resetsAt - now : 0;
+  const ref = left ? Math.round(Math.max(0, 100 - u.used) * PER_PCT / left * step) : null;
+  return {...mine, ref, down};
+}
+
+// Every host's burn.js series() summed, with the hosts that did not answer as `down`
+async function allSeries(n, step, now) {
   const q = `/api/burn/series?local=1&n=${n}&step=${step}&at=${now}`;
-  const [mine, rest, u] = await Promise.all([series(n, step, now),
-    Promise.all(others().map((h) => call(h, q, undefined, 10_000))), mergedUsage()]);
+  const [mine, rest] = await Promise.all([series(n, step, now),
+    Promise.all(others().map((h) => call(h, q, undefined, 10_000)))]);
   const down = [];
   others().forEach((h, i) => {
     const [body, err] = rest[i];
     if (err || body.from !== mine.from) return down.push([h, err ?? "buckets differ"]);
     body.w.forEach((w, j) => mine.w[j] += w);
   });
-  const left = u && u.resetsAt > now ? u.resetsAt - now : 0;
-  const ref = left ? Math.round(Math.max(0, 100 - u.used) * PER_PCT / left * step) : null;
-  return {...mine, ref, down};
+  return {...mine, down};
+}
+
+// The pace over the last 15 min (`short`) and 1h (`long`) from every host's weighted tokens
+// (usage.js tokenPace), which cc's header shows (user, 2026-10-14). Tokens per % is what the
+// last 24h of the log added against the tokens over it (5.5M-6.0M per % over 1h to 47h on
+// 2026-10-14, where PER_PCT says 14M), PER_PCT when the log added under 3% (`calib` null).
+// Each window is whole minutes back from the one in progress, so a window is up to 1 min long.
+export async function tokenPace(u, now = Date.now()) {
+  if (!u || now >= u.resetsAt) return null;
+  const from = Math.max(now - 24 * 3600_000, u.resetsAt - 7 * 24 * 3600_000);
+  const [{rows}, s] = await Promise.all([allRows(from, now, localRows), allSeries(60, 60_000, now)]);
+  const samples = weekSamples(u, now), added = usedAt(samples, now) - usedAt(samples, from);
+  const w = rows.reduce((n, r) => n + r.w, 0);
+  const calib = added >= 3 && w > 0 ? {from, added, w} : null;
+  const perPct = calib ? w / added : PER_PCT;
+  const win = (mins) => {
+    const k = s.w.length - mins;
+    return tokenPaceOf(u, s.w.slice(k).reduce((a, b) => a + b, 0), now - (s.from + k * s.step), perPct, now);
+  };
+  return {perPct, calib, short: win(15), long: win(60), down: s.down};
 }
 
 // Follow `host`'s api/events: onList(rows, body) on each list, onList(null, null, why)

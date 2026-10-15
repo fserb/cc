@@ -461,14 +461,17 @@ function hasDialog(r) { return r.state === "wait" && (r.asking || (stream?.pid =
 // waits on you: a dialog, or a turn that ended on a question in plain text (cchost's `question`), which takes typing as usual
 function waitsOnYou(r) { return hasDialog(r) || (r.state === "wait" && !!r.question); }
 function dueTodos(withSent) { const soon = Date.now() + 3600e3; return [...S.reminders, ...S.todo].filter((t) => t.due && t.due.getTime() <= soon && (withSent || !sent.has("todo:" + t.full))); }
-// the pace is ccx's (api/usage, every host's log merged), so the page and `ccx usage` agree: x over the last 1h, xl over
-// the last 3h (null from an older cchost); out is the 1h one's
-// the 1h pace against the 3h one, as shown (one decimal): ↑ faster lately, ↓ slower, nothing when equal or no 3h
+// the pace is cchost's (api/usage): x over the last 15 min, xl over the last 1h, both
+// from every host's weighted tokens at the tokens per % the log measured (paceTokens, user, Oct 14th); from an older
+// cchost the log's 1h and 3h. out is the log's 1h one's
+// the short pace against the long one, as shown (one decimal): ↑ faster lately, ↓ slower, nothing when equal or no long
 function trend(p) { if (p.xl == null) return ""; const a = +p.x.toFixed(1), b = +p.xl.toFixed(1); return a > b ? "↑" : a < b ? "↓" : ""; }
-function paces(p) { return `${p.x.toFixed(1)}x (1h)${p.xl == null ? "" : `, ${p.xl.toFixed(1)}x (3h)`}`; }
+function paces(p) { return `${p.x.toFixed(1)}x (${p.w[0]})${p.xl == null ? "" : `, ${p.xl.toFixed(1)}x (${p.w[1]})`}`; }
 function pace() {
   const p = S.usage?.pace; if (p?.ratio == null) return null;
-  return {x: p.ratio, xl: S.usage.paceLong?.ratio ?? null, out: p.out ? new Date(p.out) : null};
+  const t = S.usage.paceTokens, out = p.out ? new Date(p.out) : null;
+  if (t?.short?.ratio != null) return {x: t.short.ratio, xl: t.long?.ratio ?? null, w: ["15m", "1h"], out};
+  return {x: p.ratio, xl: S.usage.paceLong?.ratio ?? null, w: ["1h", "3h"], out};
 }
 // the header's graph: usage, weighted tokens per 5 min over the last 2h, every host (api/burn/series), scaled to
 // the window's peak, at least 1.3M per 5 min (the 5-hour session limit's rate); no pace in it (user, Oct 14th). Always drawn, empty without data, so the header keeps its width
