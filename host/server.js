@@ -113,6 +113,14 @@ function json(body, status = 200) {
 
 // The convention typeInto() and friends share: a message, or null. Which status it gets
 // is read off the message, since they come from four files that know nothing of HTTP.
+// the text typed in pid's input box: "" when empty or only Claude Code's dim prompt
+// suggestion, null with no box or no capture
+async function paneInput(pane) {
+  const raw = await run("tmux", "capture-pane", "-p", "-e", "-t", pane);
+  const box = raw.code === 0 ? inputBox(raw.out) : null;
+  return box ? (box.state === "text" ? box.lines.join("\n").trim() : "") : null;
+}
+
 function answer(err, body = {ok: true}) {
   if (!err) return json(body);
   return json({error: err}, err.startsWith("tmux:") ? 502 : 409);
@@ -882,11 +890,7 @@ export class Server {
     }
     if (get && verb === "screen") {
       if (!inst.pane) return json({error: `pid ${pid} is not inside tmux`}, 409);
-      const [text, raw] = await Promise.all([screen(inst.pane),
-        run("tmux", "capture-pane", "-p", "-e", "-t", inst.pane)]);
-      // the typed text only: a prompt suggestion is drawn dim in the same place
-      const box = raw.code === 0 ? inputBox(raw.out) : null;
-      const input = box ? (box.state === "text" ? box.lines.join("\n").trim() : "") : null;
+      const [text, input] = await Promise.all([screen(inst.pane), paneInput(inst.pane)]);
       return text === null ? json({error: "tmux: capture failed"}, 502)
         : json({text, input, draft: this.draft(pid), dialog: inst.state === "wait" ? withAsk(parseDialog(text),
           pendingAsk(inst.sessionId, inst.sessionId && logPath(inst.cwd, inst.sessionId))) : null});
@@ -929,6 +933,14 @@ export class Server {
     if (verb === "select") {
       return answer(await select(inst), {ok: true, background: await tmuxBackground(),
         session: inst.session});
+    }
+    // ifUntouched (ccx close): only a session waiting on its next prompt with nothing typed for
+    // it, read now, since a check made seconds before by the caller misses typing begun since
+    if (verb === "close" && body.ifUntouched) {
+      const input = inst.pane ? await paneInput(inst.pane) : "", draft = this.draft(pid);
+      const why = !["wait", "free"].includes(inst.state) ? `it is ${inst.state}`
+        : inst.asking ? `it shows a dialog (${inst.asking})` : input ? "text typed in its pane" : draft ? "text in cc's box for it" : "";
+      if (why) return json({error: `not closed: ${why}`, untouched: false}, 409);
     }
     if (verb === "close") return answer(await close(inst));
     // cc's chat box holds text for it: kept DRAFT_TTL, so a page that goes away stops saying so

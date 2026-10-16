@@ -1196,6 +1196,11 @@ async function cmdNew(...args) {
 // An exact name or pid, never the fuzzy match `send` takes, and one instance only: a typo
 // that happens to match some other session would kill that one
 async function cmdDelete(spec) {
+  const i = await exactlyOne("delete", spec);
+  report("closed", [i], [], [(await api(`/api/s/${i.id}/close`, {}, 20_000))[1]]);
+}
+
+async function exactlyOne(cmd, spec) {
   const instances = await listing();
   const [host, want] = splitHost(spec);
   const needle = want.toLowerCase();
@@ -1203,12 +1208,37 @@ async function cmdDelete(spec) {
     (String(i.pid) === want || i.name.toLowerCase() === needle));
   if (hits.length !== 1) {
     console.error(hits.length
-      ? `delete: ${JSON.stringify(spec)} names ${hits.length}: ${hits.map(label).join(", ")}`
-      : `delete: no instance is named ${JSON.stringify(spec)}`);
+      ? `${cmd}: ${JSON.stringify(spec)} names ${hits.length}: ${hits.map(label).join(", ")}`
+      : `${cmd}: no instance is named ${JSON.stringify(spec)}`);
     Deno.exit(1);
   }
-  const i = hits[0];
-  report("closed", hits, [], [(await api(`/api/s/${i.id}/close`, {}, 20_000))[1]]);
+  return hits[0];
+}
+
+// ccx close [host:]<name|pid>
+// delete, unless the user may be using it: cchost refuses unless it waits on its next prompt
+// with no dialog, nothing typed in its pane and nothing in cc's box for it, read at the close.
+// Refused inside a claude, a trig rule tells that claude to try again in RETRY_MIN
+const RETRY_MIN = 5;
+async function cmdClose(spec) {
+  const i = await exactlyOne("close", spec);
+  const [, err, status] = await api(`/api/s/${i.id}/close`, {ifUntouched: true}, 20_000);
+  if (status !== 409 || !err.startsWith("not closed:")) {
+    return report("closed", [i], [], [err]);
+  }
+  console.log(sendLine("refused", label(i), i.shortPath, err.replace("not closed: ", "")));
+  if (!selfPid()) Deno.exit(1);
+  const at = new Date(Date.now() + RETRY_MIN * 60e3);
+  const hhmm = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+  const rule = `at ${hhmm} -> me "ccx close ${spec} was refused (${err.replace("not closed: ", "")}): ` +
+    `the user may be using it. Run \`ccx close ${spec}\` again; it checks again and, if refused, ` +
+    "sets the next retry itself. Do not use ccx delete on it.\"";
+  const r = await new Deno.Command("trig", {args: ["add", rule], stdout: "piped", stderr: "piped"})
+    .output().catch((e) => ({success: false, stderr: new TextEncoder().encode(e.message)}));
+  const dec = (b) => new TextDecoder().decode(b).trim();
+  console.log(r.success ? `retry at ${hhmm}: trig rule ${dec(r.stdout)}`
+    : `no retry set: trig add: ${dec(r.stderr)}`);
+  Deno.exit(1);
 }
 
 // `host:rest` naming another host, as ["host", "rest"]; anything else is ours, ["", spec]
@@ -1506,6 +1536,7 @@ const COMMANDS = {
   focus: [cmdFocus, 1],
   new: [cmdNew, -1],
   delete: [cmdDelete, 1],
+  close: [cmdClose, 1],
   send: [cmdSend, -1],               // -1: its own validation, since the message is the rest
   user: [cmdUser, -1],
   goal: [cmdGoal, -1],
@@ -1537,6 +1568,8 @@ const HELP = [
   ["    --focus", "instead a tmux window beside one already in dir, else a kitty window, and focus it"],
   ["    --goal <text>", "a few words on what it is for, which cc shows under its name"],
   ["  delete [host:]<name|pid>", "end one instance and close its tmux pane"],
+  ["  close [host:]<name|pid>", "delete it only if it waits on its next prompt, no dialog and nothing"],
+  ["", "typed for it (pane or cc's box); refused in a claude, trig tells it to retry in 5m"],
   ["  send <target> <message...>", "a chat message to one or more instances"],
   ["  user [--force] <target> <text...>", "typed into an instance as its user, /commands included;"],
   ["", "refused while it shows a dialog, which the Enter would answer, unless --force"],
