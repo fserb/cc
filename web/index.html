@@ -19,10 +19,10 @@
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--font); display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100vh; height: 100dvh; overflow: hidden; }
-  body > header { display: flex; align-items: center; gap: 1.2rem; padding: 0 1.2rem; height: 48px; border-bottom: 1px solid var(--line); }
+  body > header { display: flex; align-items: center; gap: 1.2rem; padding: 0 1.2rem; height: 48px; min-width: 0; border-bottom: 1px solid var(--line); }
   body > header > b { font-size: 1.05rem; cursor: pointer; }
   body > header > b, #back { user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
-  .sum { margin-left: auto; color: var(--muted); font-size: 0.82rem; white-space: nowrap; }
+  .sum { margin-left: auto; color: var(--muted); font-size: 1.05rem; white-space: nowrap; }  /* the title's size, so the two share a baseline (user, Oct 16th) */
   #qbtn { all: unset; cursor: pointer; display: flex; align-items: center; gap: 0.55rem; padding: 0.3rem 0.6rem; border-radius: 999px; font-variant-numeric: tabular-nums; } #qbtn:hover { background: var(--hover); }
   #qbtn .bar { position: relative; width: 84px; height: 6px; border-radius: 3px; background: var(--line); }
   #qbtn .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--qc); }
@@ -174,7 +174,8 @@
   #view:has(iframe) { overflow: hidden; }
   .doc.page { max-width: none; height: 100%; display: flex; flex-direction: column; padding: 0; } .doc.page .crumbs { margin: 0; padding: 0.5rem 1rem; border-bottom: 1px solid var(--line); } .doc.page iframe { flex: 1; height: auto; background: #fff; }  /* an html file: the page itself, under its crumbs */
   @media (max-width: 760px) {
-    body > header { gap: 0.5rem; padding: 0 0.6rem; } #qbtn .bar { width: 56px; } #qbtn .spark { width: 26px; }
+    body > header { gap: 0.5rem; padding: 0 0.6rem; } #qbtn { gap: 0.35rem; padding: 0.3rem; } #qbtn .bar { width: 48px; } #qbtn .spark { width: 22px; }
+    body > header > b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #home { display: block; position: relative; }
     #left, #center { position: absolute; inset: 0; } #center { display: none; }
     body.view #center { display: grid; } body.view #left { display: none; }
