@@ -8,6 +8,9 @@ import {breakdown, group, localRows, PER_PCT, series} from "./burn.js";
 export const PORT = 7681;
 export const SELF = Deno.env.get("CCX_SELF") ?? Deno.hostname().split(".")[0];
 const TIMEOUT = 3000;
+// a followed stream silent this long is dropped: cchost writes a keepalive every 15s, and a
+// host that slept leaves the connection open with nothing on it, its last list kept as live
+const STALL = 45_000;
 const WEEK = 7 * 24 * 3600_000;
 
 // every machine that runs claudes, this one included. CCX_HOSTS=a,b overrides, and an
@@ -151,6 +154,17 @@ export async function tokenPace(u, now = Date.now()) {
   return {perPct, calib, short: win(15), long: win(60), down: s.down};
 }
 
+// Aborts `ctl` when pet() is not called for STALL ms, from the connect on
+function watchdog(ctl) {
+  let timer;
+  const pet = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => ctl.abort(new Error(`nothing in ${STALL / 1000}s`)), STALL);
+  };
+  pet();
+  return {pet, stop: () => clearTimeout(timer)};
+}
+
 // Follow `host`'s api/events: onList(rows, body) on each list, onList(null, null, why)
 // when the stream drops, then retry every `retry` ms until stop()
 export function follow(host, onList, retry = 5000) {
@@ -158,11 +172,13 @@ export function follow(host, onList, retry = 5000) {
   (async () => {
     while (alive) {
       ctl = new AbortController();
+      const dog = watchdog(ctl);
       try {
         const r = await fetch(`${base(host)}/api/events`, {signal: ctl.signal});
         if (!r.ok) throw new Error(`answered ${r.status}`);
         let buf = "";
         for await (const chunk of r.body.pipeThrough(new TextDecoderStream())) {
+          dog.pet();
           buf += chunk;
           let cut;
           while ((cut = buf.indexOf("\n\n")) >= 0) {
@@ -180,6 +196,7 @@ export function follow(host, onList, retry = 5000) {
         // down, refused or aborted: the same to the caller
         why = e.message;
       }
+      dog.stop();
       onList(null, null, why);
       if (alive) await new Promise((ok) => setTimeout(ok, retry));
     }
@@ -199,6 +216,7 @@ export function followChanges(host, changes, retry = 5000) {
   (async () => {
     while (alive) {
       ctl = new AbortController();
+      const dog = watchdog(ctl);
       try {
         if (pos === null && tries++ === 1) changes.lost(host);
         const r = await fetch(`${base(host)}/api/changes${pos === null ? "" : `?since=${pos}`}`,
@@ -206,6 +224,7 @@ export function followChanges(host, changes, retry = 5000) {
         if (!r.ok) throw new Error(`answered ${r.status}`);
         let buf = "";
         for await (const chunk of r.body.pipeThrough(new TextDecoderStream())) {
+          dog.pet();
           buf += chunk;
           let cut;
           while ((cut = buf.indexOf("\n\n")) >= 0) {
@@ -226,6 +245,7 @@ export function followChanges(host, changes, retry = 5000) {
       } catch {
         // down, refused or aborted: try again
       }
+      dog.stop();
       if (alive) await new Promise((ok) => setTimeout(ok, retry));
     }
   })();
