@@ -616,7 +616,7 @@ function draw() {
   // the bar: % used; the tick: where the even pace would be by now
   const even = u ? Math.min(100, Math.max(0, (Math.min(Date.now(), u.resetsAt) - (u.resetsAt - 7 * 86400e3)) / (7 * 86400e3) * 100)) : 0;
   const tip = u ? `quota ${u.used}% used${p ? `, ${paces(p)} the pace that lasts to the reset` : ""}${p?.out ? `, runs out ${day(p.out)}` : ""}; reset ${day(new Date(u.resetsAt))}` : "no usage data";
-  $("#sum").innerHTML = `<button id="qbtn" class="${p?.out || qout(u) ? "out" : ""}" style="--qc:${qcolor(u, p)}" title="${esc(tip)}" aria-label="${esc(tip)}">${p?.out ? `<em>out ${day(p.out)}</em>` : ""}<span class="bar"><i style="width:${u?.used ?? 0}%"></i>${u ? `<s style="left:${even.toFixed(1)}%"></s>` : ""}</span><b>${u ? u.used + "%" : "?"}</b>${spark()}${p ? `<em>${p.x.toFixed(1)}x<span class="tr">${trend(p)}</span></em>` : ""}</button>`;
+  $("#sum").innerHTML = `<button id="qbtn" class="${p?.out || qout(u) ? "out" : ""}" style="--qc:${qcolor(u, p)}" title="${esc(tip)}" aria-label="${esc(tip)}">${p?.out ? `<em>${day(p.out)}</em>` : ""}<span class="bar"><i style="width:${u?.used ?? 0}%"></i>${u ? `<s style="left:${even.toFixed(1)}%"></s>` : ""}</span><b>${u ? u.used + "%" : "?"}</b>${spark()}${p ? `<em>${p.x.toFixed(1)}x<span class="tr">${trend(p)}</span></em>` : ""}</button>`;
   if (["nadya", "plan", "projects", "quota"].includes(cur) || isPid(cur) || isDoc(cur)) drawView(true);
 }
 
