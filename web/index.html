@@ -350,17 +350,21 @@ async function loadPackages() {
   S.packages = await fetch(`${PACKAGES}packages.json`, {cache: "no-cache"}).then((r) => r.json()).catch(() => S.packages);
   draw();
 }
-async function loadTodo() {
+async function loadList(file) {
   // both files: `- [m] [YYYY-MM-DD [HH:MM]] text`; reminders.md has the dated ones, todo.md the undated notes
-  [S.todo, S.reminders] = await Promise.all(["todo.md", "reminders.md"].map(async (file) => {
-    const text = await fetch(`files/${file}`, {cache: "no-cache"}).then((r) => r.ok ? r.text() : "").catch(() => "");
-    return [...text.matchAll(/^- \[(.)\] (?:(\d{4}-\d\d-\d\d)(?: (\d\d:\d\d))? )?(.*)$/gm)].map(([, mark, date, time, rest]) => {
-      const due = date ? new Date(`${date}T${time ?? "09:00"}`) : null;
-      return {file, mark, date, time, due, text: rest.split(/\. |\(user/)[0].trim(), full: rest};
-    }).filter((t) => t.mark !== "x");
-  }));
-  S.reminders.sort((a, b) => (a.due ?? Infinity) - (b.due ?? Infinity));
-  [S.ideas, S.projects] = await Promise.all([loadDocs("ideas"), loadDocs("projects")]);
+  const text = await fetch(`files/${file}`, {cache: "no-cache"}).then((r) => r.ok ? r.text() : "").catch(() => "");
+  return [...text.matchAll(/^- \[(.)\] (?:(\d{4}-\d\d-\d\d)(?: (\d\d:\d\d))? )?(.*)$/gm)].map(([, mark, date, time, rest]) => {
+    const due = date ? new Date(`${date}T${time ?? "09:00"}`) : null;
+    return {file, mark, date, time, due, text: rest.split(/\. |\(user/)[0].trim(), full: rest};
+  }).filter((t) => t.mark !== "x");
+}
+// reminders.md on start and every 30s, for the plan row's dot and next due one (user, 2026-10-16)
+async function loadReminders() {
+  S.reminders = (await loadList("reminders.md")).sort((a, b) => (a.due ?? Infinity) - (b.due ?? Infinity));
+  draw();
+}
+async function loadTodo() {
+  [S.todo, S.ideas, S.projects] = await Promise.all([loadList("todo.md"), loadDocs("ideas"), loadDocs("projects"), loadReminders()]);
   draw();
 }
 async function loadDocs(dir) {
@@ -1415,15 +1419,15 @@ function open() {
   const pid = cur === "nadya" || cur === null ? nadyaRow()?.pid : isPid(cur) ? cur : null;
   follow(pid);
   if (isFiles(cur)) loadPath(cur.slice(6));
-  // todo.md, reminders.md, ideas/ and projects/ are read only when a tab showing them is opened (user, 2026-10-16: ~70 files every 30s)
+  // todo.md, ideas/ and projects/ are read only when a tab showing them is opened (user, 2026-10-16: ~70 files every 30s)
   if (cur === "plan" || cur === "projects" || isDoc(cur)) loadTodo();
   draw(); drawView(); fit();  // a draft restored while the view was hidden had no height to measure
 }
 
 // ---------- start
 listen();
-loadUsage(); loadBlog(); loadPackages();
-setInterval(loadUsage, 60e3); setInterval(loadBlog, 60e3); setInterval(loadPackages, 5 * 60e3);
+loadUsage(); loadBlog(); loadReminders(); loadPackages();
+setInterval(loadUsage, 60e3); setInterval(loadBlog, 60e3); setInterval(loadReminders, 30e3); setInterval(loadPackages, 5 * 60e3);
 // back on the tab or window (or the phone woke up): read everything again at once and reopen the streams.
 // focus, visibilitychange and pageshow often come together: one refresh per 2s
 let refreshed = Date.now();  // the load just read everything
