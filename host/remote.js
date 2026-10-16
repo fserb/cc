@@ -154,56 +154,72 @@ export async function tokenPace(u, now = Date.now()) {
   return {perPct, calib, short: win(15), long: win(60), down: s.down};
 }
 
-// Aborts `ctl` when pet() is not called for STALL ms, from the connect on
-function watchdog(ctl) {
-  let timer;
+// Reads one SSE stream at `url`, onFrame(event, data text) for each frame, until it ends
+// ("stream ended"), fails (thrown) or is silent STALL ms from the connect on (thrown).
+// The stall rejects the pending read itself instead of waiting on the abort to: on
+// 2026-10-16 marx dropped both of nadya's streams at 18:24 with no FIN or RST, and
+// nadya's reads were still pending at 19:30 with the 45s abort in place, sockets
+// ESTABLISHED, nothing reconnecting, and marx's rows from 18:24 shown as live
+async function sse(url, onFrame) {
+  const ctl = new AbortController();
+  let timer, stalled;
+  const stall = new Promise((_, no) => stalled = no);
+  stall.catch(() => {});
   const pet = () => {
     clearTimeout(timer);
-    timer = setTimeout(() => ctl.abort(new Error(`nothing in ${STALL / 1000}s`)), STALL);
+    timer = setTimeout(() => {
+      const e = new Error(`nothing in ${STALL / 1000}s`);
+      stalled(e);
+      ctl.abort(e);
+    }, STALL);
   };
   pet();
-  return {pet, stop: () => clearTimeout(timer)};
+  try {
+    const r = await Promise.race([fetch(url, {signal: ctl.signal}), stall]);
+    if (!r.ok) throw new Error(`answered ${r.status}`);
+    const reader = r.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buf = "";
+    for (;;) {
+      const {value, done} = await Promise.race([reader.read(), stall]);
+      if (done) return "stream ended";
+      pet();
+      buf += value;
+      let cut;
+      while ((cut = buf.indexOf("\n\n")) >= 0) {
+        const frame = buf.slice(0, cut);
+        buf = buf.slice(cut + 2);
+        onFrame(frame.match(/^event: (.*)$/m)?.[1], frame.match(/^data: (.*)$/m)?.[1]);
+      }
+    }
+  } finally {
+    clearTimeout(timer);
+    ctl.abort();
+  }
 }
 
 // Follow `host`'s api/events: onList(rows, body) on each list, onList(null, null, why)
 // when the stream drops, then retry every `retry` ms until stop()
 export function follow(host, onList, retry = 5000) {
-  let alive = true, ctl = null, why = "";
+  let alive = true;
   (async () => {
     while (alive) {
-      ctl = new AbortController();
-      const dog = watchdog(ctl);
+      let why;
       try {
-        const r = await fetch(`${base(host)}/api/events`, {signal: ctl.signal});
-        if (!r.ok) throw new Error(`answered ${r.status}`);
-        let buf = "";
-        for await (const chunk of r.body.pipeThrough(new TextDecoderStream())) {
-          dog.pet();
-          buf += chunk;
-          let cut;
-          while ((cut = buf.indexOf("\n\n")) >= 0) {
-            const frame = buf.slice(0, cut);
-            buf = buf.slice(cut + 2);
-            const event = frame.match(/^event: (.*)$/m)?.[1];
-            const data = frame.match(/^data: (.*)$/m)?.[1];
-            if (event !== "list" || !data) continue;
-            const body = JSON.parse(data);
-            onList(body.rows, body);
-          }
-        }
-        why = "stream ended";
+        why = await sse(`${base(host)}/api/events`, (event, data) => {
+          if (event !== "list" || !data) return;
+          const body = JSON.parse(data);
+          onList(body.rows, body);
+        });
       } catch (e) {
-        // down, refused or aborted: the same to the caller
+        // down, refused or stalled: the same to the caller
         why = e.message;
       }
-      dog.stop();
       onList(null, null, why);
       if (alive) await new Promise((ok) => setTimeout(ok, retry));
     }
   })();
   return () => {
     alive = false;
-    ctl?.abort();
   };
 }
 
@@ -212,45 +228,28 @@ export function follow(host, onList, retry = 5000) {
 // nothing that host still holds; what it cannot replay comes as `lost`, which is passed on.
 // The first reconnect with no position yet (no `ready` came) is one `lost` here
 export function followChanges(host, changes, retry = 5000) {
-  let alive = true, ctl = null, pos = null, tries = 0;
+  let alive = true, pos = null, tries = 0;
   (async () => {
     while (alive) {
-      ctl = new AbortController();
-      const dog = watchdog(ctl);
       try {
         if (pos === null && tries++ === 1) changes.lost(host);
-        const r = await fetch(`${base(host)}/api/changes${pos === null ? "" : `?since=${pos}`}`,
-          {signal: ctl.signal});
-        if (!r.ok) throw new Error(`answered ${r.status}`);
-        let buf = "";
-        for await (const chunk of r.body.pipeThrough(new TextDecoderStream())) {
-          dog.pet();
-          buf += chunk;
-          let cut;
-          while ((cut = buf.indexOf("\n\n")) >= 0) {
-            const frame = buf.slice(0, cut);
-            buf = buf.slice(cut + 2);
-            const event = frame.match(/^event: (.*)$/m)?.[1];
-            const data = frame.match(/^data: (.*)$/m)?.[1];
-            if (!data) continue;
-            const body = JSON.parse(data);
-            if (event === "ready") pos = body.id;
-            else if (event === "lost") changes.lost(host);
-            else if (event === "change") {
-              pos = body.id;
-              changes.remote(body);
-            }
+        await sse(`${base(host)}/api/changes${pos === null ? "" : `?since=${pos}`}`, (event, data) => {
+          if (!data) return;
+          const body = JSON.parse(data);
+          if (event === "ready") pos = body.id;
+          else if (event === "lost") changes.lost(host);
+          else if (event === "change") {
+            pos = body.id;
+            changes.remote(body);
           }
-        }
+        });
       } catch {
-        // down, refused or aborted: try again
+        // down, refused or stalled: try again
       }
-      dog.stop();
       if (alive) await new Promise((ok) => setTimeout(ok, retry));
     }
   })();
   return () => {
     alive = false;
-    ctl?.abort();
   };
 }
