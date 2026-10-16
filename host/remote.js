@@ -119,8 +119,8 @@ async function allSeries(n, step, now) {
 
 // Weighted tokens per 1% of the week, every host's burn rows against the merged log
 // (usage.js calibrate: the last 1, 3 or 7 days, the first where the log added 3%+), so it
-// follows the plan's quota as it changes: 5.5M-6.0M on 2026-10-14 over 1h to 47h, where
-// PER_PCT, fitted on 2026-10-07, says 14M. PER_PCT when no span has 3% (`calib` null).
+// follows the plan's quota as it changes: 3.0M-4.2M on 2026-10-16 over 1 to 7 days, at the
+// prices of burn.js since that day. PER_PCT when no span has 3% (`calib` null).
 // Re-measured at most every 10 min
 const MEASURE_EVERY = 10 * 60_000;
 let lastMeasure = null;

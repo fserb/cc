@@ -3,38 +3,39 @@
 // weighted into an estimated quota share and summed per hour, project and session. This
 // host's only: remote.js merges the hosts, `cchost` serves it (/api/burn).
 //
-// Weights: API list-price ratios, Opus input = 1: input 1, cache write 1.25 (5m) or 2
-// (1h), cache read 0.1, output 5; Sonnet 0.6x, Haiku 0.2x of that. The plan's quota
-// formula is not public; this assumes it follows price.
+// Weights: each message's model at its API list price (PRICES), in units of an Opus 5
+// input token ($5/M); for Opus 5.5 that is input 0.8, cache write 1 (5m) or 1.6 (1h), cache
+// read 0.04, output 4. The plan's quota formula is not public; this assumes it follows price.
 // A message is logged once per content block with the same usage; it counts once (by id).
 //
-// Checked 2026-10-07 against ~/.claude/ccx-usage.log (integer %, each reading +-1), between
-// the times the log first showed each new %:
-//   Mon 13:00 -> 20:20   +10%  146M weighted  14.6M per %
-//   Mon 20:20 -> 23:21    +6%   83M           13.8M per %
-//   Mon 23:21 -> Wed 9:17 +27% 420M           15.6M per %
-//   Wed 9:17 -> 15:05     +5%   65M           13.1M per %
-// so ~14M weighted tokens per 1% of the week, within +-10% over windows of 5%+. Single-%
-// steps scatter 4M-29M: that's the integer rounding, not the tokens. Cache reads are ~85%
-// of the weighted total, then output and cache writes (almost all 1h); uncached input is
-// ~0. The mix barely changed across these windows, so the fit doesn't tell the weights
-// apart: output + cache write alone (cache read 0) tracked the % just as well (2.2-2.5M
-// per %). What is solid: the total tracks the %. The split between sessions depends on
-// the weights, mostly on how much a cache read counts against output. So a window's
-// shares are scaled to the % the log added over it, and PER_PCT is only the fallback.
+// Until 2026-10-16 the weights were fixed ratios from older prices (input 1, cache write
+// 1.25/2, cache read 0.1, output 5; Sonnet 0.6x, Haiku 0.2x), which put a cache read at 0.1x
+// input where Opus 5.5 charges 0.05x. Cache reads were ~85% of that weighted total, then
+// output and cache writes (almost all 1h); uncached input is ~0. Re-weighing Oct 15 halved
+// the total (82.5M -> 42.7M over both hosts) and moved no session's share by more than 2
+// points, since nearly all of it is Opus 5.5 with the same mix: the coordinator, the most
+// cache-read heavy, went 17.7% -> 15.8%.
+// Fitted against ~/.claude/ccx-usage.log (integer %, each reading +-1), the old weights gave
+// 14M per % on 2026-10-07 and 5.7M (1 day), 7.3M (3), 9.0M (7) on 2026-10-15; the new ones
+// 3.2M (1 day, 29M for +9%), 3.0M (3 days), 4.2M (7) on 2026-10-16. The quota per % moves,
+// and the mix barely changes between windows, so the fit cannot tell the weights apart:
+// what is solid is that the total tracks the %. So a window's shares are scaled to the %
+// the log added over it, tokens per % is re-measured (usage.js calibrate), and PER_PCT is
+// only the fallback.
 // (Moved from ~/nadya/tools/burn.js, 2026-10-10.)
 //
 // STORE keeps settled hours, one JSON line per hour, project and session, and a
 // `{"from","done"}` line per scan, so a week still shows after its transcripts go and a
-// request reads only the hour in progress. Only `cchost` writes it.
+// request reads only the hour in progress. Only `cchost` writes it. Its scan lines carry
+// VERSION; a store from other prices is rewritten once on load (reweigh).
 
 import { HOME } from "./sh.js";
 import { usedAt, weekSamples } from "./usage.js";
 
 export const STORE = `${HOME}/.claude/ccx-burn.jsonl`;
 // weighted tokens per 1% of the 7-day quota (calibration above); the fallback for
-// remote.js measured(), which re-measures it from the log (5.5M-6.0M on 2026-10-14)
-export const PER_PCT = 14e6;
+// remote.js measured(), which re-measures it from the log
+export const PER_PCT = 3.5e6;
 const ROOT = `${HOME}/.claude/projects`;
 const HOUR = 3600_000, DAY = 24 * HOUR, WEEK = 7 * DAY;
 const SETTLE = 5 * 60_000; // an hour goes into the store this long after it ends
@@ -42,15 +43,29 @@ const BACKFILL = 15 * DAY; // what an empty store starts with: last week and thi
 const KEEP = 56 * DAY; // pruned to this once the oldest row is 60 days old
 const LIVE = 60_000; // the hour in progress is rescanned at most this often
 const CHUNK = 1 << 20;
-const W = { in: 1, cw5: 1.25, cw1: 2, cr: 0.1, out: 5 };
 const TOKENS = ["w", "out", "cw", "cr", "in", "m"];
 // a project renamed, by its old name (~/ai/ccx became ~/ai/cc on 2026-10-12)
 const ALIAS = { head: "nadya", ccx: "cc" };
 
-function modelWeight(m = "") {
-  if (m.includes("haiku")) return 0.2;
-  if (m.includes("sonnet")) return 0.6;
-  return 1;
+// List prices in $ per million tokens, [input, output, cache read]; cache writes are 1.25x
+// input (5 min) or 2x (1 h). The first match wins; anything else is priced as Opus 5.5
+const PRICES = [
+  [/fable/, 10, 50, 1],
+  [/opus-5-5/, 4, 20, 0.2],
+  [/opus/, 5, 25, 0.5],
+  [/sonnet/, 2, 10, 0.2],
+  [/haiku/, 0.1, 0.5, 0.01],
+];
+// a store whose scan lines carry another `v` was weighted by other prices (load() redoes it)
+const VERSION = 2;
+
+// A message's weight: its list price over an Opus 5 input token's ($5/M)
+export function weigh(model = "", u) {
+  const [, pin, pout, pcr] = PRICES.find(([re]) => re.test(model)) ??
+    PRICES[1];
+  const cw = u.cw ?? 0, cw1 = u.cw1 ?? 0;
+  return (u.in * pin + (cw - cw1) * 1.25 * pin + cw1 * 2 * pin + u.cr * pcr +
+    u.out * pout) / 5;
 }
 
 async function* walk(dir, depth = 0) {
@@ -254,9 +269,7 @@ export async function scan(from, to, step = HOUR) {
         cr: u.cache_read_input_tokens ?? 0,
         out: u.output_tokens ?? 0,
       };
-      r.w += modelWeight(model) *
-        (t.in * W.in + (cw - cw1) * W.cw5 + cw1 * W.cw1 + t.cr * W.cr +
-          t.out * W.out);
+      r.w += weigh(model, { ...t, cw1 });
       for (const k of ["out", "cw", "cr", "in"]) r[k] += t[k];
       r.m++;
     }
@@ -283,6 +296,7 @@ function load() {
     try {
       const j = JSON.parse(line);
       if (j.done) {
+        if (j.v !== VERSION) store.stale = true;
         [store.start, store.done] = [
           Math.min(store.start, j.from),
           Math.max(store.done, j.done),
@@ -295,22 +309,41 @@ function load() {
   return store;
 }
 
+// Rewrites a store weighted by older prices: each hour the transcripts still have is scanned
+// again, the rest keeps its rows with w from their counts, priced as Opus 5.5 with every
+// cache write 1h (the old rows keep no model or write duration)
+async function reweigh(s) {
+  const fresh = await scan(s.start, s.done), hours = new Set(fresh.map((r) => r.h));
+  s.rows = s.rows.filter((r) => !hours.has(r.h)).map((r) => ({
+    ...r,
+    w: Math.round(weigh("", { ...r, cw1: r.cw })),
+  })).concat(fresh);
+  s.stale = false;
+  const all = [...s.rows, { from: s.start, done: s.done, v: VERSION }];
+  await Deno.writeTextFile(
+    `${STORE}.tmp`,
+    all.map((r) => JSON.stringify(r) + "\n").join(""),
+  );
+  await Deno.rename(`${STORE}.tmp`, STORE);
+}
+
 // Scans what settled since the last scan into the store
 async function update(s, now) {
+  if (s.stale && s.done) await reweigh(s);
   const to = Math.floor((now - SETTLE) / HOUR) * HOUR;
   const from = s.done || to - BACKFILL;
   if (from >= to) return;
   const rows = await scan(from, to);
   s.rows.push(...rows);
   [s.start, s.done] = [Math.min(s.start, from), to];
-  const lines = [...rows, { from, done: to }].map((r) =>
+  const lines = [...rows, { from, done: to, v: VERSION }].map((r) =>
     JSON.stringify(r) + "\n"
   ).join("");
   if (s.rows[0]?.h < now - KEEP - 4 * DAY) {
     const cut = Math.floor((now - KEEP) / HOUR) * HOUR;
     s.rows = s.rows.filter((r) => r.h >= cut);
     s.start = Math.max(s.start, cut);
-    const all = [...s.rows, { from: s.start, done: s.done }];
+    const all = [...s.rows, { from: s.start, done: s.done, v: VERSION }];
     await Deno.writeTextFile(
       `${STORE}.tmp`,
       all.map((r) => JSON.stringify(r) + "\n").join(""),
@@ -375,7 +408,7 @@ function add(a, b) {
 // Rows (each with its host) summed per project and session, biggest first. Each has
 // `share`, its % of the weighted tokens, and `q`, that share of `used`, the % the log added
 // over them: the % of the limit it took. With no log `q` is null and `est`, the total's
-// only, is w / `perPct` (remote.js measured); PER_PCT put week Sep 28 - Oct 5 at 184%, so
+// only, is w / `perPct` (remote.js measured); the old weights' 14M put week Sep 28 - Oct 5 at 184%, so
 // it is not to be trusted across weeks
 export function group(rows, used = null, perPct = PER_PCT) {
   const projects = new Map(), all = blank();

@@ -1051,7 +1051,7 @@ async function cmdBurn(...args) {
     minute: "2-digit"});
   if (hours) {
     console.log(`burn ${hours}h (${when(r.from)} - ${when(r.to)}): ${tok(r.w)} weighted tok, ` +
-      (r.used == null ? `~${pct(r.est)} of the week at ${tok(r.perPct ?? 14e6)}/% (no log for this window)`
+      (r.used == null ? `~${pct(r.est)} of the week at ${tok(r.perPct ?? 3.5e6)}/% (no log for this window)`
         : `the log added ${pct(r.used)} of the week`));
     const row = (name, t) => console.log(`${(t.q == null ? `${pct(t.share)}*` : pct(t.q))
       .padStart(6)}  ${name.padEnd(22)} out ` +

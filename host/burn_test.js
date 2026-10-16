@@ -1,5 +1,5 @@
 import {assertEquals} from "jsr:@std/assert";
-import {breakdown, group, projectName, projectOf} from "./burn.js";
+import {breakdown, group, projectName, projectOf, weigh} from "./burn.js";
 
 const H = 3600_000, WEEK = 168 * H;
 
@@ -55,4 +55,15 @@ Deno.test("breakdown: last week with no log falls back to the token estimate", (
   assertEquals(b.weeks.map((w) => [w.label, w.used, w.projects[0].p, w.projects[0].q]),
     [["last week", null, "bb", null], ["this week", 20, "cc", 20]]);
   assertEquals(b.days.reduce((s, d) => s + d.w, 0), 14e6 + 7);
+});
+
+Deno.test("weigh: each model's list price over $5/M, Opus 5.5 reads at 0.05x input", () => {
+  const u = {in: 1e6, cw: 2e6, cw1: 1e6, cr: 1e6, out: 1e6};
+  // Opus 5.5: $4 in, $5 cw 5m, $8 cw 1h, $0.20 read, $20 out = $37.20
+  assertEquals(Math.round(weigh("claude-opus-5-5", u)), 37.2e6 / 5);
+  assertEquals(Math.round(weigh("claude-opus-4-8", u)), 46.75e6 / 5);
+  assertEquals(Math.round(weigh("claude-sonnet-5-5", u)), 18.7e6 / 5);
+  assertEquals(Math.round(weigh("claude-haiku-5-5", u)), 0.935e6 / 5);
+  assertEquals(Math.round(weigh("claude-fable-5-1", u)), 93.5e6 / 5);
+  assertEquals(weigh("<synthetic>", u), weigh("claude-opus-5-5", u));
 });
