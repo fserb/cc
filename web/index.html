@@ -30,7 +30,7 @@
   #qbtn b { color: var(--text); font-weight: 600; min-width: 4ch; text-align: right; }
   #qbtn.out b, #qbtn.out em { color: var(--qc); }
   #qbtn .spark { width: 32px; height: 0.72em; flex: none; align-self: baseline; } #qbtn b, #qbtn em { align-self: baseline; } #qbtn .spark path { fill: var(--qc); } #qbtn .spark line { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; } #qbtn .spark .ref { stroke: var(--muted); stroke-dasharray: 2 2; opacity: 0.6; }
-  #qbtn em { font-style: normal; } #qbtn .tr { display: inline-block; width: 1em; text-align: center; }
+  #qbtn em { font-style: normal; } #qbtn .tr { display: inline-block; width: 0.9em; text-align: right; } #qbtn .tr svg { width: 0.62em; height: 0.74em; overflow: visible; } #qbtn .tr path { fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
   #home { display: grid; grid-template-columns: 320px minmax(0, 1fr); min-height: 0; }
   #left { border-right: 1px solid var(--line); overflow: hidden auto; position: relative; padding: 0; display: flex; flex-direction: column; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   #left > * { flex-shrink: 0; }
@@ -465,7 +465,14 @@ function dueTodos(withSent) { const soon = Date.now() + 3600e3; return [...S.rem
 // from every host's weighted tokens at the tokens per % the log measured (paceTokens, user, Oct 14th); from an older
 // cchost the log's 1h and 3h. out is the log's 1h one's
 // the short pace against the long one, as shown (one decimal): ↑ faster lately, ↓ slower, nothing when equal or no long
-function trend(p) { if (p.xl == null) return ""; const a = +p.x.toFixed(1), b = +p.xl.toFixed(1); return a > b ? "↑" : a < b ? "↓" : ""; }
+// the arrow is drawn: the font's ↑ is a thin hairline taller than the digits
+function trend(p) {
+  if (p.xl == null) return "";
+  const a = +p.x.toFixed(1), b = +p.xl.toFixed(1);
+  if (a == b) return "";
+  const d = a > b ? "M5 11V2.5M1.5 5.5L5 2l3.5 3.5" : "M5 2V10.5M1.5 7.5L5 11l3.5-3.5";
+  return `<svg viewBox="0 0 10 12" aria-label="${a > b ? "rising" : "falling"}"><path d="${d}"/></svg>`;
+}
 function paces(p) { return `${p.x.toFixed(1)}x (${p.w[0]})${p.xl == null ? "" : `, ${p.xl.toFixed(1)}x (${p.w[1]})`}`; }
 function pace() {
   const p = S.usage?.pace; if (p?.ratio == null) return null;
