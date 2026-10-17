@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc assistant mocks 2: from sessions to the screen</title>
+<style>
+:root { --page: #f3f4f6; --text: #1f2328; --muted: #6b7280; --line: #e2e4e8; --hover: #f3f4f6; --lit: #fff3bf; --litb: #f59f00;
+  --accent: #1f6feb; --q: #d9480f; --ok: #2b8a3e; --busy: #1971c2; --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, Menlo, Consolas, monospace; --W: 44px; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text); font: 15px/1.45 var(--font); }
+body > header { position: sticky; top: 0; z-index: 9; background: #fff; border-bottom: 1px solid var(--line); padding: 0.45rem 1rem; display: flex; gap: 0.3rem 0.9rem; flex-wrap: wrap; align-items: center; }
+body > header a { color: var(--accent); text-decoration: none; font-size: 0.86rem; }
+body > main { max-width: 1440px; margin: 0 auto; padding: 0 1rem 4rem; }
+h2 { font-size: 1.2rem; margin: 2.2rem 0 0.1rem; padding-top: 0.6rem; border-top: 2px solid #c9ccd1; }
+h3 { font-size: 0.95rem; margin: 1rem 0 0.3rem; }
+.lede { margin: 0 0 0.6rem; color: var(--muted); }
+.b { font: inherit; font-size: 0.8rem; border: 1px solid #c5cad1; background: #fff; border-radius: 6px; padding: 0.12rem 0.5rem; cursor: pointer; color: var(--text); white-space: nowrap; }
+.b[aria-pressed="true"] { background: var(--text); color: #fff; border-color: var(--text); }
+.b.pri { background: var(--accent); border-color: var(--accent); color: #fff; }
+code { font: 0.8em var(--mono); background: #f1f3f5; padding: 0 0.2rem; border-radius: 3px; }
+.muted { color: var(--muted); } .sm { font-size: 0.8rem; } .xs { font-size: 0.72rem; }
+table.raw { border-collapse: collapse; background: #fff; font-size: 0.84rem; width: 100%; }
+table.raw td, table.raw th { border-bottom: 1px solid var(--line); padding: 0.3rem 0.5rem; text-align: left; vertical-align: top; }
+
+/* the two halves */
+.map { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 0.8rem; align-items: start; }
+@media (max-width: 980px) { .map { grid-template-columns: 1fr; } }
+.pane { background: #fff; border: 1px solid #c9ccd1; border-radius: 8px; overflow: hidden; }
+.pane > .ph { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--line); display: flex; gap: 0.5rem; align-items: center; }
+.pane > .ph .r { margin-left: auto; text-transform: none; letter-spacing: 0; }
+
+/* the trace: lanes on the left, the text, then what it becomes */
+.tr { font-size: 0.8rem; }
+.tr .hd, .tr .ev { display: grid; grid-template-columns: 3.1rem calc(var(--n) * var(--W)) minmax(0, 1fr) 14rem; align-items: center; }
+.tr .hd { position: sticky; top: 0; background: #fafbfc; border-bottom: 1px solid var(--line); font-size: 0.68rem; color: var(--muted); }
+.tr .hd .lanes { display: flex; }
+.tr .hd .lanes span { width: var(--W); text-align: center; line-height: 1.1; padding: 0.2rem 0; overflow: hidden; }
+.tr .hd .lanes b { display: block; color: var(--text); font-size: 0.7rem; }
+.tr .ev { min-height: 25px; cursor: pointer; border-bottom: 1px solid #f3f4f6; }
+.tr .ev:hover { background: var(--hover); }
+.tr .ev.after { opacity: 0.38; }
+.tr .ev.cur { background: #e8f0fb; }
+.tr .ev.lit { background: var(--lit); opacity: 1; }
+.tr .ev time { color: var(--muted); font-size: 0.7rem; padding-left: 0.35rem; white-space: nowrap; }
+.tr .ev .t { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; padding: 0.15rem 0.4rem; line-height: 1.3; }
+.tr .ev .t i { font-style: normal; color: var(--muted); font-size: 0.72rem; }
+.tr .ev .f { font-size: 0.72rem; line-height: 1.25; padding: 0.15rem 0.4rem; border-left: 1px solid var(--line); align-self: stretch; display: flex; align-items: center; }
+.tr .ev .f.hid { color: #9aa1a9; }
+.tr .ev .f.on { color: #0b5394; }
+.lc { position: relative; align-self: stretch; }
+.lc .life { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; }
+.lc .dot { position: absolute; top: 50%; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; z-index: 2; }
+.lc .dot.sq { border-radius: 2px; }
+.lc .ln { position: absolute; top: 50%; height: 0; border-top: 1.5px solid; z-index: 1; }
+.lc .ln::after { content: ""; position: absolute; top: -5px; border: 4.5px solid transparent; }
+.lc .ln.r::after { right: -2px; border-left-color: currentColor; border-right: 0; }
+.lc .ln.l::after { left: -2px; border-right-color: currentColor; border-left: 0; }
+.det { border-top: 1px solid var(--line); padding: 0.5rem 0.7rem; font-size: 0.82rem; background: #fafbfc; min-height: 5.5rem; }
+.det .k { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-top: 0.3rem; }
+.det .raw { white-space: pre-wrap; font: 0.76rem/1.4 var(--mono); background: #fff; border: 1px solid var(--line); border-radius: 4px; padding: 0.3rem 0.45rem; margin: 0.15rem 0; max-height: 7.5rem; overflow: auto; }
+
+/* the screen */
+.scr { font-size: 13px; height: 760px; overflow: auto; position: relative; }
+.m { border-radius: 6px; transition: background 0.1s; cursor: pointer; }
+.m.lit { background: var(--lit) !important; box-shadow: 0 0 0 2px var(--litb); }
+.m.fresh { box-shadow: 0 0 0 2px #74c0fc; }
+.top { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.7rem; border-bottom: 1px solid var(--line); }
+.top .r { margin-left: auto; color: var(--muted); font-size: 0.76rem; }
+.in { display: flex; gap: 0.4rem; align-items: center; border: 1px solid #c5cad1; border-radius: 10px; padding: 0.3rem 0.55rem; background: #fff; }
+.in span { flex: 1; color: var(--muted); }
+.card { border: 1px solid var(--line); border-radius: 8px; padding: 0.45rem 0.6rem; background: #fff; margin: 0 0 0.45rem; }
+.card.need { border-left: 3px solid var(--q); }
+.card.dim { opacity: 0.6; }
+.card h5 { margin: 0 0 0.15rem; font-size: 0.86rem; }
+.k { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.sd { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #adb5bd; flex: none; }
+.sd.busy { background: var(--busy); } .sd.asking { background: var(--q); } .sd.wait { background: #f59f00; } .sd.withyou { background: #7048e8; } .sd.gone { background: #ced4da; }
+.sl { display: flex; gap: 0.35rem; align-items: baseline; padding: 0.12rem 0.2rem; font-size: 0.8rem; }
+.chip { display: inline-flex; gap: 0.25rem; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 0 0.45rem; font-size: 0.72rem; white-space: nowrap; background: #fff; color: var(--accent); }
+.chips { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.25rem; }
+.cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.cols > div { padding: 0.5rem; border-right: 1px solid var(--line); min-height: 420px; }
+.cols > div:last-child { border-right: 0; }
+.ch { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 0.35rem; }
+.bub { border-radius: 12px; padding: 0.35rem 0.6rem; margin: 0.25rem 0; max-width: 84%; background: #f1f3f5; }
+.bub.me { background: #dbe7fb; margin-left: auto; }
+.who { font-size: 0.68rem; color: var(--muted); margin-top: 0.45rem; }
+.who.me { text-align: right; }
+.grp { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0.6rem 0.2rem 0.2rem; }
+.row { display: flex; gap: 0.45rem; align-items: baseline; padding: 0.25rem 0.35rem; }
+.row .t { flex: 1; min-width: 0; }
+.row time { color: var(--muted); font-size: 0.7rem; white-space: nowrap; }
+.opts { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.35rem; }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; padding: 0.5rem; border-bottom: 1px solid var(--line); }
+.tile { border: 1px solid var(--line); border-radius: 8px; padding: 0.35rem 0.5rem; font-size: 0.78rem; }
+.tile.open { border-color: var(--text); }
+.gantt { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--line); }
+.lane { display: grid; grid-template-columns: 6.8rem 1fr; gap: 0.4rem; align-items: center; font-size: 0.72rem; margin: 2px 0; }
+.lane .bar { position: relative; height: 14px; background: #f6f7f9; border-radius: 3px; }
+.lane .bar i { position: absolute; top: 2px; bottom: 2px; border-radius: 3px; background: #a5c3ef; }
+.lane .bar i.busy { background: var(--busy); } .lane .bar i.asking { background: var(--q); } .lane .bar i.withyou { background: #7048e8; }
+.tl .r2 { display: grid; grid-template-columns: 3rem 1fr; gap: 0.4rem; padding: 0.22rem 0.4rem; border-left: 2px solid var(--line); margin-left: 0.4rem; }
+.tl .r2 time { color: var(--muted); font-size: 0.7rem; }
+.tl .nowl { border-left: 2px solid var(--q); margin-left: 0.4rem; padding: 0.35rem 0.4rem; }
+.rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 0.2rem 1.2rem; font-size: 0.86rem; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 0.5rem 0.8rem; margin-top: 0.6rem; }
+.rules p { margin: 0.25rem 0; }
+.rules b { display: block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+details.org { background: #fff; border: 1px solid var(--line); border-radius: 8px; margin: 0.5rem 0 0; padding: 0.35rem 0.8rem; font-size: 0.84rem; }
+details.org summary { cursor: pointer; font-weight: 600; }
+details.org ul { margin: 0.3rem 0; padding-left: 1.1rem; }
+.leg { display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; font-size: 0.76rem; color: var(--muted); margin: 0.3rem 0; }
+.leg span { display: inline-flex; gap: 0.3rem; align-items: center; }
+</style>
+</head>
+<body>
+<header>
+  <b>cc assistant mocks 2 · from sessions to the screen · Oct 17th</b>
+  <span class="sm muted">story:</span><span id="pick"></span>
+  <span class="sm" id="nowctl"></span>
+  <span style="flex:1"></span>
+  <a href="#raw">what cc has</a><a href="#jobs">1 jobs</a><a href="#talk">2 one conversation</a><a href="#bar">3 command bar</a><a href="#rooms">4 rooms</a><a href="#day">5 the day</a><a href="#cmp">compare</a>
+</header>
+<main id="m"></main>
+<script type="module">
+// Real events of Oct 17th, read from nadya's transcript (bc40d3bf, -home-fserb-nadya), cc-a's transcript (1d3a81de),
+// nadya-log.md, ~/web/blog/index.html and git log. Times are Montreal time. Text in "t" is quoted or cut, not rewritten,
+// except where it says "(rebuilt)".
+const LANE = {
+  you: {n: "you", c: "#1f2328"}, nadya: {n: "nadya", sub: "22715", c: "#c92a2a"}, x: {n: "trig · git · blog", c: "#868e96"},
+};
+const STORIES = {
+  files: {n: "files search (12:56-13:06)", proj: "cc",
+    blurb: "One request to nadya, one helper, then a follow-up that nadya gives to a second session with the same name.",
+    lanes: ["you", "nadya", {k: "a1", n: "cc-a", sub: "78296", c: "#1971c2", life: [["f6", "f17"]]}, {k: "a2", n: "cc-a", sub: "90009", c: "#0c8599", life: [["f20", "f23"]]}, "x"],
+    ev: [
+      {id: "f1", at: "12:56", from: "you", to: "nadya", kind: "you", t: "cc: adding a search inside the files tab sounds very reasonable. Can we live grep it so we don't have to maintain an index?"},
+      {id: "f2", at: "12:56", from: "you", to: "nadya", kind: "you", other: "answer", t: "what was the lbp progress today?"},
+      {id: "f2r", at: "12:57", from: "nadya", to: "you", kind: "reply", other: "answer", t: "**Speed (arcade-lbp-a, earlier arcade-a)** Before 00:50: uncapped frame rate went from about 38 to 41 frames..."},
+      {id: "f3", at: "12:58", from: "you", to: "nadya", kind: "you", t: "can we add a lemon/boxer inside cc/web for those support functions, so we don't clog cchost with web-only things?"},
+      {id: "f4", at: "12:59", from: "nadya", to: "you", kind: "reply", t: "Yes, with one change to the plan: put the box in a subdirectory instead of at the top of cc."},
+      {id: "f5", at: "12:59", from: "you", to: "nadya", kind: "you", t: "yeah, yeah, in a subdir of web/... sounds perfect. yeah, host=on."},
+      {id: "f6", at: "12:59", from: "nadya", to: "a1", kind: "spawn", t: "ccx new ~/ai/cc/web → \"started 78296\"; ccx user 78296 \"$(cat tmp/assign/cc-a.md)\" (the brief, which quotes your words); trig add on session.cc-a.done / .asking"},
+      {id: "f7", at: "12:59", from: "nadya", to: "you", kind: "reply", t: "I started cc-a on it. It will build: The box: a lemon box in ~/ai/cc/web/api/, served at /cc/api/, with box.host=on..."},
+      {id: "f8", at: "13:00", from: "a1", to: "nadya", kind: "msg", t: "cc-a, ~/ai/cc/web: building the cc/api lemon box (host=on) with live grep over ~/nadya and a search box in cc's files tab."},
+      {id: "f9", at: "13:00", from: "you", to: "nadya", kind: "you", other: "job", t: "cc mocks, I'm still not happy with those. Even the current packages/files is not really ideal. Can you spawn an agent to do more functional mocks... (nadya starts cc-b; then cc-c 13:02, cc-d 13:03)"},
+      {id: "f10", at: "13:00", from: "nadya", to: "a1", kind: "msg", routine: 1, t: "[nadya] Peer: cc-b just started in ~/ai/cc/web, making mocks only (mocks/assistant.html). It won't touch index.html or api/."},
+      {id: "f11", at: "13:01", from: "a1", kind: "tools", t: "79 assistant lines: 23 Bash, 16 Chrome (screenshots at desktop and phone width), 3 SendMessage, 2 Skill, 1 Read. cchost state: busy the whole time."},
+      {id: "f12", at: "13:03", from: "a1", to: "x", kind: "commit", t: "a14839a cc: search in the files tab, a live grep over ~/nadya grouped by file; a hit opens its file at that line, marked. Served by web/api, a lemon box (host=on)"},
+      {id: "f13", at: "13:03", from: "a1", to: "nadya", kind: "done", t: "cc-a done: files-tab search (live grep over ~/nadya via the new web/api lemon box, host=on; hits grouped by file, a click opens the file scrolled to that line and marked; desktop and phone checked; ccreload reloaded 1 tab) a14839a"},
+      {id: "f14", at: "13:03", from: "x", to: "nadya", kind: "trig", t: "[trig nadya-on-session-cc-a-done] cc-a finished a turn: nadya:cc-a busy -> wait"},
+      {id: "f15", at: "13:03", from: "nadya", to: "a1", kind: "msg", routine: 1, t: "[nadya] For the blog: send me the path of one desktop screenshot... → cc-a: /tmp/cc-files-search.png"},
+      {id: "f16", at: "13:04", from: "nadya", to: "x", kind: "blog", t: "<article data-project=\"cc\"> 13:04 · cc · cc-a: cc's files tab can now search all of ~/nadya as you type, with no index; click a hit to open the file at that line. [screenshot] [cc files tab]"},
+      {id: "f17", at: "13:04", from: "nadya", to: "a1", kind: "close", t: "ccx close cc-a → closed; nadya-log.md: \"13:04 cc-a done: files search via web/api lemon box (a14839a); blog; closed (1d3a81de...)\""},
+      {id: "f18", at: "13:04", from: "nadya", to: "you", kind: "reply", t: "The files search is live. In cc's files tab, typing searches all of ~/nadya with no index; matches are grouped by file, and clicking one opens the file at that line."},
+      {id: "f19", at: "13:04", from: "you", to: "nadya", kind: "you", t: "cc web: file search, cursor on clear search, also increase the clear search area of click."},
+      {id: "f20", at: "13:05", from: "nadya", to: "a2", kind: "spawn", t: "ccx new ~/ai/cc/web → \"started 90009\", window named cc-a again; the brief quotes your words and names a14839a"},
+      {id: "f21", at: "13:06", from: "a2", to: "x", kind: "commit", t: "917dbd0 cc: the files search's × is a button over the box's right end (42x40 px), and clearing puts the cursor back in the box (user)"},
+      {id: "f22", at: "13:06", from: "a2", to: "nadya", kind: "done", t: "cc-a done: files search × is now a 42x40 px button over the box's right end, and clearing puts the cursor back in the box (checked at desktop and 390px phone width) 917dbd0"},
+      {id: "f23", at: "13:06", from: "nadya", to: "a2", kind: "close", t: "ccx close cc-a; nadya-log.md: \"13:06 cc-a done: search × 42x40, focus after clear (917dbd0); closed (bfbc39cb...)\""},
+    ],
+    job: {words: "f1", more: ["f3", "f5"], follow: ["f19"], title: "search inside the files tab, live grep, no index"},
+    replies: ["f4", "f7", "f18"],
+    sess: [
+      {lane: "a1", n: "cc-a", pid: "78296", goal: "files-tab live grep via lemon box", start: "f6", hello: "f8", work: "f11", done: ["f13"], commit: ["f12"], blog: ["f16"], end: "f17",
+        res: "search in the files tab: live grep over ~/nadya, hits by file", links: ["a14839a", "post 13:04", "/cc/#files"]},
+      {lane: "a2", n: "cc-a", pid: "90009", goal: "files search: clear focus, bigger ×", start: "f20", done: ["f22"], commit: ["f21"], end: "f23", asked: "f19",
+        res: "× is a 42x40 button; clearing puts the cursor back", links: ["917dbd0"]},
+    ],
+    others: {f9: {title: "cc mocks, more functional, Dribbble", by: "cc-b", room: "cc"}, f2: {room: "arcade", reply: "f2r"}},
+    find: "search"},
+
+  ep: {n: "1-14 side by side (08:44-09:28)", proj: "design-a",
+    blurb: "One request becomes two sessions on marx; later you work with one of them directly in its pane, which nadya never sees.",
+    lanes: ["you", "nadya", {k: "da", n: "design-a-a", sub: "marx", c: "#1971c2", life: [["e3", "e11"], ["e15", "e20"]]}, {k: "db", n: "design-a-b", sub: "marx", c: "#0c8599", life: [["e4", "e11c"]]}, "x"],
+    ev: [
+      {id: "e1", at: "08:44", from: "you", to: "nadya", kind: "you", t: "estimate how much using the gemini api for html summary of one design-a video would cost."},
+      {id: "e2", at: "08:48", from: "nadya", to: "you", kind: "reply", t: "Setting up the comparison: one episode, one shared prompt, two agents on marx in design-a's dir."},
+      {id: "e3", at: "08:49", from: "nadya", to: "da", kind: "spawn", t: "ccx new marx:~/web/design-a design-a-a → marx:66167; brief: compare/1-14/prompt.md, Claude reads still frames"},
+      {id: "e4", at: "08:49", from: "nadya", to: "db", kind: "spawn", t: "ccx new marx:~/web/design-a design-a-b → marx:66316; the same prompt, Gemini 3.1 Pro on the video"},
+      {id: "e5", at: "08:49", from: "nadya", to: "you", kind: "reply", t: "Both agents are running on marx with the same prompt and the same episode, design-ah-1-14 (15 minutes). They don't know about each other."},
+      {id: "e6", at: "08:50", from: "da", kind: "tools", t: "reads 453 frames at one every 2 s plus about 60 at 1 fps around segment edges; writes claude.html. State busy."},
+      {id: "e7", at: "08:50", from: "db", kind: "tools", t: "sends the 748 MB mp4 to Gemini's Files API: 82,446 video tokens, 5,328 out; writes gemini.html. State busy."},
+      {id: "e8", at: "08:55", from: "da", to: "nadya", kind: "done", t: "design-a-a done: wrote compare/1-14/claude.html (6 concepts with SVG diagrams, 13-row timeline, closing, limits section) and compare/1-14/claude-notes.md."},
+      {id: "e9", at: "08:55", from: "db", to: "nadya", kind: "done", t: "design-a-b done: compare/1-14/gemini.html + gemini-notes.md. gemini-3.1-pro-preview, original 748 MB mp4 sent via Files API... about $0.36"},
+      {id: "e10", at: "08:55", from: "x", to: "nadya", kind: "trig", t: "[trig nadya-on-session-design-a-b-done] design-a-b finished a turn: marx:design-a-b busy -> wait"},
+      {id: "e11", at: "08:55", from: "nadya", to: "da", kind: "close", t: "ccx close marx:design-a-a; nadya-log.md: \"08:55 design-a-a done (claude.html, 513 frames, no audio); closed\""},
+      {id: "e11c", at: "08:55", from: "nadya", to: "db", kind: "close", t: "ccx close marx:design-a-b; nadya-log.md: \"08:55 design-a-b done (gemini.html, ..., $0.36); both closed; blog post\""},
+      {id: "e12", at: "08:55", from: "nadya", to: "x", kind: "blog", t: "<article data-project=\"design-a\"> 08:55 · design-a · design-a-a, design-a-b: Same Design Ah episode explained twice: Claude from 513 still frames (left, 6 ideas) and Gemini 3.1 Pro from the video for $0.36 (right, 4 ideas)."},
+      {id: "e13", at: "08:56", from: "nadya", to: "you", kind: "reply", t: "Both pages are ready: claude.html and gemini.html. [a table: input, ideas, cost, time]"},
+      {id: "e14", at: "09:06", from: "you", to: "nadya", kind: "you", t: "for the design-a infos, ours is MUCH better than gemini's. But I want to iterate on it a bit, can you bring back the agent?"},
+      {id: "e15", at: "09:06", from: "nadya", to: "da", kind: "spawn", t: "claude --resume 4b7f5951 in tmux session design-a-a → marx:71888: the same conversation in a new process; told it you will work with it directly"},
+      {id: "e16", at: "09:06", from: "nadya", to: "you", kind: "reply", t: "design-a-a is back with its full earlier context (marx pid 71888, tmux session design-a-a)."},
+      {id: "e17", at: "09:07", from: "you", to: "da", kind: "direct", t: "you type in design-a-a's pane on marx for 21 minutes. These prompts are in design-a-a's transcript (origin human), not in nadya's. cchost shows it as wait/busy in turns."},
+      {id: "e18", at: "09:28", from: "da", to: "nadya", kind: "done", t: "design-a-a finished iterating with the user, and the user said \"we are good for now\". Committed ed9cf63 on master: reports/1-14.html, reports/template.html and reports/REPORT.md"},
+      {id: "e19", at: "09:28", from: "da", to: "x", kind: "commit", t: "ed9cf63 (design-a): reports/1-14.html, reports/template.html, reports/REPORT.md; compare/ deleted"},
+      {id: "e20", at: "09:28", from: "nadya", to: "da", kind: "close", t: "ccx close marx:design-a-a; nadya-log.md: \"09:28 design-a-a done: reports/1-14.html + template + REPORT.md (ed9cf63), compare/ deleted; closed (4b7f5951); blog\""},
+      {id: "e21", at: "09:28", from: "nadya", to: "x", kind: "blog", t: "<article data-project=\"design-a\"> 09:28 · design-a · design-a-a: First Design Ah episode explainer page is final (episode 1-14: six ideas with diagrams), with a template and instructions for the other episodes."},
+      {id: "e22", at: "09:28", from: "nadya", to: "you", kind: "reply", t: "design-a-a is done and closed. What it committed to design-a: reports/1-14.html: your chosen version, with the diagrams..."},
+    ],
+    job: {words: "e1", more: [], follow: ["e14"], title: "explain ep 1-14 with Claude and with Gemini, side by side"},
+    replies: ["e2", "e5", "e13", "e16", "e22"],
+    sess: [
+      {lane: "da", n: "design-a-a", pid: "marx:66167", goal: "1-14 explainer from frames", start: "e3", work: "e6", done: ["e8"], end: "e11", blog: ["e12"], res: "claude.html: 6 ideas with diagrams", links: ["claude.html", "post 08:55"]},
+      {lane: "db", n: "design-a-b", pid: "marx:66316", goal: "1-14 explainer, Gemini on the video", start: "e4", work: "e7", done: ["e9"], end: "e11c", blog: ["e12"], res: "gemini.html: 4 ideas, $0.36", links: ["gemini.html"]},
+      {lane: "da", n: "design-a-a", pid: "marx:71888", goal: "iterate on claude.html with the user", start: "e15", direct: "e17", done: ["e18"], commit: ["e19"], end: "e20", blog: ["e21"], asked: "e14", resumed: 1,
+        res: "reports/1-14.html final, template, REPORT.md", links: ["ed9cf63", "reports/1-14.html", "post 09:28"]},
+    ],
+    others: {}, find: "1-14"},
+
+  q: {n: "3-16, a helper asks (09:28-10:49)", proj: "design-a",
+    blurb: "A helper on marx asks you a question. nadya gets a notice and stays quiet; the question waits about an hour.",
+    lanes: ["you", "nadya", {k: "db", n: "design-a-b", sub: "marx:76809", c: "#0c8599", life: [["q2", "q17"]]}, "x"],
+    ev: [
+      {id: "q1", at: "09:28", from: "you", to: "nadya", kind: "you", t: "design-a: do you think you can find the missing episode?"},
+      {id: "q2", at: "09:29", from: "nadya", to: "db", kind: "spawn", t: "ccx new marx:~/web/design-a design-a-b → marx:76809; the brief quotes your words"},
+      {id: "q3", at: "09:29", from: "nadya", to: "you", kind: "reply", t: "design-a-b is on it. It will find out what 3-16 is from episode lists, including its air date and segments..."},
+      {id: "q4", at: "09:30", from: "db", kind: "tools", t: "searches episode lists, then IA, YouTube, Nyaa, Prowlarr for a copy. State busy."},
+      {id: "q5", at: "09:42", from: "db", to: "you", kind: "ask", t: "AskUserQuestion on its pane (rebuilt from its done message): no English-subtitled copy of 3-16; take the only full one, Bilibili, Chinese burned-in subtitles, 720p? cchost: record \"waiting\", waitingFor \"input needed\". The question text is in no file until it is answered; cc reads it off the pane."},
+      {id: "q6", at: "09:42", from: "x", to: "nadya", kind: "trig", t: "[trig nadya-on-session-design-a-b-asking] design-a-b asks: marx:design-a-b busy -> wait, asking: input needed"},
+      {id: "q7", at: "09:42", from: "nadya", kind: "quiet", t: "· (nadya's whole reply. Since Oct 15th nadya does not repeat a helper's question; cc shows it.)"},
+      {id: "q8", at: "10:11", from: "nadya", to: "x", kind: "log", t: "nadya-log.md, 10:11 start and 10:23 hourly: \"design-a-b waits on the user\""},
+      {id: "q9", at: "10:4x", tm: 10.7, from: "you", to: "db", kind: "answer", t: "you pick an answer in its dialog (in its pane, or in cc's session view). Time not recorded; between 10:23 and 10:48."},
+      {id: "q10", at: "10:48", from: "db", to: "nadya", kind: "done", t: "design-a-b done: 3-16 is NHK broadcast #56, ちょうどいいスペシャル (2013-11-23); there was no numbering shift, it was missing. No English-subbed copy found (IA, YouTube, Nyaa, Prowlarr). With the user's OK I took the only full copy: Bilibili BV1hwKfzmEr4 part 56..."},
+      {id: "q11", at: "10:48", from: "nadya", to: "x", kind: "blog", t: "<article data-project=\"design-a\"> 10:48 · design-a · design-a-b: Design Ah episode 3-16 found and added, so all 60 episodes now play..."},
+      {id: "q12", at: "10:48", from: "nadya", to: "db", kind: "msg", t: "nadya checks the viewer: script.js has no 3-16 yet (\"my post overstated it\"); asks design-a-b to add it"},
+      {id: "q13", at: "10:48", from: "nadya", to: "you", kind: "reply", t: "design-a-b found episode 3-16, but it doesn't show in the viewer yet. The copy: no English-subtitled copy turned up..."},
+      {id: "q14", at: "10:49", from: "db", to: "nadya", kind: "done", t: "design-a-b done: 3-16 added to the VIDEOS list in script.js and committed (5517519). Checked in headless Chrome: the page has 60 cards"},
+      {id: "q15", at: "10:49", from: "db", to: "x", kind: "commit", t: "5517519 (design-a): 3-16 in the VIDEOS list of script.js"},
+      {id: "q16", at: "10:49", from: "nadya", to: "x", kind: "blog", t: "the 10:48 post corrected back: 3-16 plays in the viewer"},
+      {id: "q17", at: "10:49", from: "nadya", to: "db", kind: "close", t: "ccx close marx:design-a-b (refused once while busy at 10:48, retried); nadya-log.md: \"10:49 design-a-b: 3-16 in the viewer (5517519), closed\""},
+      {id: "q18", at: "10:49", from: "nadya", to: "you", kind: "reply", t: "Episode 3-16 is now in the viewer, so all 60 Design Ah episodes play."},
+    ],
+    job: {words: "q1", more: [], follow: [], title: "find the missing episode 3-16"},
+    replies: ["q3", "q13", "q18"],
+    sess: [
+      {lane: "db", n: "design-a-b", pid: "marx:76809", goal: "find missing episode 3-16", start: "q2", work: "q4", ask: "q5", answer: "q9", done: ["q10", "q14"], commit: ["q15"], blog: ["q11", "q16"], end: "q17",
+        res: "3-16 is broadcast #56; Bilibili copy, Chinese subtitles; all 60 play", links: ["5517519", "viewer", "post 10:48"]},
+    ],
+    q: {ev: "q5", t: "No English-subtitled copy of 3-16. Take the Bilibili one (Chinese subtitles, 720p)?", opts: ["Yes, take it", "Keep looking"], answer: "q9"},
+    others: {}, find: "3-16"},
+};
+// where each kind of event is kept, for the detail box
+const WHERE = {
+  you: "nadya's transcript: a user line, origin.kind \"human\". cc's nadya chat shows it today.",
+  reply: "nadya's transcript: an assistant text block (or a thinking block drawn as a reply).",
+  spawn: "nadya's Bash tool call (ccx new, ccx user). cchost: a new api/list row with name, pid, dir, goal; api/changes \"new\".",
+  msg: "the sender's transcript: a SendMessage tool call; the receiver's: a user line with origin.kind \"peer\" and origin.name.",
+  done: "the helper's SendMessage; nadya's transcript: a user line, origin.kind \"peer\", origin.name the helper, body starting \"<name> done:\".",
+  tools: "the helper's transcript: assistant lines with tool_use blocks. cchost: state busy.",
+  trig: "nadya's transcript: a peer line from trig, made from cchost's api/changes.",
+  commit: "git log in the project's repo.",
+  blog: "~/web/blog/index.html: an <article data-project=...> with time, project, helper name.",
+  close: "nadya's Bash (ccx close). cchost: the row goes, api/changes \"gone\". A line in nadya-log.md.",
+  direct: "the helper's transcript only: user lines, origin.kind \"human\". Not in nadya's transcript.",
+  ask: "cchost: the record says waiting, waitingFor \"input needed\"; the dialog text is on the pane only (the askhook file on hosts that have it).",
+  answer: "the helper's pane (a key press); then the tool_result in the helper's transcript.",
+  quiet: "nadya's transcript: an assistant text block that is only \"·\".",
+  log: "nadya-log.md, one line per event, written by nadya.",
+};
+
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
+const cut = (s, n = 90) => s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s;
+// a screen element that came from events `ids`; `as` names what it is on this screen
+const m = (ids, as, html, tag = "div", cls = "") => `<${tag} class="m ${cls}" data-src="${[ids].flat().filter(Boolean).join(" ")}" data-as="${esc(as)}">${html}</${tag}>`;
+const chip = (l) => `<span class="chip">${/^[0-9a-f]{7}$/.test(l) ? `⎇ ${l}` : esc(l)}</span>`;
+const hours = (e) => e.tm ?? (+e.at.slice(0, 2) + +e.at.slice(3, 5) / 60);
+
+for (const sc of Object.values(STORIES)) {
+  sc.ix = Object.fromEntries(sc.ev.map((e, i) => [e.id, i]));
+  sc.byId = Object.fromEntries(sc.ev.map((e) => [e.id, e]));
+  sc.L = sc.lanes.map((l) => typeof l === "string" ? {k: l, ...LANE[l]} : l);
+  sc.li = Object.fromEntries(sc.L.map((l, i) => [l.k, i]));
+}
+
+// what the world looks like after event `now`
+function ctx(sc, now) {
+  const seen = (id) => id != null && sc.ix[id] <= now;
+  const E = (id) => sc.byId[id];
+  const st = (s) => {
+    if (!seen(s.start)) return null;
+    if (seen(s.end)) return "gone";
+    if (s.ask && seen(s.ask) && !seen(s.answer)) return "asking";
+    if (s.direct && seen(s.direct) && !s.done.some(seen)) return "with you";
+    if (s.done.some(seen)) {
+      // done, unless nadya sent it more work since
+      const lastDone = s.done.filter(seen).at(-1), after = sc.ev.slice(sc.ix[lastDone] + 1, now + 1);
+      return after.some((e) => e.kind === "msg" && e.to === s.lane) ? "busy" : "wait";
+    }
+    return "busy";
+  };
+  const live = sc.sess.filter((s) => st(s) && st(s) !== "gone");
+  const started = sc.sess.filter((s) => st(s));
+  const jobSt = started.length === 0 ? "asked" : started.some((s) => st(s) === "asking") ? "q" : live.length ? "busy" : "done";
+  const doneIds = (s) => s.done.filter(seen);
+  return {seen, E, st, live, started, jobSt, doneIds, now, at: sc.ev[now].at};
+}
+const stDot = (st) => `<span class="sd ${(st ?? "").replace(" ", "")}"></span>`;
+const stWord = (st) => ({busy: "working", wait: "done, not closed", asking: "asks you", "with you": "with you in its pane", gone: "closed"})[st] ?? st;
+
+// ---------- 1. Jobs ----------
+function jobs(sc, c) {
+  const {seen, E, st} = c;
+  const j = sc.job;
+  const sessLine = (s) => {
+    const x = st(s);
+    if (!x) return "";
+    const last = c.doneIds(s).at(-1);
+    const what = last ? cut(E(last).t.replace(/^[\w-]+ done: /, ""), 70) : s.hello && seen(s.hello) ? cut(E(s.hello).t.replace(/^[\w-]+, [^:]+: /, ""), 70) : s.goal;
+    return m([s.start, s.hello, s.work, seen(s.answer) && s.answer, ...c.doneIds(s), seen(s.end) && s.end], "the session's line on the job card",
+      `${stDot(x)}<span><b>${esc(s.n)}</b> <span class="xs muted">${esc(s.pid)}${s.resumed ? " · resumed" : ""}${s.work && seen(s.work) ? " · " + m(s.work, "folded: a step count on the card", "79 steps", "span") : ""}</span> · ${stWord(x)}: ${esc(what)}</span>`, "div", "sl");
+  };
+  const qBlock = sc.q && seen(sc.q.ev) && !seen(sc.q.answer) ? m(sc.q.ev, "the question, on the job card; the card moves to needs you",
+    `<div class="k" style="color:var(--q)">design-a-b asks you · ${E(sc.q.ev).at}</div><b>${esc(sc.q.t)}</b><div class="opts">${sc.q.opts.map((o) => `<button class="b">${o}</button>`).join("")}</div>`, "div", "card need") : "";
+  const directs = sc.sess.filter((s) => s.direct && st(s) === "with you").map((s) => m(s.direct, "the card says 'with you' and opens the pane", `<div class="sm">you are working with ${esc(s.n)} in its pane <span class="chip">open pane</span></div>`)).join("");
+  const follows = j.follow.filter(seen).map((id) => m(id, "a follow-up line on the same card", `<div class="sm" style="margin-top:.2rem">+ you, ${E(id).at}: ${esc(cut(E(id).t, 80))}</div>`)).join("");
+  const results = sc.sess.filter((s) => c.doneIds(s).length && seen(s.end)).map((s) => m([s.done.at(-1), ...(s.commit ?? []).filter(seen), ...(s.blog ?? []).filter(seen)], "the result and its links on the card",
+    `<div class="sm" style="margin-top:.25rem">✓ ${esc(s.res)}</div><div class="chips">${s.links.map(chip).join("")}</div>`)).join("");
+  const card = c.started.length ? `<div class="card ${c.jobSt === "q" ? "need" : ""}">
+    ${m([j.words, ...j.more.filter(seen)], "the card's title: your words", `<div class="k">${sc.proj} · ${E(j.words).at}${c.jobSt === "done" ? " → " + E(sc.sess.at(-1).end).at : ""}</div><h5>${esc(j.title)}</h5>`)}
+    ${sc.sess.map(sessLine).join("")}${follows}${directs}${qBlock}${results}</div>` : "";
+  const otherCards = Object.entries(sc.others).filter(([id, o]) => o.by && seen(id)).map(([id, o]) => m(id, "its own job card", `<div class="k">${o.room} · ${E(id).at}</div><h5>${esc(o.title)}</h5><div class="sl">${stDot("busy")}<b>${o.by}</b></div>`, "div", "card dim"));
+  const lastReply = [...sc.replies, ...Object.values(sc.others).map((o) => o.reply).filter(Boolean)].filter(seen).sort((a, b) => sc.ix[a] - sc.ix[b]).at(-1);
+  const lastYou = sc.ev.filter((e) => e.kind === "you" && seen(e.id)).at(-1);
+  const under = lastReply && sc.ix[lastReply] > sc.ix[lastYou?.id ?? sc.ev[0].id] ? m(lastReply, "the line under the box, until the next one", `<b>nadya</b>: ${esc(cut(E(lastReply).t, 150))}`, "div", "sm")
+    : lastYou ? m(lastYou.id, sc.others[lastYou.id] && !sc.others[lastYou.id].by ? "a short answer under the box, no card" : "the box, as sent", `<span class="muted">you, ${lastYou.at}:</span> ${esc(cut(lastYou.t, 110))}`, "div", "sm") : "";
+  const col = (k) => k === c.jobSt || (k === "busy" && c.jobSt === "asked") ? card : "";
+  return `<div class="top"><b>cc</b><span class="r">${c.at}</span></div>
+    <div style="padding:.5rem .6rem"><div class="in"><span>a new job for nadya…</span><button class="b pri">ask</button></div><div style="margin:.35rem .2rem 0">${under}</div></div>
+    <div class="cols"><div><div class="ch">needs you</div>${col("q")}</div><div><div class="ch">running</div>${col("busy")}${otherCards.join("")}</div><div><div class="ch">done today</div>${col("done")}</div></div>`;
+}
+
+// ---------- 2. One conversation ----------
+function talk(sc, c) {
+  const {seen, E, st} = c;
+  const out = [];
+  for (const e of sc.ev) {
+    if (!seen(e.id)) break;
+    if (e.kind === "you") out.push(m(e.id, "your bubble in the thread", `<div class="who me">you · ${e.at}</div><div class="bub me">${esc(cut(e.t, 160))}</div>`));
+    if (e.kind === "reply") out.push(m(e.id, "nadya's bubble in the thread", `<div class="who">nadya · ${e.at}</div><div class="bub">${esc(cut(e.t, 170))}</div>`));
+    if (e.kind === "spawn") {
+      const s = sc.sess.find((x) => x.start === e.id), x = st(s), d = c.doneIds(s);
+      out.push(m([e.id, s.hello, s.work, ...d, ...(s.commit ?? []).filter(seen), seen(s.end) && s.end], "a session card in the thread; it changes in place",
+        `<div class="card" style="max-width:84%;margin-top:.4rem"><div class="k">${s.resumed ? "resumed" : "started"} · ${esc(s.n)} · ${e.at}</div>
+        <div class="sl">${stDot(x)}<span>${stWord(x)}${x === "gone" ? " " + E(s.end).at : ""} · ${esc(s.goal)}</span></div>
+        ${d.length ? `<div class="sm">✓ ${esc(s.res)}</div><div class="chips">${s.links.filter((l) => !l.startsWith("post")).map(chip).join("")}</div>` : ""}
+        ${x === "with you" ? `<div class="sm">you are in its pane <span class="chip">open</span>; those turns are not in this thread</div>` : ""}</div>`));
+    }
+    if (e.kind === "ask") out.push(m([e.id, seen(sc.q.answer) && sc.q.answer], "a question card at its time, also pinned under the thread while open", `<div class="who">design-a-b · ${e.at} · inserted by cc, not sent by nadya</div><div class="card need" style="max-width:84%"><b>${esc(sc.q.t)}</b>${seen(sc.q.answer) ? `<div class="sm" style="color:var(--ok)">answered</div>` : `<div class="opts">${sc.q.opts.map((o) => `<button class="b">${o}</button>`).join("")}</div>`}</div>`));
+    if (e.kind === "blog") out.push(m(e.id, "a post card in the thread", `<div class="who">post · ${e.at}</div><div class="card" style="max-width:84%;border-style:dashed"><div class="sm">${esc(cut(e.t.replace(/^<article[^>]*>\s*[\d:]+ · [^:]+: /, ""), 130))}</div></div>`));
+  }
+  const pin = sc.q && seen(sc.q.ev) && !seen(sc.q.answer) ? m(sc.q.ev, "a question card at its time, also pinned under the thread while open", `<div class="card need" style="margin:0"><div class="k">open question · design-a-b · ${E(sc.q.ev).at}</div><b>${esc(sc.q.t)}</b></div>`) : "";
+  return `<div class="top"><b>nadya</b><span class="r">${c.at}</span></div>
+    <div style="padding:.3rem .8rem">${out.join("")}</div>
+    <div style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:.4rem .7rem">${pin}<div class="in" style="margin-top:.3rem"><span>message nadya…</span><button class="b pri">send</button></div></div>`;
+}
+
+// ---------- 3. Command bar ----------
+function bar(sc, c) {
+  const {seen, E, st} = c;
+  const status = c.live.map((s) => m([s.start, s.work], "the status line, while it runs", `${stDot(st(s))} ${esc(s.n)}`, "span", "sm")).join(" ");
+  const waiting = sc.q && seen(sc.q.ev) && !seen(sc.q.answer) ? m(sc.q.ev, "a row under 'waiting on you'; opens into its options", `<div class="row" style="background:#fff4e6">${stDot("asking")}<span class="t"><b>${esc(sc.q.t)}</b></span><time>design-a-b</time></div>`) : "";
+  const recent = sc.sess.flatMap((s) => c.doneIds(s).map((d) => ({s, d}))).reverse().map(({s, d}) => m([d, ...(s.commit ?? []).filter(seen)], "a row under 'recent'", `<div class="row">${stDot("gone")}<span class="t">${esc(cut(E(d).t.replace(/^[\w-]+ (done|finished)[^:]*: ?/, ""), 95))}</span><time>${E(d).at}</time></div>`)).join("");
+  const lastReply = sc.replies.filter(seen).at(-1);
+  const answer = lastReply ? m(lastReply, "the answer under the box (only the last one)", `<div class="card"><div class="k">nadya · ${E(lastReply).at}</div>${esc(cut(E(lastReply).t, 160))}</div>`) : "";
+  const youIds = sc.ev.filter((e) => e.kind === "you" && seen(e.id) && !sc.others[e.id]).map((e) => e.id);
+  const hits = [
+    youIds.length && m(youIds, "found by search: 'your words'", `<div class="grp">your words</div>${youIds.map((id) => `<div class="row"><span class="t">${esc(cut(E(id).t, 80))}</span><time>${E(id).at}</time></div>`).join("")}`),
+    sc.sess.some((s) => s.blog?.some(seen)) && m(sc.sess.flatMap((s) => (s.blog ?? []).filter(seen)), "found by search: 'posts'", `<div class="grp">posts</div>${[...new Set(sc.sess.flatMap((s) => (s.blog ?? []).filter(seen)))].map((id) => `<div class="row"><span class="t">${esc(cut(E(id).t.replace(/^<article[^>]*>\s*/, ""), 80))}</span></div>`).join("")}`),
+    sc.sess.some((s) => st(s) === "gone") && m(sc.sess.filter((s) => st(s) === "gone").map((s) => s.end), "found by search: 'closed sessions'", `<div class="grp">closed sessions</div>${sc.sess.filter((s) => st(s) === "gone").map((s) => `<div class="row"><span class="t">${esc(s.n)} <span class="xs muted">${esc(s.pid)} · ${esc(s.goal)}</span></span><time>${E(s.start).at}-${E(s.end).at}</time></div>`).join("")}`),
+  ].filter(Boolean).join("");
+  return `<div style="padding:1rem .8rem .3rem"><div class="in" style="padding:.5rem .7rem;font-size:1rem"><span>ask nadya, find anything</span><span class="chip">/</span></div>
+      <div class="sm muted" style="display:flex;gap:.7rem;justify-content:center;margin:.45rem 0">${status || "no session running"}<span>${c.at}</span></div></div>
+    <div style="padding:0 .8rem">${answer}${waiting ? `<div class="grp">waiting on you</div>${waiting}` : ""}${recent ? `<div class="grp">recent</div>${recent}` : ""}
+    <div style="margin-top:1rem;border-top:1px dashed var(--line);padding-top:.3rem"><div class="xs muted">and when you type "${sc.find}" in the box:</div>${hits || `<div class="xs muted">nothing yet</div>`}</div></div>`;
+}
+
+// ---------- 4. Rooms ----------
+function rooms(sc, c) {
+  const {seen, E, st} = c;
+  const mine = sc.ev.filter((e) => seen(e.id) && (e.kind === "you" || e.kind === "reply") && !sc.others[e.id]?.room && !Object.values(sc.others).some((o) => o.reply === e.id));
+  const otherRooms = Object.entries(sc.others).filter(([id]) => seen(id));
+  const need = sc.q && seen(sc.q.ev) && !seen(sc.q.answer) ? 1 : 0;
+  const tiles = [
+    `<div class="tile open"><b>${sc.proj}</b> ${need ? `<span style="color:var(--q)">● ${need}</span>` : ""} ${c.live.length ? `<span style="color:var(--busy)">◐ ${c.live.length}</span>` : ""}<div class="xs muted">open below</div></div>`,
+    ...otherRooms.filter(([, o]) => o.room !== sc.proj).map(([id, o]) => m([id, o.reply], `the ${o.room} room, not this one (your words name no room, so nadya tags it from the content)`, `<b>${o.room}</b><div class="xs muted">${E(id).at} you asked</div>`, "div", "tile")),
+    `<div class="tile muted"><b>nadya</b><div class="xs">and 5 more</div></div>`,
+  ].join("");
+  const chat = mine.map((e) => m(e.id, e.kind === "you" ? `your message, in the ${sc.proj} room's chat (it starts "${sc.proj}:" or nadya tags it)` : `nadya's reply, in the ${sc.proj} room's chat`,
+    `<div class="who ${e.kind === "you" ? "me" : ""}">${e.kind === "you" ? "you" : "nadya"} · ${e.at}</div><div class="bub ${e.kind === "you" ? "me" : ""}">${esc(cut(e.t, 130))}</div>`)).join("");
+  const sameRoom = otherRooms.filter(([, o]) => o.room === sc.proj).map(([id, o]) => m(id, `in this room too: a ${o.by} row under sessions (same dir)`, `<div class="sl">${stDot("busy")}<b>${o.by}</b> <span class="muted">${esc(o.title)}</span></div>`)).join("");
+  const sess = sc.sess.filter((s) => st(s)).map((s) => m([s.start, s.work, s.direct, seen(s.end) && s.end, s.ask && seen(s.ask) && s.ask, seen(s.answer) && s.answer], "a row under sessions: every session whose dir is this project",
+    `<div class="sl">${stDot(st(s))}<span><b>${esc(s.n)}</b> <span class="xs muted">${esc(s.pid)}</span> ${stWord(st(s))}${st(s) === "asking" ? `: <b>${esc(sc.q.t)}</b>` : ""}${st(s) === "with you" ? ' <span class="chip">open pane</span>' : ""}</span></div>`)).join("");
+  const res = sc.sess.filter((s) => c.doneIds(s).length).map((s) => m([...c.doneIds(s), ...(s.commit ?? []).filter(seen)], "a row under results", `<div class="sm" style="padding:.15rem 0">✓ ${esc(s.res)} <span class="xs muted">${esc(s.n)} ${E(c.doneIds(s).at(-1)).at}</span></div>`)).join("");
+  const posts = [...new Set(sc.sess.flatMap((s) => (s.blog ?? []).filter(seen)))].map((id) => m(id, "a row under posts (the article's data-project)", `<div class="sm" style="padding:.15rem 0">${E(id).at} ${esc(cut(E(id).t.replace(/^<article[^>]*>\s*[\d:]+ · [^:]+: /, ""), 80))}</div>`)).join("");
+  return `<div class="top"><b>cc</b><span class="sm muted">rooms</span><span class="r">${c.at}</span></div><div class="tiles">${tiles}</div>
+    <div style="display:grid;grid-template-columns:1.2fr 1fr"><div style="padding:.4rem .6rem;border-right:1px solid var(--line)"><div class="grp">${sc.proj} · chat with nadya</div>${chat}</div>
+    <div style="padding:.4rem .6rem"><div class="grp">sessions</div>${sess || '<div class="xs muted">none</div>'}${sameRoom}<div class="grp">results</div>${res || '<div class="xs muted">none yet</div>'}<div class="grp">posts</div>${posts || '<div class="xs muted">none yet</div>'}</div></div>`;
+}
+
+// ---------- 5. The day ----------
+function day(sc, c) {
+  const {seen, E, st} = c;
+  const t0 = hours(sc.ev[0]) - 0.03, t1 = hours(sc.ev.at(-1)) + 0.03, hm = (h) => `${Math.floor(h)}:${String(Math.round((h % 1) * 60)).padStart(2, "0")}`, x = (h) => `${((h - t0) / (t1 - t0)) * 100}%`;
+  const nowH = hours(sc.ev[c.now]);
+  const lanes = sc.L.filter((l) => l.life).map((l) => {
+    const ss = sc.sess.filter((s) => s.lane === l.k && st(s));
+    return `<div class="lane"><span>${esc(l.n)}</span><div class="bar">${ss.map((s) => { const a = hours(E(s.start)), b = seen(s.end) ? hours(E(s.end)) : nowH;
+      return m([s.start, s.work, s.direct, s.ask && seen(s.ask) && s.ask, seen(s.end) && s.end], "a lane bar from start to close; its colour is the state", "", "i", (st(s) ?? "").replace(" ", "")).replace("<i ", `<i style="left:${x(a)};width:max(3px,calc(${x(b)} - ${x(a)}))" `); }).join("")}</div></div>`;
+  }).join("");
+  const rows = [];
+  for (const e of sc.ev) {
+    if (!seen(e.id)) break;
+    if (e.kind === "you") rows.push([e, m([e.id, sc.others[e.id]?.reply], "a row at its time: 'you: ...'; click opens nadya's replies", `<b>you</b>: ${esc(cut(e.t, 90))}`)]);
+    if (e.kind === "spawn") { const s = sc.sess.find((y) => y.start === e.id); rows.push([e, m(e.id, "a row 'started' at its time", `${esc(s.n)} ${s.resumed ? "resumed" : "started"}: ${esc(s.goal)}`)]); }
+    if (e.kind === "done") { const s = sc.sess.find((y) => y.done.includes(e.id)); const last = s.done.at(-1) === e.id;
+      const extra = last ? [...(s.commit ?? []), ...(s.blog ?? []), s.end].filter(seen) : [];
+      rows.push([e, m([e.id, ...extra], "one row 'done' with links; commit, post and close fold into it", `<b>${esc(s.n)} done</b>: ${esc(cut(e.t.replace(/^[\w-]+ (done|finished)[^:]*: ?/, ""), 80))}${extra.length ? `<div class="chips">${s.links.filter((l) => !l.startsWith("post") || s.blog?.some(seen)).map(chip).join("")}</div>` : ""}`)]); }
+    if (e.kind === "answer") rows.push([e, m(e.id, "a row: you answered", `you answered design-a-b`)]);
+    if (e.kind === "log") rows.push([e, m(e.id, "a folded row: nothing new", `<span class="muted">2 checks, nothing new (folded)</span>`)]);
+    if (e.kind === "ask") rows.push([e, m(e.id, "pinned at the now line while open; a row at its time after", `<span style="color:var(--q)">design-a-b asked you</span>`)]);
+  }
+  const pin = sc.q && seen(sc.q.ev) && !seen(sc.q.answer) ? m(sc.q.ev, "pinned at the now line while open; a row at its time after", `<div class="card need" style="margin:.3rem 0 0"><b>${esc(sc.q.t)}</b><div class="opts">${sc.q.opts.map((o) => `<button class="b">${o}</button>`).join("")}</div></div>`) : "";
+  return `<div class="top"><b>cc</b><span class="sm muted">Sat Oct 17th</span><span class="r">${c.at}</span></div>
+    <div class="gantt"><div class="lane"><span></span><div class="xs muted" style="display:flex;justify-content:space-between"><span>${hm(t0)}</span><span>${hm(t1)}</span></div></div>${lanes}</div>
+    <div class="tl" style="padding:.5rem .6rem"><div class="nowl"><b class="sm" style="color:var(--q)">now ${c.at}</b>${pin}<div class="in" style="margin-top:.3rem"><span>to nadya…</span></div></div>
+    ${rows.reverse().map(([e, h]) => `<div class="r2"><time>${e.at}</time><div>${h}</div></div>`).join("")}</div>`;
+}
+
+const DIRS = [
+  {id: "jobs", n: "1. Jobs", r: jobs, lede: "A job is one request you make to nadya, with every session nadya starts for it. The board has three columns: needs you, running, done.",
+    hide: {reply: "only the newest shows, under the box", trig: "hidden: the card's state comes from cchost", msg: "hidden: between sessions", tools: "folded into the step count", commit: "a link on the card", close: "the card moves to done", quiet: "hidden", log: "hidden"},
+    rules: [
+      ["What makes a job", "A message from you that makes nadya start a session. nadya writes a job id into the brief (new); cc groups sessions by it. A message nadya answers itself (\"what was the lbp progress\") is a line under the box, not a job."],
+      ["One request, several sessions", "One card, one line per session: design-a-a and design-a-b are two lines on the 1-14 card."],
+      ["A follow-up", "\"cursor on clear search\" starts a second cc-a (90009). nadya puts the same job id in its brief, so it is a second line on the same card, not a new card."],
+      ["A question", "The card moves to needs you and shows the question with its options. cc reads it from cchost (waitsOnYou), not from nadya."],
+      ["A session ends", "Its line turns grey. When the last one closes, the card moves to done with the result, the commit and the post as links."],
+      ["You talk to a helper", "The card says \"with you in its pane\" and opens the pane. Those turns are not on the card."],
+      ["Hidden", "nadya's tool calls, trig notices, messages between sessions, the helper's tool calls (a count only)."],
+    ],
+    org: ["nadya writes a job id into each brief and its done/close log lines", "a helper's done message stays one line plus links; that line is the card's result", "web/api: api/jobs, built from cchost rows, nadya-log.md and the briefs in tmp/assign/"]},
+  {id: "talk", n: "2. One conversation", r: talk, lede: "The screen is nadya's own transcript, filtered: your messages and nadya's replies, plus cards that cc puts in for sessions, questions and posts.",
+    hide: {trig: "hidden: a notice to nadya, not to you", msg: "folded into the session card", tools: "folded into the session card", commit: "a link on the session card", close: "the session card turns grey", done: "the session card's result line", quiet: "hidden: a reply that is only \"·\"", log: "hidden"},
+    rules: [
+      ["What makes a line", "Every user line with origin \"human\" and every assistant text in nadya's transcript is a bubble. Tool calls and \"·\" replies are not."],
+      ["What makes a card", "A session nadya starts (a new cchost row with its goal), a helper's question, a post. cc adds them at their time; nadya does not write them."],
+      ["One request, several sessions", "Two session cards under nadya's reply that started them."],
+      ["A follow-up", "Your bubble, then a new session card for the second cc-a. Two cards with the same name, distinguished by time."],
+      ["A question", "A card at 09:42 in the thread and a copy pinned above the box until answered. nadya says nothing (its rule since Oct 15th)."],
+      ["A session ends", "Its card changes in place: the dot goes grey, the result and links appear. No new message."],
+      ["You talk to a helper", "The card says you are in its pane. The pane's turns stay in the helper's own transcript."],
+    ],
+    org: ["nadya's done replies get shorter: the session card already has the result", "web/index.html: cards from cchost api/changes and the blog, placed by time in nadya's chat"]},
+  {id: "bar", n: "3. Command bar", r: bar, lede: "Nothing streams. The screen shows what waits on you, the last results, the live sessions as one line, and everything else when you search.",
+    hide: {reply: "only the last one, under the box", trig: "hidden", msg: "hidden", tools: "hidden: the dot in the status line is busy", close: "the name leaves the status line; a 'closed sessions' hit", spawn: "a name in the status line", answer: "the row leaves waiting on you", quiet: "hidden", log: "hidden", direct: "the status line shows it busy/wait"},
+    rules: [
+      ["What makes a row", "A helper's done message is one row under recent. A question is one row under waiting on you. Nothing else is listed."],
+      ["Live sessions", "Each cchost row is a name and a dot in the status line, gone when it closes."],
+      ["One request, several sessions", "Two names in the status line, then two recent rows."],
+      ["A follow-up", "You type it in the box; it goes to nadya. Its result is another recent row."],
+      ["A question", "A row under waiting on you; a click opens its options under the box."],
+      ["Search", "Your words, posts, closed sessions (name, pid, goal, times), commits and file lines."],
+      ["You talk to a helper", "Not shown; its name stays in the status line."],
+    ],
+    org: ["web/api: api/find over nadya's transcript (human lines), the blog, closed sessions, git logs, plus api/grep", "done messages keep the result in the first line, since that line is the row"]},
+  {id: "rooms", n: "4. Rooms", r: rooms, lede: "A room is a project. A session joins the room of its dir; your message joins the room it names (\"cc:\", \"design-a:\"). Each room has its chat, sessions, results and posts.",
+    hide: {trig: "hidden", msg: "hidden: between sessions", tools: "the session's dot", commit: "a link on the result", close: "the session row goes grey", quiet: "hidden", log: "hidden", spawn: "a row under sessions"},
+    rules: [
+      ["What makes a room", "The project name burn.js already computes from a session's dir (~/ai/cc/web is cc, marx:~/web/design-a is design-a). Blog articles already carry it (data-project)."],
+      ["Your messages", "\"cc: ...\" goes to cc. A message with no prefix goes where nadya tags it: \"what was the lbp progress\" goes to arcade."],
+      ["One request, several sessions", "Same dir, same room: both design-a sessions are rows under sessions. A request in cc that starts cc-b also lands in cc."],
+      ["A question", "The asking session's row in its room, plus an orange count on the room's tile."],
+      ["A session ends", "Its row goes grey; its done message is a row under results."],
+      ["You talk to a helper", "Its row says with you and opens the pane; the room's chat stays with nadya."],
+    ],
+    org: ["nadya tags every reply with a room when your message has no prefix", "web/api: api/rooms from cchost rows (dir), the blog (data-project) and nadya's transcript"]},
+  {id: "day", n: "5. The day", r: day, lede: "The unit is time. Each session is a bar from start to close; under the now line, one row per thing that happened, newest first.",
+    hide: {reply: "hidden: opens from your row", trig: "hidden", msg: "hidden", tools: "the bar's colour", quiet: "hidden", commit: "a link on the done row", close: "the bar ends; folded into the done row", blog: "a link on the done row", direct: "the bar is purple while you work in its pane"},
+    rules: [
+      ["What makes a row", "Your message, a session start, a done, an answer. These are the lines nadya-log.md has today, in a fixed shape."],
+      ["What makes a bar", "One cchost session, from api/changes \"new\" to \"gone\". The colour is its state: blue busy, orange asks you, purple with you."],
+      ["One request, several sessions", "Two bars side by side; one row for your request."],
+      ["A follow-up", "A new bar on a new lane (cc-a 90009), a new row."],
+      ["A question", "Pinned on the now line until answered; then a row at 09:42."],
+      ["You talk to a helper", "Its bar is purple; the turns open from the bar."],
+    ],
+    org: ["nadya-log.md lines in one shape: HH:MM kind who: text [links]", "web/api: api/day from nadya-log.md, cchost api/changes, the blog"]},
+];
+
+const D = Object.fromEntries(DIRS.map((d) => [d.id, d]));
+const STATE = {story: "files", now: null, sel: null};
+const sc = () => STORIES[STATE.story];
+
+// what each event becomes on each direction's screen, over every moment of the story
+const FATE = {};
+function fates(storyId) {
+  if (FATE[storyId]) return FATE[storyId];
+  const s = STORIES[storyId], tmp = document.createElement("div"), out = {};
+  for (const d of DIRS) {
+    const f = out[d.id] = {};
+    s.ev.forEach((_, i) => {
+      tmp.innerHTML = d.r(s, ctx(s, i));
+      tmp.querySelectorAll("[data-src]").forEach((el) => el.dataset.src.split(" ").filter(Boolean).forEach((id) => (f[id] ??= new Set()).add(el.dataset.as)));
+    });
+  }
+  return FATE[storyId] = out;
+}
+function fateOf(d, e) {
+  const f = fates(STATE.story)[d.id][e.id];
+  if (f?.size) return {on: true, t: [...f].join("; ")};
+  return {on: false, t: d.hide[e.kind] ?? "hidden"};
+}
+
+function trace(d) {
+  const s = sc(), now = STATE.now, W = 44;
+  const alive = (l, i) => l.life?.some(([a, b]) => s.ix[a] <= i && i <= s.ix[b]) ?? (l.k === "you" || l.k === "nadya");
+  const hd = `<div class="hd"><span style="padding-left:.35rem">time</span><div class="lanes">${s.L.map((l) => `<span><b style="color:${l.c}">${esc(l.n)}</b>${esc(l.sub ?? "")}</span>`).join("")}</div><span style="padding-left:.4rem">event (real text)</span><span style="padding-left:.4rem">on this screen</span></div>`;
+  const rows = s.ev.map((e, i) => {
+    const fi = s.li[e.from], ti = e.to != null ? s.li[e.to] : null, L = s.L[fi];
+    const lives = s.L.map((l, k) => alive(l, i) ? `<i class="life" style="left:${k * W + W / 2}px;background:${l.c}33"></i>` : "").join("");
+    const ln = ti != null ? `<i class="ln ${ti > fi ? "r" : "l"}" style="left:${Math.min(fi, ti) * W + W / 2}px;width:${Math.abs(ti - fi) * W}px;color:${L.c}"></i>` : "";
+    const dot = `<i class="dot ${e.kind === "tools" || e.kind === "quiet" ? "sq" : ""}" style="left:${fi * W + W / 2}px;background:${L.c}"></i>`;
+    const f = fateOf(d, e);
+    const kindWord = {you: "", reply: "", spawn: "starts session", msg: "SendMessage", done: "SendMessage", tools: "tool calls", trig: "", commit: "", blog: "blog post", close: "closes", ask: "dialog", answer: "answers", direct: "types in its pane", quiet: "", log: "log"}[e.kind];
+    return `<div class="ev ${i > now ? "after" : ""} ${i === now ? "cur" : ""}" data-ev="${e.id}" data-i="${i}" title="${esc(e.t)}"><time>${e.at}</time>
+      <div class="lc">${lives}${ln}${dot}</div><div class="t">${kindWord ? `<i>${kindWord}</i> ` : ""}${esc(e.t)}</div><div class="f ${f.on ? "on" : "hid"}" title="${esc(f.t)}">${f.on ? "→ " : ""}${esc(f.t)}</div></div>`;
+  }).join("");
+  const sel = s.byId[STATE.sel] ?? s.ev[now];
+  const f = fateOf(d, sel);
+  const det = `<div class="det"><div class="k">${sel.at} · ${esc(sel.from)}${sel.to ? " → " + esc(sel.to) : ""} · kept in</div><div class="sm">${esc(WHERE[sel.kind])}</div>
+    <div class="raw">${esc(sel.t)}</div><div class="k">on this screen</div><div class="sm">${f.on ? "" : '<span class="muted">not drawn: </span>'}${esc(f.t)}</div></div>`;
+  return `<div class="tr" style="--n:${s.L.length}">${hd}${rows}</div>${det}`;
+}
+
+const M = document.getElementById("m");
+function frame() {
+  const s = sc();
+  M.innerHTML = `<section id="raw"><h2>What cc has to draw from</h2>
+    <p class="lede">Every direction below is made of the same raw material. None of it is a "job", a "room" or a "card" yet; each direction decides what to group and what to drop.</p>
+    <table class="raw"><thead><tr><th>thing</th><th>where it is</th><th>what cc can read today</th></tr></thead><tbody>
+    ${[["a session", "cchost <code>api/list?all=1</code> (nadya and marx)", "one row per running Claude: <code>{name: \"cc-b\", pid: \"nadya.121786\", state: \"busy\", cwd: \"/home/fserb/ai/cc/web\", goal: \"cc assistant mocks: sessions -> screen mapping\", context: 88199, question: \"\"}</code>. State is busy, wait, free, hold, or asking (a dialog). No row once closed."],
+      ["a session's changes", "cchost <code>api/changes</code>", "new, busy → wait, asking, gone: what trig turns into notices for nadya"],
+      ["a turn", "<code>~/.claude/projects/&lt;dir&gt;/&lt;session&gt;.jsonl</code>", "user lines (origin human = typed by you; peer = a SendMessage; ccx-typed.jsonl says who typed it), assistant text, tool calls and results"],
+      ["a message between sessions", "the sender's SendMessage tool call; the receiver's peer line", "from-name, body. A helper says \"started\" and \"&lt;name&gt; done: ... &lt;commit&gt;\" to nadya by its rules"],
+      ["a request from you", "nadya's transcript, a human line", "your words only. Which sessions it caused is not written anywhere; nadya's brief (<code>tmp/assign/&lt;name&gt;.md</code>) quotes your words"],
+      ["a post", "<code>~/web/blog/index.html</code>", "time, project (data-project), helper name, one sentence, an image, links"],
+      ["the log", "<code>~/nadya/nadya-log.md</code>", "one line per start, done, close, hourly check: \"13:04 cc-a done: files search via web/api lemon box (a14839a); blog; closed (1d3a81de…)\""],
+      ["commits, files", "git in each repo; <code>~/nadya</code> files", "hash, subject, time"],
+      ["trig, reminders, tracker", "trig rules, <code>todo/reminders.md</code>, tracker packages.json", "times and owners; not in the stories below"]]
+      .map((r) => `<tr><td><b>${r[0]}</b></td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join("")}</tbody></table>
+    <h3>How to read the sections below</h3>
+    <p class="sm">Left: one real story from today, one row per event, read from the transcripts and logs. Each column is a session (or you, or trig/git/blog); a dot is where the event happens, an arrow is a message to another column, the coloured line is the session's life. The last column says what the event becomes on that direction's screen, or why it is not drawn. Right: the screen at the moment you pick. <b>Click a row</b> to move the screen to that moment; <b>hover</b> a row or a part of the screen to light up the other side.</p>
+    <div class="leg"><span><span class="sd busy"></span>working</span><span><span class="sd wait"></span>done, not closed</span><span><span class="sd asking"></span>asks you</span><span><span class="sd withyou"></span>with you in its pane</span><span><span class="sd gone"></span>closed</span><span style="background:var(--lit);padding:0 .3rem">lit = same event on both sides</span></div>
+    </section>` +
+    DIRS.map((d) => `<section id="${d.id}" data-d="${d.id}"><h2>${d.n}</h2><p class="lede">${d.lede}</p>
+      <div class="map"><div class="pane"><div class="ph">sessions and events · ${esc(s.n)}<span class="r sm">${esc(s.blurb)}</span></div><div data-trace></div></div>
+        <div class="pane"><div class="ph">the screen<span class="r sm" data-at></span></div><div class="scr" data-scr></div></div></div>
+      <div class="rules">${d.rules.map(([h, t]) => `<p><b>${h}</b>${t}</p>`).join("")}</div>
+      <details class="org"><summary>what changes around it</summary><ul>${d.org.map((x) => `<li>${x}</li>`).join("")}</ul></details></section>`).join("") +
+    `<section id="cmp"><h2>Compare: the same three facts in each direction</h2>
+    <table class="raw"><thead><tr><th></th><th>12:59 nadya starts cc-a</th><th>13:03 cc-a: "cc-a done: files-tab search ... a14839a"</th><th>09:42 design-a-b asks you</th><th>grouped by</th></tr></thead><tbody>
+    ${[["1 jobs", "a line on the job card under your words", "the card's result; card moves to done at close", "the card moves to needs you", "your request (a job id in the brief)"],
+      ["2 conversation", "a session card in nadya's thread", "the card's result line, in place", "a card at 09:42, pinned above the box", "nothing: time order"],
+      ["3 command bar", "a name in the status line", "a row under recent", "a row under waiting on you", "nothing; search finds things"],
+      ["4 rooms", "a row under the cc room's sessions", "a row under the room's results", "the session's row + a count on the tile", "project, from the dir"],
+      ["5 the day", "a bar starts; a row 'started'", "a row 'done' with links; the bar ends", "pinned on the now line, the bar turns orange", "time"]]
+      .map((r) => `<tr>${r.map((c, i) => `<td>${i ? c : `<b>${c}</b>`}</td>`).join("")}</tr>`).join("")}</tbody></table>
+    <p class="sm">Only jobs needs data that does not exist today (which sessions a request caused). The others regroup what cchost, the transcripts, the blog and nadya-log.md already have. Earlier round (what changes, 6 flows): <a href="assistant.html">assistant.html</a>.</p></section>`;
+  draw();
+}
+function draw() {
+  const s = sc();
+  STATE.now ??= s.ev.length - 1;
+  document.getElementById("pick").innerHTML = Object.entries(STORIES).map(([k, v]) => `<button class="b" data-story="${k}" aria-pressed="${k === STATE.story}">${esc(v.n)}</button>`).join(" ");
+  document.getElementById("nowctl").innerHTML = `<button class="b" data-step="-1">◀</button> screen at <b>${s.ev[STATE.now].at}</b> (${STATE.now + 1}/${s.ev.length}) <button class="b" data-step="1">▶</button> <button class="b" data-step="end">end</button>`;
+  for (const d of DIRS) {
+    const sec = M.querySelector(`section[data-d="${d.id}"]`);
+    sec.querySelector("[data-trace]").innerHTML = trace(d);
+    const scr = sec.querySelector("[data-scr]"), top = scr.scrollTop;
+    scr.innerHTML = d.r(s, ctx(s, STATE.now));
+    scr.querySelectorAll("[data-src]").forEach((el) => el.dataset.src.split(" ").includes(s.ev[STATE.now].id) && el.classList.add("fresh"));
+    scr.scrollTop = top;
+    sec.querySelector("[data-at]").textContent = `at ${s.ev[STATE.now].at}, after "${cut(s.ev[STATE.now].t, 40)}"`;
+  }
+}
+function light(sec, ids) {
+  sec.querySelectorAll(".lit").forEach((el) => el.classList.remove("lit"));
+  if (!ids) return;
+  sec.querySelectorAll("[data-ev]").forEach((el) => ids.includes(el.dataset.ev) && el.classList.add("lit"));
+  sec.querySelectorAll("[data-src]").forEach((el) => el.dataset.src.split(" ").some((x) => ids.includes(x)) && el.classList.add("lit"));
+}
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-story],[data-step],[data-ev],[data-src]");
+  if (!t) return;
+  const s = sc();
+  if (t.dataset.story) { Object.assign(STATE, {story: t.dataset.story, now: null, sel: null}); frame(); return; }
+  if (t.dataset.step) STATE.now = t.dataset.step === "end" ? s.ev.length - 1 : Math.max(0, Math.min(s.ev.length - 1, STATE.now + +t.dataset.step)), STATE.sel = null;
+  else if (t.dataset.ev) Object.assign(STATE, {now: +t.dataset.i, sel: t.dataset.ev});
+  else if (t.dataset.src) STATE.sel = t.dataset.src.split(" ").filter(Boolean).at(-1);
+  draw();
+});
+document.addEventListener("mouseover", (e) => {
+  const sec = e.target.closest("section[data-d]");
+  if (!sec) return;
+  const t = e.target.closest("[data-ev],[data-src]");
+  light(sec, t ? (t.dataset.ev ? [t.dataset.ev] : t.dataset.src.split(" ").filter(Boolean)) : null);
+});
+frame();
+</script>
+</body>
+</html>
