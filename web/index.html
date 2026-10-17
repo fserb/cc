@@ -14,8 +14,10 @@
     --accent: #0b7bd3; --on-accent: #fff; --red: #d63939; --green: #2f9e44; --yel: #f59f00; --purple: #7950f2; --gray: #ced4da;
     --cur: #e7f1fb; --hot: #fff4e6; --hot-red: #fdecec; --need: #f4f8fd; --need-red: #fdf3f3;
     --pre-bg: #1e1f22; --pre-fg: #ddd; --bubble: #f3f4f6;
-    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace;
+    --font: ccpic, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ccpic, ui-monospace, Menlo, Consolas, monospace;
   }
+  /* a pasted image is 🖼 (U+1F5BC) in the text; this one-glyph font draws it in the text colour on every platform (web/mocks/paste-mark.html, F) */
+  @font-face { font-family: ccpic; src: url(data:font/ttf;base64,AAEAAAAKAIAAAwAgT1MvMkTfRvcAAAEoAAAAYGNtYXAAHuwrAAABkAAAAFBnbHlmJTJSywAAAegAAABoaGVhZDCN+ZQAAACsAAAANmhoZWEG9gNLAAAA5AAAACRobXR4BXgAPAAAAYgAAAAIbG9jYQA0AAAAAAHgAAAABm1heHAABwAfAAABCAAAACBuYW1lOgtG1AAAAlAAAABacG9zdGppA3AAAAKsAAAAKgABAAAAAQAADeEAlV8PPPUAAwPoAAAAAOb5WyQAAAAA5vlbJAA8/8QDSAKoAAAAAwACAAAAAAAAAAEAAANw/4gAAAOEADwAPANIAAEAAAAAAAAAAAAAAAAAAAACAAEAAAACAB0ABAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAwK8AZAABQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAPz8/PwAA/////wNw/4gAAANwAHgAAAAAAAAAAAAAAAAAAAAgAAAB9AAAA4QAPAAAAAMAAAADAAAAHAADAAEAAAAcAAMACgAAADQABAAYAAAAAgACAAAAAP//AAD//wABAAAADAAAAAAAHAAAAAAAAAABAAH1vAAB9bwAAAABAAAAAAA0AAAABAA8/8QDSAKoAAMABwAMABwAABcRIRElIREhExMXNxcDDwMvAz8DHwI8Awz9OgKA/YAoyGRaqjoFDRQYGBQNBQUNFBgYFA08AuT9HEYCWP3QARiCZPoBrhgUDQUFDRQYGBQNBQUNFAAAAAQANgABAAAAAAABAAUAAAABAAAAAAACAAcABQADAAEECQABAAoADAADAAEECQACAA4AFmNjcGljUmVndWxhcgBjAGMAcABpAGMAUgBlAGcAdQBsAGEAcgAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAQIDcGljAAA=) format("truetype"); unicode-range: U+1F5BC; }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--font); display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100vh; height: 100dvh; overflow: hidden; }
