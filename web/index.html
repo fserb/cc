@@ -181,6 +181,8 @@
   #new button { justify-self: start; font: inherit; border: 0; background: var(--accent); color: var(--on-accent); border-radius: 6px; padding: 0.5rem 1.4rem; cursor: pointer; }
   #new button:disabled { opacity: 0.5; cursor: default; }
   #view iframe { display: block; width: 100%; height: 100%; border: 0; }
+  #tty { grid-area: 1 / 1; width: 100%; height: 100%; border: 0; background: #000; }
+  #tty[hidden] { display: none; }
   #view:has(iframe) { overflow: hidden; }
   .doc.page { max-width: none; height: 100%; display: flex; flex-direction: column; padding: 0; } .doc.page .crumbs { margin: 0; padding: 0.5rem 1rem; border-bottom: 1px solid var(--line); } .doc.page iframe { flex: 1; height: auto; background: #fff; }  /* an html file: the page itself, under its crumbs */
   @media (max-width: 760px) {
@@ -201,7 +203,7 @@
 <header><button id="back" aria-label="back">‹</button><b id="title">nadya</b><span class="sum" id="sum"></span></header>
 <section id="home">
   <nav id="left"></nav>
-  <section id="center"><div id="view"></div><button id="newer" hidden>↓ new</button><form id="say"><div id="att" hidden></div><button type="button" id="focus" title="focus in kitty" aria-label="focus in kitty"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button><button type="button" id="mode" aria-pressed="false" title="terminal view" aria-label="terminal view">&gt;_</button><textarea name="q" rows="1" autocomplete="off"></textarea><button>send</button></form></section>
+  <section id="center"><div id="view"></div><iframe id="tty" title="terminal" hidden></iframe><button id="newer" hidden>↓ new</button><form id="say"><div id="att" hidden></div><button type="button" id="focus" title="focus in kitty" aria-label="focus in kitty"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button><button type="button" id="mode" aria-pressed="false" title="terminal view" aria-label="terminal view">&gt;_</button><textarea name="q" rows="1" autocomplete="off"></textarea><button>send</button></form></section>
 </section>
 <dialog id="pic"><img alt="image"></dialog>
 <script type="module">
@@ -750,6 +752,7 @@ function drawView(soft) {
   $("#mode").hidden = !chatty;
   $("#focus").hidden = !chatty || (!isPid(cur) && !nadyaRow());
   $("#mode").setAttribute("aria-pressed", term);
+  ttyView(term && chatty && (isPid(cur) ? i?.r : nadyaRow()));
   if (!soft) { pausedAt = 0; $("#newer").hidden = true; }
   if (chatty && !soft) return toBottom();
   if (chatty && keep) return keepUp();
@@ -759,6 +762,15 @@ function drawView(soft) {
   autoTop = view.scrollTop;
   if (chatty && same && view.querySelector(".msgs")?.lastElementChild?.outerHTML !== tail) $("#newer").hidden = false;
   jumpTo(view);
+}
+// desktop: the terminal view is the session's own tmux pane, live (the term/ box: ttyd, attached
+// so the window keeps its size); its iframe sits over #view, outside the redraws, so it stays connected
+function ttyView(r) {
+  const tty = $("#tty"), [host, pane] = r?.pane?.split("/") ?? [];
+  const src = pane && matchMedia("(hover: hover) and (pointer: fine)").matches ? `term/?arg=${host}&arg=${encodeURIComponent(pane)}` : "";
+  if (tty.dataset.src !== src) { tty.dataset.src = src; tty.src = src || "about:blank"; }
+  tty.hidden = !src;
+  $("#view").style.visibility = src ? "hidden" : "";
 }
 // the terminal view keeps the pane's columns and rows: its font shrinks until the whole screen fits the view, never grows past 12.5px
 function fitTerm() {
