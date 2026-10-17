@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc flow mocks</title>
+<style>
+  :root {
+    --bg: #fff; --page: #f1f2f4; --text: #212529; --muted: #6c757d; --line: #e3e5e8; --hover: #f3f4f6; --cur: #e7f1fb;
+    --accent: #0b7bd3; --red: #d63939; --green: #2f9e44; --yel: #f59f00; --gray: #ced4da; --blue: #4c6ef5; --q: #e8590c;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); font: 15px/1.45 var(--font); color: var(--text); }
+  body > header { position: sticky; top: 0; z-index: 5; background: #fff; border-bottom: 1px solid var(--line); padding: 0.5rem 1rem; display: flex; gap: 0.4rem 1rem; flex-wrap: wrap; align-items: baseline; }
+  body > header b { font-size: 1rem; }
+  body > header a { color: var(--accent); text-decoration: none; font-size: 0.85rem; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 1rem 4rem; }
+  h2 { font-size: 1.15rem; margin: 2.2rem 0 0.2rem; padding-top: 0.6rem; border-top: 2px solid #c9ccd1; }
+  h3 { font-size: 0.98rem; margin: 1.4rem 0 0.4rem; }
+  h3 small { font-weight: 400; color: var(--muted); }
+  .v { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 1rem; align-items: start; }
+  .org { font-size: 0.8rem; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 0.55rem 0.75rem; }
+  .org h4 { margin: 0.35rem 0 0.1rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  .org h4:first-child { margin-top: 0; }
+  .org ul { margin: 0; padding-left: 1rem; }
+  .org li { margin: 0.12rem 0; }
+  .org code, .cap code { font: 0.75rem var(--mono); background: #f1f3f5; padding: 0 0.2rem; border-radius: 3px; }
+  .cap { font-size: 0.82rem; color: #444; margin: 0.35rem 0 0; }
+
+  /* the cc frame */
+  .cc { background: var(--bg); border: 1px solid #cfd3d8; border-radius: 10px; overflow: hidden; font-size: 13.5px; user-select: none; }
+  .cc .hd { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.8rem; border-bottom: 1px solid var(--line); }
+  .cc .hd b { font-size: 0.95rem; }
+  .cc .hd .sum { margin-left: auto; color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
+  .cc .bd { display: grid; grid-template-columns: 235px minmax(0, 1fr); height: 430px; }
+  .cc nav { border-right: 1px solid var(--line); overflow: auto; padding: 0.2rem 0 0.6rem; }
+  .cc main { overflow: auto; padding: 0.6rem 0.9rem; position: relative; }
+  .cc main.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr); gap: 0; padding: 0; }
+  .cc main.split > div { overflow: auto; padding: 0.6rem 0.9rem; }
+  .cc main.split > div + div { border-left: 1px solid var(--line); background: #fafbfc; }
+  .sec { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 0.7rem 0.8rem 0.15rem; display: flex; justify-content: space-between; }
+  .sec[data-a] { cursor: pointer; }
+  .it { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 0 0.55rem; padding: 0.28rem 0.8rem; cursor: pointer; align-items: baseline; }
+  .it:hover { background: var(--hover); }
+  .it[aria-current="true"] { background: var(--cur); }
+  .it .tx { min-width: 0; }
+  .it .tx > div { display: flex; gap: 0.3rem; align-items: baseline; }
+  .it .tx > div > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .it small { display: block; color: var(--muted); font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .it time, .it .at { color: var(--muted); font-size: 0.72rem; white-space: nowrap; }
+  .it.unread .tx > div > span:first-child { font-weight: 650; }
+  .d { width: 8px; height: 8px; border-radius: 50%; align-self: center; font: 700 10px/8px var(--font); color: #fff; text-align: center; }
+  .d.green { background: var(--green); } .d.busy { background: var(--accent); } .d.hold { background: var(--gray); } .d.blue { background: var(--blue); } .d.wait { background: var(--yel); }
+  .d.q { background: var(--q); width: 12px; height: 12px; line-height: 12px; margin-left: -2px; }
+  .d.gone { border: 1.5px solid var(--gray); }
+  .tag { font-size: 0.68rem; border-radius: 3px; padding: 0 0.3rem; background: #eef0f3; color: #495057; white-space: nowrap; font-weight: 500; }
+  .tag.q { background: #fff0e6; color: #b5420a; } .tag.new { background: #e6f4ea; color: #1e6b34; } .tag.dead { background: #fdecec; color: #a12222; text-decoration: line-through; }
+  .cnt { background: var(--q); color: #fff; border-radius: 9px; padding: 0 0.4rem; font-size: 0.7rem; font-weight: 650; }
+  .cnt.g { background: var(--green); } .cnt.n { background: #868e96; }
+
+  /* chat */
+  .m { max-width: 86%; margin: 0.35rem 0; padding: 0.35rem 0.6rem; border-radius: 10px; background: #f1f3f5; }
+  .m.me { margin-left: auto; background: #dceafb; }
+  .m small { display: block; color: var(--muted); font-size: 0.68rem; margin-top: 0.1rem; }
+  .m.hot { box-shadow: inset 3px 0 0 var(--q); background: #fff6ef; }
+  .m.lit { outline: 2px solid var(--accent); }
+  .m .who { font-size: 0.7rem; color: var(--muted); display: block; }
+  .fold { margin: 0.3rem 0; font-size: 0.75rem; color: var(--muted); cursor: pointer; padding: 0.15rem 0.5rem; border-left: 2px solid var(--gray); }
+  .fold:hover { color: var(--text); }
+  .fold.open { color: var(--text); }
+  .fold .ln { display: block; padding: 0.05rem 0; color: #555; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 0.4rem 0.6rem; margin: 0.4rem 0; background: #fff; cursor: pointer; }
+  .card:hover { border-color: #b8c2cc; }
+  .card .k { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  .card.post { border-left: 3px solid var(--green); }
+  .card.qc { border-left: 3px solid var(--q); }
+  .card.lit { outline: 2px solid var(--accent); }
+  .lk { color: var(--accent); text-decoration: none; cursor: pointer; }
+  .lk:hover { text-decoration: underline; }
+  .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.2rem 0 0.5rem; }
+  .chip { font-size: 0.75rem; border: 1px solid #cfd3d8; background: #fff; border-radius: 12px; padding: 0.05rem 0.55rem; cursor: pointer; white-space: nowrap; }
+  .chip[aria-pressed="true"] { background: var(--text); color: #fff; border-color: var(--text); }
+  .btn { font: inherit; font-size: 0.78rem; border: 1px solid #c4c9cf; background: #fff; border-radius: 6px; padding: 0.12rem 0.55rem; cursor: pointer; color: var(--text); }
+  .btn:hover { background: var(--hover); }
+  .btn.pri { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .row { display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center; margin-top: 0.3rem; }
+  .meta { color: var(--muted); font-size: 0.78rem; }
+  .h { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0.8rem 0 0.2rem; }
+  .h:first-child { margin-top: 0; }
+  .li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 0.6rem; padding: 0.3rem 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .li:hover { background: var(--hover); }
+  .li small { color: var(--muted); font-size: 0.74rem; }
+  .li .r { text-align: right; font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
+  .pv { border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+  .pv .pvh { display: flex; gap: 0.5rem; align-items: center; padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--line); font-size: 0.78rem; }
+  .pv .pvh span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+  .pv .pvb { padding: 0.8rem; color: var(--muted); font-size: 0.8rem; min-height: 9rem; background: repeating-linear-gradient(0deg, #fff 0 18px, #f6f7f8 18px 19px); }
+  .need { border: 1px solid #f3c9a8; background: #fff8f2; border-radius: 8px; padding: 0.5rem 0.7rem; margin: 0.5rem 0; }
+  .need .opts { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.4rem; }
+  .need .opts .btn { text-align: left; }
+  .q1 { padding: 0.35rem 0; border-bottom: 1px dashed var(--line); }
+  .q1.done { color: var(--muted); }
+  .q1 .ans { font-size: 0.78rem; color: var(--green); }
+  textarea, input[type=text], input[type=search] { font: inherit; font-size: 0.82rem; border: 1px solid #c4c9cf; border-radius: 6px; padding: 0.25rem 0.45rem; width: 100%; }
+  textarea { resize: vertical; min-height: 2.2rem; }
+  .say { position: sticky; bottom: -0.6rem; background: #fff; padding: 0.4rem 0 0.5rem; margin-top: 0.4rem; display: flex; gap: 0.4rem; }
+  .say input { flex: 1; }
+  .toast { position: sticky; bottom: 0; background: #212529; color: #fff; font-size: 0.78rem; padding: 0.3rem 0.6rem; border-radius: 6px; margin-top: 0.5rem; }
+  .strip { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.8rem; background: #fff6ef; border-bottom: 1px solid #f3d3b8; font-size: 0.8rem; }
+  .strip b { color: #b5420a; white-space: nowrap; }
+  .strip span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+  .strip .btn { padding: 0 0.4rem; }
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--line); margin: -0.6rem -0.9rem 0.5rem; padding: 0 0.6rem; }
+  .tabs button { font: inherit; font-size: 0.82rem; background: none; border: 0; padding: 0.4rem 0.7rem; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; }
+  .tabs button[aria-pressed="true"] { color: var(--text); border-bottom-color: var(--text); }
+  .twin { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+  .phone { border: 1px solid #cfd3d8; border-radius: 16px; background: #fff; padding: 0.5rem; font-size: 13px; }
+  .phone .t { font-size: 0.72rem; color: var(--muted); text-align: center; margin-bottom: 0.3rem; }
+  hr.s { border: 0; border-top: 1px solid var(--line); margin: 0.6rem 0; }
+  mark { background: #fff3bf; }
+
+  @media (max-width: 820px) {
+    .v { grid-template-columns: minmax(0, 1fr); }
+    body > header { position: static; }
+    .cc .bd { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); height: 520px; }
+    .cc nav { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 0.2rem; }
+    .cc nav .sec { display: none; }
+    .cc nav .it { display: flex; flex: none; gap: 0.3rem; padding: 0.25rem 0.5rem; border-radius: 6px; }
+    .cc nav .it small, .cc nav .it time { display: none; }
+    .cc main.split { grid-template-columns: 1fr; }
+    .cc main.split > div + div { border-left: 0; border-top: 1px solid var(--line); }
+    .twin { grid-template-columns: 1fr; }
+  }
+</style>
+
+<header><b>cc flow mocks · Oct 17th</b>
+  <a href="#links">1 links</a><a href="#important">2 important messages</a><a href="#feed">3 chat and blog</a><a href="#questions">4 questions</a><a href="#other">5 finding things</a>
+</header>
+
+<div class="wrap">
+
+<h2 id="links">1. Recently produced links</h2>
+
+<h3>1A. A links row <small>every link from today, by kind</small></h3>
+<div class="v"><div data-mock="links-tab"></div>
+<aside class="org">
+<h4>data</h4><ul>
+<li>new cchost route <code>api/links?since=</code>: URLs and commit hashes in assistant text of every transcript on both hosts, plus <code>&lt;a&gt;</code> in blog posts; kept in <code>~/.claude/ccx-links.jsonl</code></li>
+<li>a HEAD check marks dead ones (gemini.html went with <code>compare/</code> at 09:28)</li>
+<li>commits have no page today: open as <code>git show</code> text in the files tab</li></ul>
+<h4>nadya and helpers</h4><ul>
+<li>helpers end their done SendMessage with the links on their own lines, so the scan finds them</li></ul>
+<h4>files</h4><ul>
+<li><code>~/ai/roles/AGENTS.md</code>: "the done message lists every file, page and commit made"</li>
+<li><code>host/links.js</code>, <code>web/index.html</code> (a <code>links</code> row)</li></ul>
+</aside></div>
+
+<h3>1B. Links of this chat <small>a strip at the top of every chat, preview beside it</small></h3>
+<div class="v"><div data-mock="links-strip"></div>
+<aside class="org">
+<h4>data</h4><ul>
+<li>none new: cc already has the session's log (<code>api/s/&lt;pid&gt;/log</code>); the strip is the log's links</li>
+<li>a closed session's strip needs 5A's closed list</li></ul>
+<h4>nadya and helpers</h4><ul>
+<li>no change; works best if links are written as full URLs, not "the page"</li></ul>
+<h4>files</h4><ul>
+<li><code>web/index.html</code> only</li>
+<li><code>~/nadya/skills/blog-publish</code>: nothing</li></ul>
+</aside></div>
+
+<h3>1C. Search everything <small>one box over links, posts, sessions, files</small></h3>
+<div class="v"><div data-mock="search"></div>
+<aside class="org">
+<h4>data</h4><ul>
+<li>the 1A index, blog archive (<code>archive/*.html</code>), <code>ideas/</code>, <code>projects/</code>, <code>research/</code>, <code>dream/</code> titles, and the closed list from 5A</li>
+<li>new <code>api/search?q=</code> on nadya's cchost, or cc filters a JSON it fetches once a minute</li></ul>
+<h4>nadya and helpers</h4><ul>
+<li>no change</li></ul>
+<h4>files</h4><ul>
+<li><code>host/search.js</code>, <code>web/index.html</code> (the box, key <code>/</code>)</li></ul>
+</aside></div>
+
+<h2 id="important">2. Important messages</h2>
+
+<h3>2A. Fold routine replies <small>cc collapses what answered trig</small></h3>
+<div class="v"><div data-mock="fold"></div>
+<aside class="org">
+<h4>data</h4><ul>
+<li>none new: a reply right after a peer message from <code>trig</code> carries the rule name (<code>[trig hourly]</code>, <code>[trig daily]</code>, <code>[trig zk]</code>)</li>
+<li>the folded line shows the last of each rule</li></ul>
+<h4>nadya</h4><ul>
+<li>an hourly or daily reply that changed nothing is one line: "08:23 · 70% · marx back · nothing to do"</li>
+<li>anything for the user goes in a separate reply, so it is not folded</li></ul>
+<h4>files</h4><ul>
+<li><code>~/nadya/cron/hourly.md</code>, <code>cron/daily.md</code>: the last step's reply format</li>
+<li><code>web/index.html</code>: fold by rule</li></ul>
+</aside></div>
+
+<h3>2B. Writers mark what is for you <small>a pinned strip in nadya's chat, ✓ to clear</small></h3>
+<div class="v"><div data-mock="pin"></div>
+<aside class="org">
+<h4>data</h4><ul>
+<li>a reply whose first line starts <code>For you:</code> is pinned; cc also pins any message you star</li>
+<li>cleared pins in cchost <code>~/.claude/ccx-pins.json</code> (route <code>api/pins</code>), so phone and Arc agree</li></ul>
+<h4>nadya and helpers</h4><ul>
+<li>nadya starts a reply with <code>For you:</code> only when it needs a decision or reports a result you asked for; never on hourly, daily, relays</li>
+<li>helpers do the same in their own chat</li></ul>
+<h4>files</h4><ul>
+<li><code>~/nadya/CLAUDE.md</code> "Rules": the marker rule next to "Routine notices get no reply"</li>
+<li><code>~/ai/roles/AGENTS.md</code>: the same for helpers</li></ul>
+</aside></div>
+
+<h3>2C. One line in the header <small>the oldest thing waiting on you, on every view</small></h3>
+<div class="v"><div data-mock="header"></div>
+<aside class="org">
+<h4>data</h4><ul>
+<li>session questions (<code>waitsOnYou</code>, already in cc), due <code>user:</code> reminders (already read), and 2B's pins</li>
+<li>"later" puts it back after 2 hours, kept in <code>api/pins</code></li></ul>
+<h4>nadya</h4><ul>
+<li>stops making <code>nadya: ask the user ...</code> reminders (Sun 10:15 backup question): a pin stays until you answer</li></ul>
+<h4>files</h4><ul>
+<li><code>~/nadya/todo/reminders.md</code> format line: no ask-again reminders</li>
+<li><code>web/index.html</code></li></ul>
+</aside></div>
+
+<h2 id="feed">3. nadya's chat and the blog</h2>
+
+<h3>3A. Kept apart, linked <small>a result is a card in chat that opens the post</small></h3>
+<div class="v"><div data-mock="apart"></div>
+<aside class="org">
+<h4>data</h4><ul>
+<li>the post's id: blog-publish gives each <code>&lt;article&gt;</code> an <code>id</code> and nadya's reply names it as <code>blog#&lt;id&gt;</code>; cc draws that reply as a card</li></ul>
+<h4>nadya</h4><ul>
+<li>a helper's result: post first, then one line in chat with the post's id, not a second summary</li>
+<li>direct answers (a cost estimate, "it works") stay as chat text</li></ul>
+<h4>files</h4><ul>
+<li><code>~/nadya/skills/blog-publish</code>: article ids; "reply with one line and the id"</li>
+<li><code>~/nadya/CLAUDE.md</code> "Blog": "the chat is not where results live" made literal</li></ul>
+</aside></div>
+
+<h3>3B. One feed, raw chat behind a tab <small>your messages, replies to you, posts, questions, by time</small></h3>
+<div class="v"><div data-mock="merged"></div>
+<aside class="org">
+<h4>data</h4><ul>
+<li>nadya's log (cc has it) minus trig and peer turns, plus blog posts (cc reads them), plus 4A's report questions</li>
+<li>a post replaces nadya's chat reply that has the same link</li></ul>
+<h4>nadya</h4><ul>
+<li>no change needed; 2A's one-line hourly makes the raw tab readable</li></ul>
+<h4>files</h4><ul>
+<li><code>web/index.html</code>: the nadya row opens the feed; blog row stays for older days</li></ul>
+</aside></div>
+
+<h3>3C. Side by side <small>chat left, today's posts right; a post points at the message that asked for it</small></h3>
+<div class="v"><div data-mock="twocol"></div>
+<aside class="org">
+<h4>data</h4><ul>
+<li>the asking message's time: nadya-log has "nadya-b 4156287 started: ... (user)" at 09:16; blog-publish writes it as <code>data-asked="2026-10-17T09:16"</code></li>
+<li>posts with no request (dream, hard queue, nightly) show no link</li></ul>
+<h4>nadya</h4><ul>
+<li>keeps the time of the user's request in <code>tmp/assign/&lt;name&gt;.md</code> and passes it to the post</li></ul>
+<h4>files</h4><ul>
+<li><code>~/nadya/skills/blog-publish</code>, <code>~/web/blog/inbox/README.md</code> (<code>asked:</code> field)</li></ul>
+</aside></div>
+
+<h2 id="questions">4. Questions from sessions and reports</h2>
+
+<h3>4A. Answer report questions in cc <small>one box per question; the answer goes to nadya and into the page</small></h3>
+<div class="v"><div data-mock="rq"></div>
+<aside class="org">
+<h4>data</h4><ul>
+<li>report pages keep questions as <code>&lt;section id="questions"&gt;&lt;li data-q="…"&gt;</code>, answered ones with <code>data-a</code>; cchost scans <code>research/</code> and <code>dream/</code> (route <code>api/rq</code>)</li>
+<li>today's pages put answers in a separate "Answers" block, so week-away and phone-apps read as open unless rewritten</li></ul>
+<h4>nadya and helpers</h4><ul>
+<li>an answer from cc arrives as a typed message <code>[q research/exercise-guide.html#2] ...</code>; nadya writes it into the page and into the idea file, commits</li>
+<li>report helpers use the section format</li></ul>
+<h4>files</h4><ul>
+<li><code>~/nadya/research/README.md</code>, <code>~/nadya/dream/PROMPT.md</code>: the section format</li>
+<li><code>~/nadya/CLAUDE.md</code> "Questions for the user stay in their session": add "or in their page"</li></ul>
+</aside></div>
+
+<h3>4B. Questions move to the idea or project <small>a closing helper writes them there; plan and projects count them</small></h3>
+<div class="v"><div data-mock="onidea"></div>
+<aside class="org">
+<h4>data</h4><ul>
+<li>an <code>## Open questions</code> list in <code>ideas/*.md</code> and <code>projects/*.md</code>; cc already reads both files (<code>loadDocs</code>)</li></ul>
+<h4>nadya and helpers</h4><ul>
+<li>a helper with unanswered questions copies them to its idea or project file before its done message</li>
+<li>nadya checks it at close (<code>git diff</code> of that file); an answer you give anywhere removes the line</li></ul>
+<h4>files</h4><ul>
+<li><code>~/nadya/CLAUDE.md</code> "Helpers in this dir" (close steps) and "Questions for the user stay in their session"</li>
+<li><code>~/ai/roles/AGENTS.md</code>; <code>web/index.html</code> counts</li></ul>
+</aside></div>
+
+<h3>4C. "Later" on a live question <small>the helper parks it and closes; it comes back when you pick</small></h3>
+<div class="v"><div><div data-mock="later"></div><p class="cap">design-a-b's report at 10:4x is real; the question and its options are written for the mock.</p></div>
+<aside class="org">
+<h4>data</h4><ul>
+<li>cc types the free-text option: <code>Later (user, from cc): write this question to ideas/… and finish</code>; the dialog answer goes the way cc's picks already go</li>
+<li>a <code>user:</code> reminder at the time picked</li></ul>
+<h4>nadya</h4><ul>
+<li>"when at marx": trig rule <code>hard-user</code> already sees you on marx; it fires the reminder then</li></ul>
+<h4>files</h4><ul>
+<li><code>web/index.html</code> (<code>dialogBox</code>: three more buttons)</li>
+<li><code>~/nadya/todo/reminders.md</code>; <code>~/ai/trig/rules</code> (<code>later-at-marx</code>)</li></ul>
+</aside></div>
+
+<h2 id="other">5. Finding things later</h2>
+
+<h3>5A. Closed today <small>a closed helper keeps a row with its result and a resume button</small></h3>
+<div class="v"><div data-mock="closed"></div>
+<aside class="org">
+<h4>data</h4><ul>
+<li>cchost keeps each gone session's name, goal, sessionId, last reply and links for 24h (<code>~/.claude/ccx-closed.jsonl</code>, route <code>api/closed</code>)</li>
+<li>today these are only in nadya-log ("closed (4b7f5951)")</li></ul>
+<h4>nadya</h4><ul>
+<li>resume becomes <code>ccx resume &lt;name&gt;</code> (new) instead of <code>claude --resume</code> typed into a tmux window</li></ul>
+<h4>files</h4><ul>
+<li><code>host/claudes.js</code> (StateClock <code>gone</code>), <code>ccx/ccx</code> (<code>resume</code>)</li>
+<li><code>~/nadya/CLAUDE.md</code> "Helpers in this dir": the resume line</li></ul>
+</aside></div>
+
+<h3>5B. A project page <small>sessions, posts, links and questions of one project together</small></h3>
+<div class="v"><div data-mock="hub"></div>
+<aside class="org">
+<h4>data</h4><ul>
+<li>sessions by path (<code>projects.md</code> has each dir), posts by <code>data-project</code>, links from 1A by session name, questions from 4B</li></ul>
+<h4>nadya</h4><ul>
+<li>keeps project names the same in the blog, <code>projects.md</code> and burn.js (today "design-a" everywhere; "arcade" vs arcade-ps3 does not match)</li></ul>
+<h4>files</h4><ul>
+<li><code>web/index.html</code> (<code>docView</code> for projects)</li>
+<li><code>~/nadya/skills/blog-publish</code>: <code>data-project</code> = the projects/ file name</li></ul>
+</aside></div>
+
+<h3>5C. One read state for phone and Arc <small>mark on one, the other follows</small></h3>
+<div class="v"><div data-mock="seen"></div>
+<aside class="org">
+<h4>data</h4><ul>
+<li>today <code>localStorage.cc_blog_seen</code> and <code>cc_seen</code> per browser</li>
+<li>new <code>api/seen</code> on nadya's cchost, <code>~/.claude/ccx-seen.json</code>, sent on each change</li></ul>
+<h4>nadya</h4><ul>
+<li>no change</li></ul>
+<h4>files</h4><ul>
+<li><code>host/server.js</code>, <code>web/index.html</code> (<code>unseen</code>, <code>markSeen</code>)</li></ul>
+</aside></div>
+
+</div>
+
+<script type="module">
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+
+// ---------- today's data (Oct 17th, local times)
+const POSTS = [
+  {id: "p1028", t: "10:28", p: "arcade", who: "arcade-b", text: "LittleBigPlanet's sound on the PS3 emulator is done: you listened to the new recordings and approved them.", url: "https://marx.gum.ts.net/arcade/tmp/ps3/b9/aud/", link: "b9/aud"},
+  {id: "p0938", t: "09:38", p: "nadya", who: "nadya-a", text: "New hard work queue: LBP, iron, soccer and arcade run on marx when it is plugged in, idle 15 minutes and under pace, or when you say so.", url: "https://nadya.gum.ts.net/nadya/todo/hard-queue.md", link: "hard-queue.md"},
+  {id: "p0928", t: "09:28", p: "design-a", who: "design-a-a", text: "First Design Ah episode explainer page is final (episode 1-14: six ideas with diagrams), with a template and instructions for the other episodes.", url: "https://marx.gum.ts.net/design-a/reports/1-14.html", link: "reports/1-14", asked: "09:06"},
+  {id: "p0921", t: "09:21", p: "nadya", who: "nadya-b", text: "21 services worth self-hosting, from a blog post and 424 HN comments; top picks Vaultwarden, Immich, Audiobookshelf; 4 questions for you.", url: "https://nadya.gum.ts.net/nadya/research/self-host.html", link: "self-host.html", asked: "09:16"},
+  {id: "p0855", t: "08:55", p: "design-a", who: "design-a-a, design-a-b", text: "Same Design Ah episode explained twice: Claude from 513 still frames (6 ideas) and Gemini 3.1 Pro from the video for $0.36 (4 ideas).", url: "https://marx.gum.ts.net/design-a/reports/1-14.html", link: "reports/1-14", asked: "08:44"},
+  {id: "p0848", t: "08:48", p: "nadya", who: "nadya-a", text: "Information-flow research: 11 of 13 report questions never got answers and results repeat in 2-5 places; four cc redesigns proposed, 5 questions for you.", url: "https://nadya.gum.ts.net/nadya/research/info-flow.html", link: "info-flow.html", asked: "08:42"},
+  {id: "p0834", t: "08:34", p: "nadya", who: "nadya-a", text: "Phone pushes from nadya now retry every 5 minutes until the phone answers, so none are lost if it drops off the network in Nassau.", url: "https://nadya.gum.ts.net/nadya/tools/push.js", link: "tools/push.js", asked: "08:29"},
+  {id: "p0327b", t: "03:27", p: "dream", who: "dream", text: "Dream asked four ordinary people near you for ideas and found ideas for your job and your neighbours.", url: "https://nadya.gum.ts.net/nadya/dream/2026-10-17/tails.html", link: "tails.html"},
+  {id: "p0327", t: "03:27", p: "dream", who: "dream", text: "Next week: marx travels with you while its backup stays home, the quota resets during your Toronto layover, and failed phone pushes are not retried; questions before Monday.", url: "https://nadya.gum.ts.net/nadya/dream/2026-10-17/week-away.html", link: "week-away.html"},
+  {id: "p0053", t: "00:53", p: "arcade", who: "arcade-a", text: "LittleBigPlanet in the browser runs about 8% faster uncapped (38 to 41 frames per second); LBP work is paused for now."},
+  {id: "p0050", t: "00:50", p: "cc", who: "cc-a", text: "cc: when a session asks several questions, tapping a question's tab goes back to it, shows your pick and lets you change it."},
+  {id: "p0047", t: "00:47", p: "nadya", who: "nadya-a", text: "Short video APIs: only our Gemini key makes video (Veo from $0.05 a second; OpenAI shut Sora down); 6 test clips in the report.", url: "https://nadya.gum.ts.net/nadya/research/short-video-apis.html", link: "short video APIs"},
+  {id: "p0043", t: "00:43", p: "nadya", who: "nadya-b", text: "Exercise guide idea researched: free clips cover HIIT but barely stretching or tai chi; generated clips cost about $0.20 each; questions wait for you.", url: "https://nadya.gum.ts.net/nadya/research/exercise-guide.html", link: "exercise guide"},
+];
+
+// k: page | report | file | commit; on: where it was said (blog, chat, log)
+const LINKS = [
+  {t: "10:33", who: "arcade-lbp-a", k: "commit", title: "rpcs3: speed block 12, +3% fps", url: "arcade e9c6793a8", on: "chat"},
+  {t: "10:28", who: "arcade-b", k: "page", title: "LBP sound recordings, block 9", url: "https://marx.gum.ts.net/arcade/tmp/ps3/b9/aud/", on: "blog"},
+  {t: "09:43", who: "shopping-a", k: "file", title: "footrest equivalents on amazon.ca", url: "https://nadya.gum.ts.net/nadya/agents/shopping/2026-10-17-footrest.md", on: "chat"},
+  {t: "09:38", who: "nadya-a", k: "file", title: "hard work queue", url: "https://nadya.gum.ts.net/nadya/todo/hard-queue.md", on: "blog"},
+  {t: "09:38", who: "nadya-a", k: "commit", title: "hard queue built", url: "nadya 6cc9328", on: "chat"},
+  {t: "09:28", who: "design-a-a", k: "report", title: "Design Ah 1-14 explainer", url: "https://marx.gum.ts.net/design-a/reports/1-14.html", on: "blog"},
+  {t: "09:28", who: "design-a-a", k: "commit", title: "reports/1-14 + template + REPORT.md", url: "design-a ed9cf63", on: "chat"},
+  {t: "09:21", who: "nadya-b", k: "report", title: "21 services worth self-hosting", url: "https://nadya.gum.ts.net/nadya/research/self-host.html", on: "blog"},
+  {t: "08:59", who: "arcist-a", k: "commit", title: "new-tab --space server (reverted)", url: "arcist 1739680", on: "chat"},
+  {t: "08:55", who: "design-a-a", k: "page", title: "1-14 by Claude, 513 frames", url: "https://marx.gum.ts.net/design-a/compare/1-14/claude.html", on: "chat", dead: true},
+  {t: "08:55", who: "design-a-b", k: "page", title: "1-14 by Gemini 3.1 Pro", url: "https://marx.gum.ts.net/design-a/compare/1-14/gemini.html", on: "chat", dead: true},
+  {t: "08:48", who: "nadya-a", k: "report", title: "information flow", url: "https://nadya.gum.ts.net/nadya/research/info-flow.html", on: "blog"},
+  {t: "08:34", who: "nadya-a", k: "commit", title: "push retry queue", url: "nadya 18a1dcc", on: "chat"},
+  {t: "08:20", who: "nightly", k: "file", title: "day digest, Oct 16th", url: "https://nadya.gum.ts.net/nadya/days/2026-10-16.md", on: "log"},
+  {t: "08:08", who: "nadya", k: "file", title: "morning briefing", url: "https://nadya.gum.ts.net/nadya/briefings/2026-10-17.md", on: "log"},
+  {t: "03:27", who: "dream", k: "report", title: "ideas from ordinary people", url: "https://nadya.gum.ts.net/nadya/dream/2026-10-17/tails.html", on: "blog"},
+  {t: "03:27", who: "dream", k: "report", title: "the trip week from the system's side", url: "https://nadya.gum.ts.net/nadya/dream/2026-10-17/week-away.html", on: "blog"},
+  {t: "00:50", who: "cc-a", k: "commit", title: "cc: question tabs are buttons", url: "cc 1241eee", on: "blog"},
+  {t: "00:47", who: "nadya-a", k: "report", title: "short video APIs", url: "https://nadya.gum.ts.net/nadya/research/short-video-apis.html", on: "blog"},
+  {t: "00:45", who: "yt-player-a", k: "page", title: "yt-player Inbox column", url: "https://marx.gum.ts.net/yt-player/", on: "blog"},
+  {t: "00:43", who: "nadya-b", k: "report", title: "exercise guide", url: "https://nadya.gum.ts.net/nadya/research/exercise-guide.html", on: "blog"},
+  {t: "00:22", who: "nadya-h", k: "report", title: "phone apps", url: "https://nadya.gum.ts.net/nadya/research/phone-apps.html", on: "blog"},
+  {t: "00:18", who: "iron-a", k: "file", title: "iron reverse engineering notes", url: "https://marx.gum.ts.net/iron/re/README.md", on: "blog"},
+  {t: "00:04", who: "arcade-b", k: "page", title: "PS3 reference shots", url: "https://marx.gum.ts.net/arcade/tmp/ps3/ref-real/", on: "blog"},
+];
+
+// nadya's chat today. k: me | re (a reply to you) | rt (routine, answering trig: rule) | res (a helper's result, also on the blog: post)
+const CHAT = [
+  {t: "02:41", k: "rt", rule: "nightly", text: "The nightly run has started: dream runs for one hour. Weekly usage is 69%, under tonight's limit of 70.2%."},
+  {t: "02:51", k: "rt", rule: "blog-inbox", text: "dream is still running and may add or change notes, so I'll publish these when it reports done."},
+  {t: "03:23", k: "rt", rule: "hourly", text: "Hourly check at 03:23: usage 70%, under tonight's limit of 70.8%. dream used 1.3 of the 2.0 points the week went up."},
+  {t: "03:27", k: "res", post: "p0327", text: "dream finished at 03:27, 14 minutes early, and I closed it. Its work is on the blog as two posts: ideas from ordinary people; next week from the system's side."},
+  {t: "04:23", k: "rt", rule: "hourly", text: "Hourly check at 04:23, nothing changed: usage 70%. You: probably asleep. nightly: still waiting for your answers."},
+  {t: "05:23", k: "rt", rule: "hourly", text: "Hourly check at 05:23: usage 70%. marx offline since about 04:30. It sleeps most nights, so I sent no push."},
+  {t: "06:23", k: "rt", rule: "hourly", text: "Hourly check at 06:23: nothing changed. Usage is 70%, marx and you are both asleep, and nightly is still waiting for your answers."},
+  {t: "07:23", k: "rt", rule: "hourly", text: "Hourly check at 07:23: nothing changed. Usage is 70%, about 2.9 points under the limit for this hour. nightly is still waiting for your answers."},
+  {t: "08:08", k: "rt", rule: "daily", text: "I finished the morning check and sent no push, because nothing was urgent. Usage 70%, about 3 points under today's limit."},
+  {t: "08:20", k: "res", text: "nightly finished and is closed. It added 3 of its 6 proposals to your profile: going-out interests, Bypass Paywalls in Arc, cc inside the nadya phone app."},
+  {t: "08:23", k: "rt", rule: "hourly", text: "Hourly check at 08:23: you are awake at home. marx is back online, with no Claude sessions."},
+  {t: "08:29", k: "me", text: "answering you some questions from dream... time machine only works locally, by design. there's internet at the offsite, so you will still get marx sometimes"},
+  {t: "08:32", k: "re", text: "I saved all your answers to your profile, dream's page and the reminders. Time Machine backs up only at home, so marx has no backup during the trip."},
+  {t: "08:34", k: "res", post: "p0834", text: "Phone pushes now retry. If nadya's push to your phone fails, it is saved to a queue and resent every 5 minutes until the phone takes it."},
+  {t: "08:38", k: "me", text: "I really like the idea of dream asking random personas about things. Eventually it can also use the personas from voices."},
+  {t: "08:39", k: "re", text: "I'm glad that one worked. I added it to dream's instructions with your quote."},
+  {t: "08:40", k: "me", text: "maybe it SHOULD expire after a day."},
+  {t: "08:40", k: "re", text: "Done: a push that has waited in the queue for more than a day is now dropped, and the log records it as expired."},
+  {t: "08:42", k: "me", text: "one thing that dream came up with that I think is hitting a real problem: our flux of information management is not super great..."},
+  {t: "08:42", k: "re", text: "I started nadya-a on this research. The report will be at research/info-flow.html."},
+  {t: "08:44", k: "me", text: "estimate how much using the gemini api for html summary of one design-a video would cost."},
+  {t: "08:44", k: "re", text: "About $0.30 to $1.50 per episode, depending on the model and the video resolution setting. The prices come from third-party pages, so treat them as approximate."},
+  {t: "08:48", k: "res", post: "p0848", text: "nadya-a finished the information-flow research: research/info-flow.html. 11 of 13 report pages have unanswered questions."},
+  {t: "08:51", k: "me", text: "remember for all reports/researchs: use direct language, no figurative language. Also, be compact."},
+  {t: "08:52", k: "re", text: "Saved, with your quote, in three places: research/README.md, dream/PROMPT.md and my memory."},
+  {t: "08:56", k: "res", post: "p0855", text: "Both pages are ready: claude.html and gemini.html. Claude 6 concepts with diagrams, Gemini 4, for $0.36."},
+  {t: "09:01", k: "re", text: "I checked it, and the 20-minute wait stays: 6 waits since Oct 14th, each held the cycle 10 to 30 minutes."},
+  {t: "09:16", k: "me", text: "spawn an agent to go through viceconsole.fyi/blog/2026/10/10/what-i-self-host/ and the HN thread and come up with a html with a list of services"},
+  {t: "09:16", k: "re", text: "I started nadya-b on it."},
+  {t: "09:21", k: "res", post: "p0921", text: "The list is ready: self-host.html. The post and 424 comments named about 70 services. 25 already run on lenin, and 21 of the rest are worth a look."},
+  {t: "09:23", k: "rt", rule: "hourly", text: "Hourly check at 09:23: usage 71% (1.8x 1h, 0.6x 3h). design-a-a with you; nadya-a closed by you."},
+  {t: "09:28", k: "me", text: "design-a: do you think you can find the missing episode?"},
+  {t: "09:29", k: "re", text: "Episode 3-16 is the gap: seasons 1 and 2 have all 20 episodes, and season 3 has 19. design-a-b is on it."},
+  {t: "09:32", k: "me", text: "let's create a hard work queue (for things like LBP, iron, soccer, etc). they need heavy use of marx..."},
+  {t: "09:32", k: "re", q: true, text: "Before I brief a helper, two choices change how it works: what counts as marx unused, and whether soccer needs your go?"},
+  {t: "09:33", k: "me", text: "(you can also guess, it's useful)"},
+  {t: "09:38", k: "res", post: "p0938", text: "The hard work queue is in place: hard-queue.md. Items in order: LBP, iron, soccer, arcade switch, arcade ps2, arcade wii."},
+  {t: "09:43", k: "re", url: "https://nadya.gum.ts.net/nadya/agents/shopping/2026-10-17-footrest.md", text: "amazon.ca doesn't sell the UK item, the HUANUO memory-foam footrest. The closest equivalents, all Prime with delivery Oct 18th: agents/shopping/2026-10-17-footrest.md"},
+  {t: "09:58", k: "rt", rule: "hard-go", text: "The hard queue started for the first time. marx was plugged in with no input for 17 minutes, usage 72%."},
+  {t: "10:23", k: "rt", rule: "hourly", text: "Hourly check at 10:23: one helper needed a push, nothing else to do. Usage 72%."},
+  {t: "10:28", k: "res", post: "p1028", text: "I posted a blog note at 10:28: you approved the new recordings, so the LittleBigPlanet sound work is done."},
+  {t: "10:28", k: "me", text: "btw, lbp work should be arcade-lbp"},
+  {t: "10:30", k: "re", text: "I renamed the two running LBP sessions to arcade-lbp-a and arcade-lbp-b."},
+  {t: "10:30", k: "me", text: "I meant for the future, but ok"},
+  {t: "10:30", k: "me", text: "also, I don't think we should \"pause\" hard work, update the hard-queue instructions: we start / stop it"},
+  {t: "10:32", k: "re", text: "I made both hard-queue changes and committed them. When you're on marx, the queue now stops the same way it does on battery."},
+  {t: "10:39", k: "me", text: "add bb to hard queue too."},
+  {t: "10:39", k: "re", text: "I added bb as the last item in todo/hard-queue.md, and committed it."},
+  {t: "10:46", k: "me", text: "I want more functional mocks of what we can change on cc web ui..."},
+  {t: "10:47", k: "re", text: "I started cc-a in ~/web/cc to make the mocks, and it has its brief."},
+];
+// trig notices that got "·" or nothing: they never draw in cc, counted only
+const SILENT = [["05:00", "zk", "the watch lost its ssh connection"], ["07:30", "cc-version", "could not reach its host"], ["07:38", "zk", "the watch lost its ssh connection"],
+  ["10:27", "hard-pause", "the user is on marx"], ["10:28", "session.arcade-b.done", "arcade-b finished a turn"], ["10:30", "session.arcade-lbp-a.done", "arcade-lbp-a finished a turn"]];
+
+// report questions (read from the pages today; answered ones as the pages show them)
+const RQ = [
+  {id: "eg", page: "research/exercise-guide.html", title: "exercise guide", who: "nadya-b", at: "00:43", idea: "ideas/exercise-guide.md", qs: [
+    "Which comes first: stretching, tai chi, HIIT, or general exercises?",
+    "Do you follow a routine today (a class, a YouTube teacher, the 24-form)?",
+    "Fixed routines you already know, or a library where you build your own?",
+    "What should the clips look like: a generated real-looking person, a plain 3D or stick figure, or real teacher clips you pick?",
+    "Where would you do it: phone on the floor, marx on a desk, a TV?",
+    "Voice cues (\"Next, wall sit\"), beeps only, or silent?",
+    "Should a session count as a habit (habit-tracking idea), or no logging at all?"].map((q) => ({q}))},
+  {id: "if", page: "research/info-flow.html", title: "information flow", who: "nadya-a", at: "08:48", qs: [
+    "Which is the bigger problem: questions you lose, news you get too often, or reports you can't find again?",
+    "Should report and dream questions stay on a list until you mark them done?",
+    "Should hourly checks stop posting to nadya's chat?",
+    "Do you read updates more on the phone or on marx?",
+    "Next: mock one direction in more detail (which one), or try the two rule changes for a week?"].map((q, i) => ({q, a: i === 4 ? "mock more (cc-a, 10:46 in nadya's chat)" : null}))},
+  {id: "wa", page: "dream/2026-10-17/week-away.html", title: "the trip week", who: "dream", at: "03:27", qs: [
+    {q: "Before Monday, copy marx's ~/prj to nadya once?", a: "no (08:29 in nadya's chat)"},
+    {q: "The new quota week: idle, nadya-side free cycles only, or marx agents from the hotel too?", a: "low-tier agents on marx too"},
+    {q: "Hold reports that ask you something for one \"while you were away\" page?", a: "no away page"},
+    {q: "Should a failed phone push retry every 5 minutes?", a: "yes; built 08:34"},
+    {q: "Only low-tier work, infra changes held until you are back?", a: "yes"}]},
+  {id: "pa", page: "research/phone-apps.html", title: "phone apps", who: "nadya-h", at: "00:22", qs: [
+    {q: "Final button: press Send/Post after you approve, or stop for your tap?", a: "both, two modes of /share"},
+    {q: "Locked phone: wait, notify, or unlock with the PIN?", a: "unlock with the stored pattern"},
+    {q: "Google Chat: personal or Tailscale's?", a: "personal, in Gmail"}]},
+];
+
+const ROWS = {
+  nadya: {id: "nadya", title: "nadya", d: "wait", t: "10:47"},
+  blog: {id: "blog", title: "blog", sub: POSTS[0].text, t: "4 new · 19m", d: "green", unread: true},
+  plan: {id: "plan", title: "plan", sub: "Sun 10:10 user: online check-in AC 407"},
+  projects: {id: "projects", title: "projects"},
+  files: {id: "files", title: "files"},
+  dab: {id: "design-a-b", title: "design-a-b", sub: "design-a: find missing episode 3-16", at: "marx:web/design-a", d: "hold", sec: "sessions"},
+  cca: {id: "cc-a", title: "cc-a", sub: "cc flow mocks", at: "web/cc", d: "busy", sec: "sessions"},
+};
+const std = (extra = {}) => [ROWS.nadya, ROWS.blog, ROWS.plan, ROWS.projects, ROWS.files, ROWS.dab, ROWS.cca].map((r) => ({...r, ...(extra[r.id] ?? {})}));
+
+function navHtml(rows, cur) {
+  let sec = null, h = "";
+  for (const r of rows) {
+    if ((r.sec ?? "") !== sec) { sec = r.sec ?? ""; if (sec) h += `<div class="sec"${r.secA ? ` data-a="${r.secA}"` : ""}><span>${esc(sec)}</span>${r.secR ?? ""}</div>`; }
+    if (r.hide) continue;
+    h += `<div class="it ${r.unread ? "unread" : ""}" data-a="${r.a ?? "go"}:${esc(r.id)}" aria-current="${r.id === cur}"><span class="d ${r.d ?? ""}">${r.d === "q" ? "?" : ""}</span><span class="tx"><div><span>${esc(r.title)}</span>${r.tag ?? ""}${r.at ? `<span class="at" style="margin-left:auto">${esc(r.at)}</span>` : ""}</div>${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</span>${r.at ? "<span></span>" : `<time>${esc(r.t ?? "")}${r.cnt ?? ""}</time>`}</div>`;
+  }
+  return h;
+}
+function frame({title = "nadya", nav, main, top = "", split = false}) {
+  return `<div class="cc"><div class="hd"><b>${esc(title)}</b><span class="sum">72% · 1.8x 1h · 1.2x 3h</span></div>${top}<div class="bd"><nav>${nav}</nav><main class="${split ? "split" : ""}">${main}</main></div></div>`;
+}
+const bub = (m, extra = "") => `<div class="m ${m.k === "me" ? "me" : ""} ${extra}" data-t="${m.t}">${esc(m.text)}<small>${m.t}</small></div>`;
+const hostOf = (u) => u.startsWith("http") ? new URL(u).host.split(".")[0] + new URL(u).pathname : u;
+const preview = (l, close) => `<div class="pv"><div class="pvh"><b>${esc(l.title)}</b><span>${esc(hostOf(l.url))}</span>${l.dead ? `<span class="tag dead">404</span>` : ""}<span style="margin-left:auto"></span><button class="btn" data-a="noop">new tab</button>${close ? `<button class="btn" data-a="${close}">✕</button>` : ""}</div><div class="pvb">${l.k === "commit" ? `git show ${esc(l.url.split(" ")[1])} (${esc(l.url.split(" ")[0])}) as text` : l.dead ? "the page is gone: compare/ was deleted at 09:28 when the final report was committed" : `the page, framed (cc's files tab already frames .html from nadya; marx pages open in a new tab)`}<br><br>from ${esc(l.who)} at ${esc(l.t)} · said in ${esc(l.on)}</div></div>`;
+
+// ---------- the mock engine: state per mock, clicks on [data-a] call act[name](state, arg), then redraw
+const M = {};
+function mock(id, s, view, act = {}) { M[id] = {s, view, act}; draw(id); }
+function draw(id) {
+  const box = $(`[data-mock="${id}"]`), f = document.activeElement, key = f?.dataset?.in, pos = f?.selectionStart;
+  box.innerHTML = M[id].view(M[id].s);
+  if (key && box.contains(f) === false) { const n = box.querySelector(`[data-in="${key}"]`); if (n) { n.focus(); n.setSelectionRange?.(pos, pos); } }
+}
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("[data-a]"), box = a?.closest("[data-mock]");
+  if (!box) return;
+  e.preventDefault();
+  const m = M[box.dataset.mock], [n, ...rest] = a.dataset.a.split(":"), arg = rest.join(":");
+  if (n === "noop") return;
+  (m.act[n] ?? m.act.go ?? (() => {}))(m.s, arg, a, n);
+  draw(box.dataset.mock);
+});
+document.addEventListener("input", (e) => {
+  const box = e.target.closest("[data-mock]"), k = e.target.dataset.in;
+  if (!box || !k) return;
+  const m = M[box.dataset.mock];
+  (m.act["in_" + k] ?? ((s, v) => { s[k] = v; }))(m.s, e.target.value);
+  draw(box.dataset.mock);
+});
+document.addEventListener("submit", (e) => {
+  const box = e.target.closest("[data-mock]");
+  if (!box) return;
+  e.preventDefault();
+  const m = M[box.dataset.mock];
+  m.act[e.target.dataset.f]?.(m.s, new FormData(e.target), e.target);
+  draw(box.dataset.mock);
+});
+const toast = (s) => s.toast ? `<div class="toast">${esc(s.toast)}</div>` : "";
+
+// ---------- 1A links row
+const KINDS = ["all", "report", "page", "file", "commit"];
+mock("links-tab", {cur: "links", kind: "all", open: null, chatOnly: false}, (s) => {
+  const rows = [...std({blog: {unread: false}}).slice(0, 2), {id: "links", title: "links", sub: `${LINKS.length} today · 2 only in chat`, t: ""}, ...std().slice(2)];
+  let main;
+  if (s.cur !== "links") main = `<p class="meta">${s.cur} as today. Pick links.</p>`;
+  else if (s.open != null) main = `<p class="meta"><a class="lk" data-a="back">← links</a></p>${preview(LINKS[s.open])}`;
+  else {
+    const ls = LINKS.map((l, i) => ({...l, i})).filter((l) => (s.kind === "all" || l.k === s.kind) && (!s.chatOnly || l.on !== "blog"));
+    main = `<div class="chips">${KINDS.map((k) => `<span class="chip" data-a="kind:${k}" aria-pressed="${s.kind === k}">${k}</span>`).join("")}<span class="chip" data-a="chat" aria-pressed="${s.chatOnly}">not on the blog</span></div>
+      ${ls.map((l) => `<div class="li" data-a="open:${l.i}"><span>${esc(l.title)} ${l.on !== "blog" ? `<span class="tag">${l.on} only</span>` : ""}${l.dead ? `<span class="tag dead">404</span>` : ""}<br><small>${esc(hostOf(l.url))}</small></span><span class="r">${l.t}<br>${esc(l.who)}</span></div>`).join("") || `<p class="meta">none</p>`}`;
+  }
+  return frame({nav: navHtml(rows, s.cur), main});
+}, {
+  go: (s, id) => { s.cur = id; s.open = null; }, kind: (s, k) => { s.kind = k; }, chat: (s) => { s.chatOnly = !s.chatOnly; },
+  open: (s, i) => { s.open = +i; }, back: (s) => { s.open = null; },
+});
+
+// ---------- 1B links of this chat
+const NADYA_LINKS = LINKS.filter((l) => l.on !== "log" && ["nadya-a", "nadya-b", "dream", "design-a-a", "design-a-b", "shopping-a", "arcade-b"].includes(l.who) && l.t >= "03:00" && l.k !== "commit");
+mock("links-strip", {cur: "nadya", openStrip: false, pv: null}, (s) => {
+  const msgs = CHAT.filter((m) => m.k !== "rt").slice(-14);
+  const strip = `<div class="card" style="cursor:default"><div class="row" style="margin:0"><b style="font-size:0.8rem">${NADYA_LINKS.length} links in this chat today</b><span style="margin-left:auto"></span><button class="btn" data-a="strip">${s.openStrip ? "hide" : "show"}</button></div>
+    ${s.openStrip ? `<div class="chips" style="margin-top:0.4rem">${NADYA_LINKS.map((l) => `<span class="chip" data-a="pv:${LINKS.indexOf(l)}" aria-pressed="${s.pv === LINKS.indexOf(l)}">${esc(l.title)}${l.dead ? " ✕" : ""}</span>`).join("")}</div>` : ""}</div>`;
+  const chat = `${strip}${msgs.map((m) => bub(m)).join("")}`;
+  if (s.pv == null) return frame({nav: navHtml(std(), s.cur), main: chat});
+  return frame({nav: navHtml(std(), s.cur), split: true, main: `<div>${chat}</div><div>${preview(LINKS[s.pv], "close")}</div>`});
+}, {go: (s, id) => { s.cur = id; }, strip: (s) => { s.openStrip = !s.openStrip; }, pv: (s, i) => { s.pv = s.pv === +i ? null : +i; }, close: (s) => { s.pv = null; }});
+
+// ---------- 1C search
+const CLOSED = [
+  {name: "arcade-lbp-a", host: "marx", goal: "LBP speed blocks (hard queue)", t: "10:33", last: "speed block 12: rpcs3-a39 +3% fps, committed e9c6793a8; handover in docs/ps3-log.md", sid: "fd7a8ad9"},
+  {name: "arcade-lbp-b", host: "marx", goal: "LBP sound (hard queue)", t: "10:33", last: "sound is finished; next block compares the First Steps level", sid: "bcbbec65"},
+  {name: "shopping-a", host: "nadya", goal: "amazon.ca equivalent of B09V7VNZ9Y", t: "09:43", last: "UK item is the HUANUO memory-foam footrest; 3 equivalents, Prime, Oct 18th", sid: "?"},
+  {name: "nadya-a", host: "nadya", goal: "hard work queue", t: "09:38", last: "hard queue built (nadya 6cc9328, trig 3ed5d4e, 0f4e7a6)", sid: "?"},
+  {name: "design-a-a", host: "marx", goal: "design-a 1-14 explainer, with the user", t: "09:28", last: "reports/1-14.html + template + REPORT.md (ed9cf63), compare/ deleted", sid: "4b7f5951"},
+  {name: "nadya-b", host: "nadya", goal: "self-host services list", t: "09:21", last: "research/self-host.html (91b466f); you answered its 4 questions in its chat", sid: "e53672a1"},
+  {name: "arcist-a", host: "marx", goal: "new tab always in the Arc server space", t: "08:58", last: "--space server works by switching the window; reverted after you tried it", sid: "?"},
+  {name: "nadya-a", host: "nadya", goal: "research info-flow UI/UX", t: "08:48", last: "research/info-flow.html (98902fd), 5 questions for you", sid: "?"},
+  {name: "nadya-a", host: "nadya", goal: "phone push retry", t: "08:34", last: "./task push retries failed pushes every 5 min (18a1dcc)", sid: "1478bfd7"},
+  {name: "nightly", host: "nadya", goal: "day digest, profile proposals", t: "08:20", last: "3 of 6 profile proposals applied; days/2026-10-16.md", sid: "ea489004"},
+  {name: "dream", host: "nadya", goal: "one hour of ideas", t: "03:27", last: "personas as ordinary people; the trip week; 4 questions", sid: "?"},
+];
+const DOCS = ["ideas/exercise-guide.md", "ideas/web-screenflow.md", "ideas/daily-cut.md", "ideas/password-sync.md", "projects/design-a.md", "projects/arcade-ps3.md", "projects/phone.md", "projects/mtl.md", "research/self-host.html", "research/info-flow.html", "research/exercise-guide.html", "research/short-video-apis.html", "todo/hard-queue.md", "dream/2026-10-17/week-away.html"];
+mock("search", {cur: "nadya", q: "design", pick: null}, (s) => {
+  const q = s.q.trim().toLowerCase(), hit = (t) => q && t.toLowerCase().includes(q);
+  const mk = (t) => q ? esc(t).replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), (x) => `<mark>${x}</mark>`) : esc(t);
+  const groups = [
+    ["sessions", [...Object.values(ROWS).filter((r) => r.sec).map((r) => ({t: r.title, sub: r.sub + " · live"})), ...CLOSED.map((c) => ({t: c.name, sub: `${c.goal} · closed ${c.t}`}))].filter((x) => hit(x.t + x.sub))],
+    ["links", LINKS.filter((l) => hit(l.title + l.url + l.who)).map((l) => ({t: l.title, sub: `${hostOf(l.url)} · ${l.t}`}))],
+    ["blog", POSTS.filter((p) => hit(p.text + p.p)).map((p) => ({t: p.text, sub: `${p.p} · ${p.t}`}))],
+    ["files", DOCS.filter((d) => hit(d)).map((d) => ({t: d, sub: "nadya"}))],
+  ];
+  const n = groups.reduce((a, g) => a + g[1].length, 0);
+  const nav = `<div style="padding:0.4rem 0.6rem"><input type="search" data-in="q" value="${esc(s.q)}" placeholder="search  /"></div>${q ? `<div class="sec"><span>${n} found</span></div>` : ""}${q ? "" : navHtml(std(), s.cur)}`;
+  const main = q ? groups.filter((g) => g[1].length).map(([g, xs]) => `<div class="h">${g} · ${xs.length}</div>${xs.slice(0, 6).map((x) => `<div class="li" data-a="pick:${esc(x.t)}"><span>${mk(x.t)}<br><small>${mk(x.sub)}</small></span><span class="r"></span></div>`).join("")}${xs.length > 6 ? `<p class="meta">${xs.length - 6} more</p>` : ""}`).join("") || `<p class="meta">nothing</p>`
+    : `<p class="meta">Type in the box. Try: design, hard, push, exercise, 3-16.</p>`;
+  return frame({nav, main: (s.pick ? `<div class="toast" style="position:static;margin-bottom:0.5rem">opens: ${esc(s.pick)}</div>` : "") + main});
+}, {go: (s, id) => { s.cur = id; }, pick: (s, t) => { s.pick = t; }, in_q: (s, v) => { s.q = v; s.pick = null; }});
+
+// ---------- 2A fold routine
+mock("fold", {cur: "nadya", open: new Set(), raw: false}, (s) => {
+  let h = "", run = [];
+  const flush = () => {
+    if (!run.length) return;
+    const key = run[0].t, by = {};
+    for (const m of run) by[m.rule] = m;
+    const names = Object.keys(by), open = s.open.has(key);
+    h += `<div class="fold ${open ? "open" : ""}" data-a="fold:${key}">${open ? "▾" : "▸"} ${run.length} routine ${run.length > 1 ? "replies" : "reply"} (${names.join(", ")}) · last ${run.at(-1).t}: ${esc(run.at(-1).text.replace(/^Hourly check at [\d:]+:?,? ?/, "").slice(0, 70))}…
+      ${open ? run.map((m) => `<span class="ln">${m.t} [${m.rule}] ${esc(m.text)}</span>`).join("") : ""}</div>`;
+    run = [];
+  };
+  for (const m of CHAT) {
+    if (m.k === "rt" && !s.raw) { run.push(m); continue; }
+    flush();
+    h += m.k === "rt" ? `<div class="m"><span class="who">answering trig ${m.rule}</span>${esc(m.text)}<small>${m.t}</small></div>` : bub(m);
+  }
+  flush();
+  const top = `<div class="row" style="margin:-0.2rem 0 0.4rem"><span class="meta">${CHAT.filter((m) => m.k === "rt").length} routine replies and ${SILENT.length} silent notices today</span><span style="margin-left:auto"></span><span class="chip" data-a="raw" aria-pressed="${s.raw}">show all</span></div>`;
+  return frame({nav: navHtml(std(), s.cur), main: top + h});
+}, {go: (s, id) => { s.cur = id; }, fold: (s, k) => { s.open.has(k) ? s.open.delete(k) : s.open.add(k); }, raw: (s) => { s.raw = !s.raw; }});
+
+// ---------- 2B writers mark "For you"
+const PINS0 = [
+  {id: "hq", t: "09:32", who: "nadya", text: "For you: before I brief a helper, two choices change how it works: what counts as marx unused, and whether soccer needs your go.", gone: "you answered at 09:33"},
+  {id: "fe", t: "09:43", who: "nadya", text: "For you: amazon.ca doesn't sell the UK footrest; 3 equivalents, Prime, delivery Oct 18th. Pick one to order."},
+  {id: "3-16", t: "10:4x", who: "design-a-b", text: "For you: 3-16 is on the site, but the only copy has Chinese subtitles and is 720p. Keep it, or keep looking?"},
+  {id: "if", t: "08:48", who: "nadya-a", text: "For you: 5 questions in research/info-flow.html."},
+];
+mock("pin", {cur: "nadya", done: new Set(["hq"]), star: new Set(), showDone: false}, (s) => {
+  const open = PINS0.filter((p) => !s.done.has(p.id));
+  const strip = `<div class="card" style="cursor:default;border-left:3px solid var(--q)"><div class="row" style="margin:0 0 0.2rem"><b style="font-size:0.8rem">for you · ${open.length}</b><span style="margin-left:auto"></span><span class="chip" data-a="sd" aria-pressed="${s.showDone}">cleared ${s.done.size}</span></div>
+    ${(s.showDone ? PINS0 : open).map((p) => `<div class="li" style="cursor:default"><span style="${s.done.has(p.id) ? "color:var(--muted);text-decoration:line-through" : ""}">${esc(p.text.replace(/^For you: /, ""))}<br><small>${esc(p.who)} · ${p.t}${p.gone && s.done.has(p.id) ? " · " + p.gone : ""}</small></span><span class="r">${s.done.has(p.id) ? `<button class="btn" data-a="undo:${p.id}">back</button>` : `<button class="btn" data-a="go2:${p.id}">open</button> <button class="btn" data-a="done:${p.id}">✓</button>`}</span></div>`).join("") || `<p class="meta">nothing for you</p>`}</div>`;
+  const msgs = CHAT.filter((m) => m.k !== "rt").slice(-12).map((m) => `<div class="m ${m.k === "me" ? "me" : ""} ${s.star.has(m.t + m.text.slice(0, 8)) ? "hot" : ""}">${esc(m.text)}<small>${m.t} ${m.k !== "me" ? `<a class="lk" data-a="star:${m.t + m.text.slice(0, 8)}">${s.star.has(m.t + m.text.slice(0, 8)) ? "★ pinned" : "☆ pin"}</a>` : ""}</small></div>`).join("");
+  const rows = std({nadya: {cnt: open.length ? ` <span class="cnt">${open.length + s.star.size}</span>` : ""}, "design-a-b": {d: open.some((p) => p.id === "3-16") ? "q" : "hold"}});
+  return frame({nav: navHtml(rows, s.cur), main: s.cur === "nadya" ? strip + msgs : s.cur === "design-a-b" ? `<div class="m">Episode 3-16 is now on the site, but the only copy I could find has Chinese subtitles, not English. It is also 720p and much lower quality than the other 59.<small>10:4x</small></div><div class="m hot">For you: keep it, or keep looking?<small>pinned in nadya's strip too</small></div>` : `<p class="meta">${s.cur}</p>`});
+}, {
+  go: (s, id) => { s.cur = id; }, done: (s, id) => { s.done.add(id); }, undo: (s, id) => { s.done.delete(id); }, sd: (s) => { s.showDone = !s.showDone; },
+  star: (s, k) => { s.star.has(k) ? s.star.delete(k) : s.star.add(k); }, go2: (s, id) => { s.cur = id === "3-16" ? "design-a-b" : "nadya"; },
+});
+
+// ---------- 2C header line
+const WAITS = [
+  {id: "eg", text: "exercise guide: 7 questions", who: "nadya-b, report", age: "10 h", go: "plan"},
+  {id: "3-16", text: "design-a-b: keep the Chinese-subtitled 3-16, or keep looking?", who: "design-a-b", age: "5 min", go: "design-a-b"},
+  {id: "if", text: "info-flow: 4 questions left", who: "nadya-a, report", age: "2 h", go: "nadya"},
+  {id: "fe", text: "footrest: pick one to order", who: "nadya", age: "1 h", go: "nadya"},
+  {id: "ci", text: "Sun 10:10 online check-in AC 407", who: "reminder", age: "due tomorrow", go: "plan"},
+];
+mock("header", {cur: "blog", i: 0, done: new Set(), later: new Set()}, (s) => {
+  const live = WAITS.filter((w) => !s.done.has(w.id) && !s.later.has(w.id));
+  const w = live[s.i % Math.max(live.length, 1)];
+  const top = w ? `<div class="strip"><b>${s.i % live.length + 1}/${live.length}</b><span data-a="open">${esc(w.text)} <span class="meta">· ${esc(w.who)} · ${esc(w.age)}</span></span><button class="btn" data-a="next">next</button><button class="btn" data-a="later">later</button><button class="btn" data-a="done">✓</button></div>`
+    : `<div class="strip" style="background:#f3faf4;border-color:#cfe8d4"><b style="color:var(--green)">nothing waits on you</b><span></span>${s.later.size ? `<button class="btn" data-a="unlater">${s.later.size} later</button>` : ""}</div>`;
+  const view = {
+    blog: POSTS.slice(0, 6).map((p) => `<div class="card post"><span class="k">${p.p} · ${p.who} · ${p.t}</span><br>${esc(p.text)}</div>`).join(""),
+    plan: `<div class="need"><b>user: Online check-in for Monday's flights: AC 407 10:10, AC 2115 14:10</b><p class="meta">due Sun 10:10</p></div><div class="h">ideas with open questions</div><div class="li"><span>Exercise guide <span class="tag q">7 ?</span></span></div>`,
+    nadya: CHAT.filter((m) => m.k !== "rt").slice(-6).map((m) => bub(m)).join(""),
+    "design-a-b": `<div class="m">Episode 3-16 is now on the site, but the only copy has Chinese subtitles, 720p.<small>10:4x</small></div><div class="need"><b>Keep it, or keep looking?</b></div>`,
+  }[s.cur] ?? `<p class="meta">${s.cur}</p>`;
+  return frame({title: s.cur, top, nav: navHtml(std({"design-a-b": {d: "q"}}), s.cur), main: view});
+}, {
+  go: (s, id) => { s.cur = id; }, next: (s) => { s.i++; },
+  open: (s) => { const live = WAITS.filter((w) => !s.done.has(w.id) && !s.later.has(w.id)); s.cur = live[s.i % live.length].go; },
+  done: (s) => { const live = WAITS.filter((w) => !s.done.has(w.id) && !s.later.has(w.id)); s.done.add(live[s.i % live.length].id); },
+  later: (s) => { const live = WAITS.filter((w) => !s.done.has(w.id) && !s.later.has(w.id)); s.later.add(live[s.i % live.length].id); },
+  unlater: (s) => { s.later.clear(); },
+});
+
+// ---------- 3A apart, linked
+const postCard = (p, a = `post:${p.id}`, lit = false) => `<div class="card post ${lit ? "lit" : ""}" data-a="${a}"><span class="k">blog · ${esc(p.p)} · ${esc(p.who)} · ${p.t}</span><br>${esc(p.text)}${p.url ? `<br><span class="lk">↗ ${esc(p.link)}</span>` : ""}</div>`;
+mock("apart", {cur: "nadya", post: null, before: false}, (s) => {
+  const msgs = CHAT.filter((m) => m.k !== "rt" && m.t >= "08:29").map((m) => m.k === "res" && !s.before ? (m.post ? `<div class="m" style="padding:0.2rem 0.5rem;background:none">${postCard(POSTS.find((p) => p.id === m.post))}<small>${m.t} · nadya posted</small></div>` : `<div class="m">${esc(m.text)}<small>${m.t}</small></div>`) : bub(m)).join("");
+  const top = `<div class="row" style="margin:-0.2rem 0 0.4rem"><span class="chip" data-a="bf" aria-pressed="${s.before}">as today</span><span class="chip" data-a="bf" aria-pressed="${!s.before}">results as cards</span></div>`;
+  const blog = POSTS.map((p) => postCard(p, `post:${p.id}`, s.post === p.id)).join("");
+  return frame({title: s.cur, nav: navHtml(std({blog: {unread: false, t: "19m"}}), s.cur), main: s.cur === "blog" ? `${s.post ? `<p class="meta">opened from nadya's chat: the post is outlined</p>` : ""}${blog}` : top + msgs});
+}, {go: (s, id) => { s.cur = id; s.post = null; }, post: (s, id) => { s.cur = "blog"; s.post = id; }, bf: (s) => { s.before = !s.before; }});
+
+// ---------- 3B merged feed
+mock("merged", {cur: "nadya", tab: "feed", say: "", sent: []}, (s) => {
+  let main;
+  if (s.cur !== "nadya") main = `<p class="meta">${s.cur}</p>`;
+  else {
+    const tabs = `<div class="tabs"><button data-a="tab:feed" aria-pressed="${s.tab === "feed"}">feed</button><button data-a="tab:chat" aria-pressed="${s.tab === "chat"}">chat (all ${CHAT.length + SILENT.length + 30})</button></div>`;
+    let body;
+    if (s.tab === "chat") body = CHAT.map((m) => m.k === "rt" ? `<div class="m"><span class="who">[trig ${m.rule}]</span>${esc(m.text)}<small>${m.t}</small></div>` : bub(m)).join("") + `<p class="meta">peer messages from trig, helpers and ccx are here too</p>`;
+    else {
+      const items = [
+        ...CHAT.filter((m) => m.k === "me" || m.k === "re" || (m.k === "res" && !m.post)).map((m) => ({t: m.t, h: m.k === "res" ? `<div class="m"><span class="who">result</span>${esc(m.text)}<small>${m.t}</small></div>` : bub(m, m.q ? "hot" : "")})),
+        ...POSTS.filter((p) => p.t >= "03:00").map((p) => ({t: p.t, h: postCard(p, "noop")})),
+        {t: "08:48", h: `<div class="card qc"><span class="k">questions · info-flow.html · nadya-a</span><br>5 questions, 1 answered. <span class="lk">answer here</span></div>`},
+        ...s.sent.map((x) => ({t: "10:5x", h: `<div class="m me">${esc(x)}<small>10:5x · to nadya</small></div>`})),
+      ].sort((a, b) => a.t.localeCompare(b.t));
+      body = items.map((x) => x.h).join("");
+    }
+    main = tabs + body + `<form class="say" data-f="send"><input type="text" name="q" placeholder="to nadya" autocomplete="off"><button class="btn pri">send</button></form>`;
+  }
+  return frame({nav: navHtml(std({nadya: {title: "nadya", sub: "feed: chat + blog"}, blog: {hide: true}}), s.cur), main});
+}, {go: (s, id) => { s.cur = id; }, tab: (s, t) => { s.tab = t; }, send: (s, fd) => { const q = fd.get("q").trim(); if (q) s.sent.push(q); }});
+
+// ---------- 3C two columns
+mock("twocol", {cur: "nadya", lit: null}, (s) => {
+  const chat = CHAT.filter((m) => m.k === "me" || m.k === "re").map((m) => bub(m, s.lit && m.t === s.lit && m.k === "me" ? "lit" : "")).join("");
+  const posts = POSTS.slice(0, 9).map((p) => `<div class="card post ${s.lit && p.asked === s.lit ? "lit" : ""}" data-a="${p.asked ? `lit:${p.asked}` : "noop"}"><span class="k">${esc(p.p)} · ${p.t}${p.asked ? ` · asked ${p.asked}` : ""}</span><br>${esc(p.text)}</div>`).join("");
+  return frame({nav: navHtml(std({blog: {hide: true}}), s.cur), split: true, main: `<div id="tc-chat">${chat}</div><div><div class="h">today on the blog · tap one with "asked"</div>${posts}</div>`});
+}, {go: (s, id) => { s.cur = id; }, lit: (s, t) => { s.lit = s.lit === t ? null : t; }});
+// scroll the chat to the lit message after each draw
+new MutationObserver(() => { const el = $('[data-mock="twocol"] .m.lit'); el?.scrollIntoView({block: "center", behavior: "smooth"}); }).observe($('[data-mock="twocol"]'), {childList: true});
+
+// ---------- 4A report questions in cc
+mock("rq", {cur: "questions", ans: {}, typed: {}, page: null}, (s) => {
+  const isA = (r, i) => r.qs[i].a || s.ans[`${r.id}${i}`];
+  const openN = (r) => r.qs.filter((_, i) => !isA(r, i)).length;
+  const total = RQ.reduce((a, r) => a + openN(r), 0);
+  const rows = [...std().slice(0, 2), {id: "questions", title: "questions", sub: "from report pages", cnt: total ? ` <span class="cnt">${total}</span>` : ""}, ...std().slice(2)];
+  let main;
+  if (s.cur !== "questions") main = `<p class="meta">${s.cur}</p>`;
+  else if (!s.page) main = RQ.map((r) => `<div class="li" data-a="page:${r.id}"><span>${esc(r.title)} ${openN(r) ? `<span class="tag q">${openN(r)} open</span>` : `<span class="tag new">all answered</span>`}<br><small>${esc(r.page)} · ${esc(r.who)} · ${r.at}</small></span><span class="r">${r.qs.length} asked</span></div>`).join("")
+    + `<div class="h">older pages, not in the format yet</div><div class="li"><span>Montreal events sources <span class="tag">6 asked</span><br><small>Oct 16th 22:41</small></span></div><div class="li"><span>web-screenflow function mocks <span class="tag">7 asked</span><br><small>Oct 16th 22:41</small></span></div><div class="li"><span>Ideas on marx that nadya doesn't list <span class="tag">"you pick"</span><br><small>Oct 16th 22:28</small></span></div>`;
+  else {
+    const r = RQ.find((x) => x.id === s.page);
+    main = `<p class="meta"><a class="lk" data-a="back">← questions</a> · <span class="lk">${esc(r.page)} ↗</span></p>` + r.qs.map((x, i) => {
+      const a = isA(r, i);
+      return `<div class="q1 ${a ? "done" : ""}">${i + 1}. ${esc(x.q)}${a ? `<div class="ans">✓ ${esc(a)}</div>` : `<form class="row" data-f="ans" data-k="${r.id}${i}"><input type="text" name="a" placeholder="answer" autocomplete="off" style="flex:1"><button class="btn pri">send</button><button class="btn" type="button" data-a="skip:${r.id}${i}">not now</button></form>`}</div>`;
+    }).join("");
+  }
+  return frame({nav: navHtml(rows, s.cur), main: main + toast(s)});
+}, {
+  go: (s, id) => { s.cur = id; s.page = null; }, page: (s, id) => { s.page = id; s.toast = null; }, back: (s) => { s.page = null; s.toast = null; },
+  skip: (s) => { s.toast = "stays open; nothing sent"; },
+  ans: (s, fd, f) => { const a = fd.get("a").trim(); if (!a) return; s.ans[f.dataset.k] = a; const r = RQ.find((x) => f.dataset.k.startsWith(x.id)); s.toast = `typed to nadya: [q ${r.page}#${+f.dataset.k.slice(2) + 1}] ${a}`; },
+});
+
+// ---------- 4B questions on the idea
+const IDEAS = [
+  {f: "exercise-guide.md", t: "Exercise guide", qs: RQ[0].qs.map((x) => x.q), from: "nadya-b, Oct 17th 00:43 (research/exercise-guide.html)"},
+  {f: "web-screenflow.md", t: "web-screenflow", qs: ["Recording: whole screen, a window, or a tab?", "Camera window: none, a circle, or a corner box?", "7 questions in all (mocks page)"], from: "nadya-a, Oct 16th 22:41"},
+  {f: "daily-cut.md", t: "daily cut", qs: ["Format pick", "Reddit RSS replacement"], from: "Oct 15th (daily-cut-2)"},
+  {f: "password-sync.md", t: "password sync", qs: [], from: ""},
+  {f: "habit-tracking.md", t: "habit tracking", qs: [], from: ""},
+  {f: "techtree.md", t: "techtree", qs: [], from: ""},
+];
+mock("onidea", {cur: "plan", doc: null, gone: {}}, (s) => {
+  const left = (x) => x.qs.filter((_, i) => !s.gone[x.f + i]);
+  const total = IDEAS.reduce((a, x) => a + left(x).length, 0);
+  const rows = std({plan: {cnt: ` <span class="cnt">${total}</span>`, sub: "ideas with questions: " + IDEAS.filter((x) => left(x).length).length}});
+  let main;
+  if (s.cur !== "plan") main = `<p class="meta">${s.cur}</p>`;
+  else if (!s.doc) main = `<div class="need"><b>user: Online check-in for Monday's flights: AC 407 10:10</b><p class="meta">due Sun 10:10</p></div><div class="h">ideas</div>` + IDEAS.map((x) => `<div class="li" data-a="doc:${x.f}"><span>${esc(x.t)} ${left(x).length ? `<span class="tag q">${left(x).length} ?</span>` : ""}</span><span class="r"></span></div>`).join("");
+  else {
+    const x = IDEAS.find((y) => y.f === s.doc);
+    main = `<p class="meta"><a class="lk" data-a="back">← plan</a> · ideas/${esc(x.f)}</p><h3 style="margin:0.3rem 0">${esc(x.t)}</h3>
+      ${x.qs.length ? `<div class="need"><b>Open questions</b> <span class="meta">· written by ${esc(x.from)}</span>${x.qs.map((q, i) => s.gone[x.f + i] ? `<div class="q1 done">✓ ${esc(q)} <span class="ans">${esc(s.gone[x.f + i])}</span></div>` : `<div class="q1">${esc(q)}<div class="row"><button class="btn" data-a="ask:${x.f}:${i}">answer in nadya's chat</button><button class="btn" data-a="drop:${x.f}:${i}">doesn't matter</button></div></div>`).join("")}</div>` : ""}
+      <p class="meta">## Goal, ## Why, ## Notes as today…</p>`;
+  }
+  return frame({nav: navHtml(rows, s.cur), main: main + toast(s)});
+}, {
+  go: (s, id) => { s.cur = id; s.doc = null; s.toast = null; }, doc: (s, f) => { s.doc = f; s.toast = null; }, back: (s) => { s.doc = null; s.toast = null; },
+  ask: (s, a) => { const [f, i] = a.split(":"); s.toast = `nadya's box gets: "[ideas/${f} Q${+i + 1}] " and the cursor`; },
+  drop: (s, a) => { const [f, i] = a.split(":"); s.gone[f + i] = "dropped"; s.toast = `nadya removes the line from ideas/${f}`; },
+});
+
+// ---------- 4C later on a live question
+mock("later", {cur: "design-a-b", picked: null}, (s) => {
+  const rows = std({"design-a-b": {d: s.picked ? "hold" : "q"}, plan: s.picked?.startsWith("later") ? {sub: s.picked.includes("marx") ? "when you are on marx: design-a 3-16" : `${s.picked.includes("tonight") ? "today 21:00" : "Sun 09:00"} user: design-a 3-16`, d: "blue"} : {}});
+  let main;
+  if (s.cur === "design-a-b") {
+    main = `<div class="m">Episode 3-16 is now on the site, but the only copy I could find has Chinese subtitles, not English. It is also 720p and much lower quality than the other 59. NHK broadcast #56, first aired 2013-11-23.<small>10:4x</small></div>`;
+    main += s.picked ? `<div class="m me">${esc(s.picked.startsWith("later") ? `Later (user, from cc): write this question to projects/design-a.md "Open questions" and finish.` : s.picked)}<small>from cc</small></div><div class="m">${s.picked.startsWith("later") ? "Written to projects/design-a.md. Done; nothing running." : "OK."}<small>10:5x</small></div>${s.picked.startsWith("later") ? `<p class="meta">nadya closes it (close liberally); the reminder brings the question back with a link to the project file</p>` : ""}`
+      : `<div class="need"><b>3-16: keep this copy?</b><div class="opts"><button class="btn" data-a="pick:Keep it">1. Keep it <small class="meta">Chinese subtitles, 720p</small></button><button class="btn" data-a="pick:Keep looking">2. Keep looking</button><button class="btn" data-a="pick:Remove it">3. Remove it from the site</button></div>
+        <div class="row" style="margin-top:0.5rem;border-top:1px solid #f3d3b8;padding-top:0.4rem"><span class="meta">later:</span><button class="btn" data-a="pick:later tonight">tonight</button><button class="btn" data-a="pick:later tomorrow">tomorrow</button><button class="btn" data-a="pick:later marx">when I'm on marx</button></div></div>`;
+  } else if (s.cur === "plan") main = s.picked?.startsWith("later") ? `<div class="need"><b>user: design-a: keep the Chinese-subtitled 3-16?</b><p class="meta">${s.picked.includes("marx") ? "when you are on marx (trig later-at-marx)" : s.picked.includes("tonight") ? "today 21:00" : "Sun 09:00"} · projects/design-a.md</p><div class="row"><button class="btn">done</button><button class="btn">snooze 1 h</button><button class="btn">send to nadya</button></div></div>` : `<p class="meta">no reminder</p>`;
+  else main = `<p class="meta">${s.cur}</p>`;
+  return frame({nav: navHtml(rows, s.cur), main: main + (s.picked ? `<p><button class="btn" data-a="reset">start over</button></p>` : "")});
+}, {go: (s, id) => { s.cur = id; }, pick: (s, p) => { s.picked = p; }, reset: (s) => { s.picked = null; s.cur = "design-a-b"; }});
+
+// ---------- 5A closed today
+mock("closed", {cur: "nadya", open: false, sel: null, resumed: new Set()}, (s) => {
+  const rows = [...std(), {id: "_closed", sec: "closed today", secA: "toggle", secR: `<span>${s.open ? "▾" : "▸"} ${CLOSED.length}</span>`, hide: true},
+    ...(s.open ? CLOSED.map((c, i) => ({id: "closed-" + i, title: c.name, sub: c.goal, at: `${c.host === "nadya" ? "" : "marx · "}${c.t}`, d: s.resumed.has(i) ? "wait" : "gone", sec: "closed today"})) : [])];
+  let main = `<p class="meta">${s.cur}</p>`;
+  if (s.sel != null) {
+    const c = CLOSED[s.sel];
+    main = `<h3 style="margin:0 0 0.2rem">${esc(c.name)} <small class="meta">${c.host} · closed ${c.t}</small></h3><p class="meta">${esc(c.goal)}</p><div class="m">${esc(c.last)}<small>its last reply</small></div>
+      <div class="h">links</div>${LINKS.filter((l) => l.who === c.name && Math.abs(+l.t.replace(":", "") - +c.t.replace(":", "")) < 40).map((l) => `<div class="li"><span>${esc(l.title)}<br><small>${esc(hostOf(l.url))}</small></span></div>`).join("") || `<p class="meta">none</p>`}
+      <div class="row" style="margin-top:0.6rem">${s.resumed.has(s.sel) ? `<span class="meta">resumed: ccx resume ${esc(c.name)} (session ${esc(c.sid)}), wait</span>` : `<button class="btn pri" data-a="resume">resume</button><button class="btn">full chat</button>`}</div>`;
+  }
+  return frame({title: s.sel != null ? CLOSED[s.sel].name : s.cur, nav: navHtml(rows, s.sel != null ? "closed-" + s.sel : s.cur), main});
+}, {
+  go: (s, id) => { if (id.startsWith("closed-")) s.sel = +id.slice(7); else { s.cur = id; s.sel = null; } },
+  toggle: (s) => { s.open = !s.open; }, resume: (s) => { s.resumed.add(s.sel); },
+});
+
+// ---------- 5B project page
+mock("hub", {cur: "projects", proj: null}, (s) => {
+  let main;
+  if (s.cur !== "projects") main = `<p class="meta">${s.cur}</p>`;
+  else if (!s.proj) main = ["alma", "arcade-ps3", "cc", "design-a", "iron", "mtl", "nadya", "phone", "yt-player"].map((p) => `<div class="li" data-a="proj:${p}"><span>${p} ${p === "design-a" ? `<span class="tag">1 live</span><span class="tag new">2 posts today</span><span class="tag q">1 ?</span>` : p === "arcade-ps3" ? `<span class="tag new">3 posts today</span>` : ""}</span></div>`).join("");
+  else if (s.proj === "design-a") main = `<p class="meta"><a class="lk" data-a="back">← projects</a> · projects/design-a.md</p><h3 style="margin:0.2rem 0">design-a</h3><p class="meta">marx:~/web/design-a · Design Ah episode viewer</p>
+    <div class="h">sessions</div><div class="li"><span><span class="d q" style="display:inline-block">?</span> design-a-b <small>find missing episode 3-16 · live</small></span></div><div class="li"><span>design-a-a <small>1-14 explainer · closed 09:28</small></span></div>
+    <div class="h">waits on you</div><div class="need" style="margin:0.2rem 0">3-16: keep the Chinese-subtitled 720p copy, or keep looking?</div>
+    <div class="h">posts</div>${POSTS.filter((p) => p.p === "design-a").map((p) => postCard(p, "noop")).join("")}
+    <div class="h">links</div>${LINKS.filter((l) => l.url.includes("design-a")).map((l) => `<div class="li"><span>${esc(l.title)} ${l.dead ? `<span class="tag dead">404</span>` : ""}<br><small>${esc(hostOf(l.url))}</small></span><span class="r">${l.t}</span></div>`).join("")}
+    <div class="h">notes</div><p class="meta">the projects/design-a.md text as today</p>`;
+  else main = `<p class="meta"><a class="lk" data-a="back">← projects</a></p><p class="meta">only design-a is filled in for this mock</p>`;
+  return frame({nav: navHtml(std(), s.cur), main});
+}, {go: (s, id) => { s.cur = id; s.proj = null; }, proj: (s, p) => { s.proj = p; }, back: (s) => { s.proj = null; }});
+
+// ---------- 5C shared read state
+mock("seen", {shared: true, arc: 4, phone: 4}, (s) => {
+  const side = (who, n) => `<div class="${who === "phone" ? "phone" : "cc"}" style="${who === "arc" ? "padding:0.5rem" : ""}"><div class="t">${who === "phone" ? "Pixel" : "Arc on marx"}</div>
+    <div class="it unread" style="cursor:default"><span class="d ${n ? "green" : ""}"></span><span class="tx"><div><span>blog</span></div><small>${esc(POSTS[0].text)}</small></span><time>${n ? `${n} new` : "read"}</time></div>
+    ${n ? POSTS.slice(0, n).map((p) => `<div class="card post" style="margin:0.3rem 0.5rem"><span class="k">${p.p} · ${p.t}</span><br>${esc(p.text.slice(0, 70))}…</div>`).join("") : ""}
+    <div class="row" style="padding:0 0.5rem"><button class="btn" data-a="read:${who}" ${n ? "" : "disabled"}>read all</button></div></div>`;
+  return `<div class="row" style="margin-bottom:0.5rem"><span class="chip" data-a="mode:0" aria-pressed="${!s.shared}">today: per browser</span><span class="chip" data-a="mode:1" aria-pressed="${s.shared}">cchost keeps it</span><button class="btn" data-a="reset">4 new posts</button></div><div class="twin">${side("arc", s.arc)}${side("phone", s.phone)}</div>`;
+}, {
+  read: (s, who) => { if (s.shared) s.arc = s.phone = 0; else s[who] = 0; },
+  mode: (s, v) => { s.shared = v === "1"; s.arc = s.phone = 4; }, reset: (s) => { s.arc = s.phone = 4; },
+});
+</script>
+</html>
