@@ -148,6 +148,10 @@
   .doc blockquote { margin: 0 0 0.8rem; padding: 0 0 0 0.9rem; border-left: 3px solid var(--line); color: var(--muted); } .doc hr { border: 0; border-top: 1px solid var(--line); margin: 1.4rem 0; } .doc li > input { margin: 0 0.35rem 0 0; }
   .fl li span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .fl li.dir span { font-weight: 600; } .fl li small { font-variant-numeric: tabular-nums; } .fl li small i { font-style: normal; } .doc ul.fl { padding: 0; } .doc .fl li { margin: 0; }
   .fsearch input { width: 100%; box-sizing: border-box; font: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 0.4rem 0.6rem; margin: 0 0 0.8rem; background: none; color: inherit; } .fsearch input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  /* the clear button is ours, not the browser's: the whole right end of the box, 2.6rem wide, and it puts the cursor back in the box */
+  .fsearch { position: relative; } .fsearch input { padding-right: 2.4rem; } .fsearch input::-webkit-search-cancel-button { display: none; }
+  .fsx { position: absolute; top: 0; right: 0; bottom: 0.8rem; width: 2.6rem; min-height: 2.5rem; border: 0; background: none; color: var(--muted); font: inherit; font-size: 1.2rem; line-height: 1; cursor: pointer; } .fsx:hover { color: inherit; }
+  .fsq:placeholder-shown + .fsx { display: none; }
   .hits h3 { font-size: 0.95em; margin: 1rem 0 0.2rem; cursor: pointer; overflow-wrap: anywhere; } .hits h3:hover { color: var(--accent); }
   .fl li .ln { font-style: normal; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2.5em; text-align: right; flex: none; } .hits .fl li span { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
   .hits mark { background: color-mix(in srgb, var(--yel) 45%, transparent); color: inherit; border-radius: 2px; } ::highlight(hit) { background: color-mix(in srgb, var(--yel) 60%, transparent); }
@@ -1026,7 +1030,7 @@ function filesView(path) {
   const crumbs = [go("", "nadya"), ...parts.map((x, k) => k === parts.length - 1 ? `<b>${esc(x)}</b>` : go(`${parts.slice(0, k + 1).join("/")}/`, x))].join(" / ");
   const raw = NADYA + encodeURI(path).replace(/#/g, "%23"), f = S.fs[path];
   const head = `<p class="meta crumbs">${crumbs}${dir ? "" : ` · <a href="${esc(raw)}" target="_blank" rel="noopener" data-out>open ↗</a>`}</p>`;
-  const search = `<form class="fsearch" role="search"><input type="search" class="fsq" name="q" value="${esc(S.grep.q)}" placeholder="search nadya" aria-label="search nadya" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search"></form>`;
+  const search = `<form class="fsearch" role="search"><input type="search" class="fsq" name="q" value="${esc(S.grep.q)}" placeholder="search nadya" aria-label="search nadya" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search"><button type="button" class="fsx" aria-label="clear search">×</button></form>`;
   if (dir && S.grep.q.trim().length >= 2) return `<article class="doc">${head}${search}${grepView()}</article>`;
   if (!f) return `<article class="doc">${head}<p class="meta">loading…</p></article>`;
   if (f.error) return `<article class="doc">${head}<p class="meta err">${esc(f.error)}</p></article>`;
@@ -1442,6 +1446,9 @@ document.addEventListener("click", async (e) => {
 });
 document.addEventListener("input", (e) => { if (e.target.matches(".free input") && freeText) freeText.value = e.target.value; });
 document.addEventListener("input", (e) => { if (!e.target.matches(".fsq")) return; S.grep.q = e.target.value; if (S.grep.q.trim().length < 2) { clearTimeout(grepT); S.grep.res = null; drawView(true); } else { if (!S.grep.res) drawView(true); grepSoon(); } });
+// × clears the search and leaves the cursor in the box; pointerdown keeps the focus there on a desktop
+document.addEventListener("pointerdown", (e) => { if (e.target.closest(".fsx")) e.preventDefault(); });
+document.addEventListener("click", (e) => { if (!e.target.closest(".fsx")) return; S.grep.q = ""; clearTimeout(grepT); S.grep.res = null; $("#view .fsq")?.focus(); drawView(true); });
 // enter searches at once; on a phone it also closes the keyboard so the results show
 document.addEventListener("submit", (e) => { if (!e.target.matches(".fsearch")) return; e.preventDefault(); grepSoon(true); if (narrow()) e.target.q.blur(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && e.target.matches(".free input")) { freeText = null; lastView = null; drawView(true); } });
