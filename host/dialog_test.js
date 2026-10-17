@@ -2,7 +2,7 @@
 // dialogs on 2.1.289, one session in a scratch directory; question-wide.txt is a capture
 // from another project with its words replaced and its layout kept.
 
-import {dialogRefusal, parseDialog, pendingAsk, pickKeys, withAsk} from "./dialog.js";
+import {dialogRefusal, parseDialog, pendingAsk, pickKeys, withAsk, tabAt} from "./dialog.js";
 import {IMAGE, imageParts, typeInto} from "./jump.js";
 import {run} from "./sh.js";
 
@@ -254,4 +254,17 @@ Deno.test("pendingAsk: askhook.sh's file until the log holds its tool_use_id", a
   Deno.writeTextFileSync(log, JSON.stringify({type: "user", message: {content: [{type: "tool_result", tool_use_id: "toolu_x", content: "answered"}]}}) + "\n", {append: true});
   eq(pendingAsk("0a1b-2c", log, ask), null, "answered");
   Deno.removeSync(dir, {recursive: true});
+});
+
+// 2.1.296, three questions, the first answered `green` and gone back to with Left
+Deno.test("parseDialog and tabAt: a question gone back to, its answer and the current tab", () => {
+  const d = parseDialog(fixture("question-tabs-back"));
+  eq([d.tabs.map((t) => t.done), d.options.map((o) => o.label).slice(0, 3), d.options.map((o) => !!o.picked).slice(0, 3)],
+    [[true, false, false, false], ["red", "green", "blue"], [false, true, false]], "green ✔ is picked");
+  const ansi = Deno.readTextFileSync(new URL("./fixtures/dialog/question-tabs-back.ansi", import.meta.url));
+  eq(tabAt(ansi), 0, "the first tab");
+  eq(tabAt("\x1b[39m←  ☒ Color \x1b[38;5;16m\x1b[48;5;153m ☐ Size \x1b[39m\x1b[49m ☐ Shape  ✔ Submit  →"), 1, "the second tab");
+  eq(tabAt("←  ☐ Color  ☐ Size  ✔ Submit  →"), -1, "no colour");
+  const qs = [{options: [{label: "red"}, {label: "green"}]}, {options: [{label: "red"}, {label: "green"}]}];
+  eq(withAsk({...d, title: "", body: "", tab: 1}, qs).ask.i, 1, "same labels: the current tab");
 });

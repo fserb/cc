@@ -1,0 +1,24 @@
+ ▝▝   ▝▝   /tmp/cca-qtest
+
+
+❯ Use the AskUserQuestion tool once with three questions: header Color
+  (red/green/blue), header Size (small/large), header Shape (circle/square).
+  Single select each. Do nothing else.
+────────────────────────────────────────────────────────────────────────────────
+←  ☒ Color  ☐ Size  ☐ Shape  ✔ Submit  →
+
+Which color?
+
+❯ 1. red
+     Red
+  2. green ✔
+     Green
+  3. blue
+     Blue
+  4. ab
+────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel
+
+──────────────────────────────────────────────────────────────────── cca-qtest ─

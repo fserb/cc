@@ -39,7 +39,11 @@
 //   field every other option goes by arrows and Enter, as a digit would be typed
 // - **several questions draw a tab row** (2.1.296), `←  ☐ Design  ☐ Storage  ✔ Submit  →`, ✔
 //   ☒ once answered (Submit's ✔ is its icon). Which tab is current is only a background colour, which `capture-pane -p`
-//   drops, so `tabs` says only which are answered; a pick moves to the next question
+//   drops, so `tabs` says only which are answered; a pick moves to the next question.
+//   `capture-pane -e` keeps it, a `48;5;N` background on the current tab (2.1.296), which
+//   tabAt() reads into `tab`. Left/Right go one tab, except with the cursor in the free-text
+//   field, where they move inside the text (Tab too): Up first leaves it. A question gone
+//   back to draws its answer as `label ✔`, read as `picked`
 // - **a dialog taller than the screen loses its top**, the `─` rule and the question's first
 //   lines with it; the pane keeps no scrollback of it. What shows is the body, with no title,
 //   and the dialog says `cut`. The question tool's input is in the transcript only once it
@@ -106,6 +110,12 @@ export function parseDialog(text) {
     to = end + 2;
   }
   if (options.length < 2) return null;
+  // an answered question gone back to: its answer is `label ✔`
+  for (const o of options) {
+    if (o.checked !== null || !/\s✔$/.test(o.label)) continue;
+    o.label = o.label.replace(/\s+✔$/, "");
+    o.picked = true;
+  }
   const below = lines.slice(to).filter((l) => l.trim());
   if (RULE.test(below.at(-1) ?? "")) below.pop();  // the bottom rule with the session's name
   if (below.length > BELOW) return null;
@@ -278,13 +288,60 @@ export function pendingAsk(sessionId, log, dir = ASK_DIR) {
   return questions;
 }
 
+// The index of the current tab in a `capture-pane -e` of a dialog with tabs: the one drawn
+// on a background colour. -1 when none is.
+export function tabAt(ansi) {
+  const line = (ansi ?? "").split("\n").find((l) => TABS.test(l.replace(/\x1b\[[\d;]*m/g, "").trim()));
+  if (!line) return -1;
+  let bg = false, k = -1;
+  for (const [, sgr, glyph] of line.matchAll(/\x1b\[([\d;]*)m|([☐✔☒])/g)) {
+    if (glyph) {
+      k++;
+      if (bg) return k;
+      continue;
+    }
+    const ps = sgr.split(";");
+    for (let j = 0; j < ps.length; j++) {
+      if (ps[j] === "48") [bg, j] = [true, j + (ps[j + 1] === "5" ? 2 : 4)];
+      else if (ps[j] === "49" || ps[j] === "0" || ps[j] === "") bg = false;
+      else if (/^4[0-7]$|^10[0-7]$/.test(ps[j])) bg = true;
+    }
+  }
+  return -1;
+}
+
+// The dialog with `tab`, the current tab, read off a coloured capture; as it was without tabs.
+export async function withTab(dialog, pane) {
+  if (!dialog?.tabs) return dialog;
+  const r = await run("tmux", "capture-pane", "-p", "-e", "-t", pane);
+  const tab = r.code === 0 ? tabAt(r.out) : -1;
+  return tab < 0 ? dialog : {...dialog, tab};
+}
+
+// Show tab `k` of the question dialog up on the instance's pane, if its tabs are still
+// `labels`: Left or Right from the current one, after an Up out of the free-text field.
+export async function goTab(inst, k, labels) {
+  if (!inst.pane) return `pid ${inst.pid} is not inside tmux`;
+  const text = await screen(inst.pane);
+  if (text === null) return `tmux: cannot capture ${inst.pane}`;
+  const dialog = await withTab(parseDialog(text), inst.pane);
+  if (!dialog?.tabs) return "no question with tabs is up";
+  if (JSON.stringify(dialog.tabs.map((t) => t.label)) !== JSON.stringify(labels)) return "the dialog changed";
+  if (!Number.isInteger(k) || k < 0 || k >= labels.length) return `no tab ${k}`;
+  if (dialog.tab === undefined) return "cannot tell which tab is up";
+  const d = k - dialog.tab;
+  if (!d) return null;
+  const out = dialog.options.find((o) => o.current)?.free ? ["Up"] : [];
+  return sendKeys(inst, [...out, ...Array(Math.abs(d)).fill(d < 0 ? "Left" : "Right")]);
+}
+
 const norm = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
 
 // The question tool's dialog with its question as written, not as the pane wrapped and cut
 // it: `ask` {header, question, multiSelect, options: [{label, description, preview}], i, of}.
 // The pane still says which question is up and how to answer. Which one is up: the one whose
 // labels the pane's numbered options start, then the one holding the pane's title, then the
-// first tab not answered. The dialog as it was when nothing matches.
+// current tab (withTab), else the first tab not answered. The dialog as it was when nothing matches.
 export function withAsk(dialog, questions) {
   if (!dialog || !questions?.length) return dialog;
   const shown = dialog.options.filter((o) => o.n !== null && !o.free);
@@ -295,7 +352,7 @@ export function withAsk(dialog, questions) {
   const title = norm(dialog.title || dialog.body.split("\n").find((l) => l.trim())).slice(0, 60);
   const byTitle = title ? cands.filter(({q}) => norm(q.question).includes(title)) : [];
   if (byTitle.length) cands = byTitle;
-  const open = dialog.tabs?.findIndex((t) => !t.done) ?? -1;
+  const open = dialog.tab ?? dialog.tabs?.findIndex((t) => !t.done) ?? -1;
   const {q, i} = cands.find((c) => c.i === open) ?? cands[0];
   const options = q.options.map((o) => ({label: String(o.label ?? ""), description: String(o.description ?? ""),
     ...o.preview && {preview: String(o.preview)}}));

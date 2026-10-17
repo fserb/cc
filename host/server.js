@@ -18,7 +18,7 @@
 
 import {byCodePoint, HOME, run} from "./sh.js";
 import {imageAt, logPath, readFrom, readPage} from "./transcript.js";
-import {parseDialog, pendingAsk, pick, screen, withAsk} from "./dialog.js";
+import {goTab, parseDialog, pendingAsk, pick, screen, withAsk, withTab} from "./dialog.js";
 import {attachSession, select, sendKeys, show, tmuxBackground, typeInto} from "./jump.js";
 import {inputBox, unqueue} from "./queue.js";
 import {close, expandDir, homeRel, paneIn, spawn} from "./spawn.js";
@@ -455,7 +455,7 @@ export class Server {
     }
     // parsed every tick, not on a new screen: the dialog draws before the record says wait
     // the question tool's text comes from askhook.sh's file, the pane says which question and how to answer
-    const parsed = inst.state === "wait" ? parseDialog(text) : null;
+    const parsed = inst.state === "wait" && inst.pane ? await withTab(parseDialog(text), inst.pane) : null;
     const dialog = parsed && withAsk(parsed, pendingAsk(inst.sessionId, path));
     const d = JSON.stringify(dialog);
     if (d !== c.dialog) {
@@ -864,7 +864,7 @@ export class Server {
       tag = host;
       path = `/api/s/${pid}/${verb}`;
     }
-    const m = path.match(/^\/api\/s\/(\d+)\/(log|img|events|type|pick|now|unqueue|screen|send|select|close|goal|draft)$/);
+    const m = path.match(/^\/api\/s\/(\d+)\/(log|img|events|type|pick|tab|now|unqueue|screen|send|select|close|goal|draft)$/);
     if (!m) return json({error: "not found"}, 404);
     const [, pidText, verb] = m, pid = Number(pidText);
     // the pid has to be a claude in the current poll: a pane whose claude exited types
@@ -892,7 +892,7 @@ export class Server {
       if (!inst.pane) return json({error: `pid ${pid} is not inside tmux`}, 409);
       const [text, input] = await Promise.all([screen(inst.pane), paneInput(inst.pane)]);
       return text === null ? json({error: "tmux: capture failed"}, 502)
-        : json({text, input, draft: this.draft(pid), dialog: inst.state === "wait" ? withAsk(parseDialog(text),
+        : json({text, input, draft: this.draft(pid), dialog: inst.state === "wait" ? withAsk(await withTab(parseDialog(text), inst.pane),
           pendingAsk(inst.sessionId, inst.sessionId && logPath(inst.cwd, inst.sessionId))) : null});
     }
     if (!post) return json({error: "not found"}, 404);
@@ -918,6 +918,11 @@ export class Server {
     if (verb === "pick") {
       if (!Array.isArray(body.labels)) return json({error: "no labels"}, 400);
       return answer(await pick(inst, Number(body.i), body.labels, body.text ?? undefined));
+    }
+    // the question tool's tab `k`, to see or change an answer before submitting
+    if (verb === "tab") {
+      if (!Array.isArray(body.labels)) return json({error: "no labels"}, 400);
+      return answer(await goTab(inst, Number(body.k), body.labels));
     }
     // Claude Code's chat:sendNow: with an empty input it stops the turn and sends the queued messages
     if (verb === "now") return answer(await sendKeys(inst, ["C-x", "C-s"]));

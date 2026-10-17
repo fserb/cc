@@ -122,6 +122,10 @@ All JSON, all under `api/`.
     POST api/s/<pid>/pick   {i, labels, text?}  option i of the dialog, refused unless its
                                            labels are still `labels`; `text` answers the
                                            question tool's free-text option (`free` on it)
+    POST api/s/<pid>/tab    {k, labels}    the question tool's tab k (the dialog's `tab` is
+                                           the current one), refused unless its tab labels
+                                           are still `labels`; an answered question shows
+                                           its answer as `picked`
     POST api/s/<pid>/now                   ctrl+x ctrl+s, Claude Code's "send now": with an
                                            empty input, stops the turn and sends the queue
                                            (`esc`, a bare Escape, went 2026-10-12: nothing
