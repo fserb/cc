@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc mocks 5: three desktop designs</title>
+<style>
+:root { --text: #1f2328; --muted: #6b7280; --line: #e5e7eb; --bub: #f1f3f5; --red: #d9100f; --cur: #fdecec; --q: #e8590c;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #e9eaed; color: var(--text); font: 15px/1.5 var(--font); }
+.pick { max-width: 1400px; margin: 0.7rem auto; padding: 0 1rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.pick button { font: inherit; font-size: 0.9rem; border: 1px solid #c5cad1; background: #fff; border-radius: 8px; padding: 0.25rem 0.8rem; cursor: pointer; }
+.pick button[aria-pressed="true"] { background: var(--text); color: #fff; border-color: var(--text); }
+.desc { max-width: 1400px; margin: 0 auto 0.6rem; padding: 0 1rem; font-size: 0.88rem; }
+.app { max-width: 1400px; height: 800px; margin: 0 auto 3rem; background: #fff; border: 1px solid #c9ccd1; border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; }
+.bar { display: flex; align-items: center; gap: 0.5rem; padding: 0 1rem; height: 46px; border-bottom: 1px solid var(--line); flex: none; }
+.bar > b { font-size: 1rem; }
+.quota { margin-left: auto; color: var(--red); font-size: 0.9rem; white-space: nowrap; }
+.body { flex: 1; display: flex; min-height: 0; }
+.scroll { overflow: auto; min-height: 0; }
+.msg { margin: 0.45rem 0; max-width: 86%; }
+.msg .meta { font-size: 0.72rem; color: var(--muted); margin: 0 0 0.12rem 0.2rem; }
+.msg .meta b { color: var(--text); }
+.msg .b { background: var(--bub); border-radius: 12px; padding: 0.45rem 0.75rem; }
+.msg.me { margin-left: auto; }
+.msg.me .meta { text-align: right; }
+.msg.me .b { background: var(--red); color: #fff; }
+.msg.me .b a { color: #fff; }
+.msg.ask .b { border-left: 4px solid var(--q); }
+.msg.agent .b { background: #fafafa; border: 1px dashed var(--line); color: var(--muted); font-size: 0.85rem; }
+a, .lk { color: var(--red); cursor: pointer; text-decoration: none; }
+a:hover, .lk:hover { text-decoration: underline; }
+.compose { display: flex; gap: 0.5rem; align-items: center; padding: 0.55rem 0.9rem 0.75rem; flex: none; border-top: 1px solid var(--line); }
+.compose .in { flex: 1; border: 2px solid var(--red); border-radius: 20px; padding: 0.4rem 0.85rem; color: var(--muted); }
+.send { background: var(--red); color: #fff; border: 0; border-radius: 20px; padding: 0.5rem 1rem; font: inherit; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #adb5bd; flex: none; }
+.dot.busy { background: #1971c2; } .dot.q { background: var(--q); } .dot.you { background: #7048e8; } .dot.ok { background: #2f9e44; } .dot.new { background: var(--red); }
+.row { display: flex; gap: 0.6rem; align-items: baseline; padding: 0.4rem 0.6rem; border-bottom: 1px solid #f3f4f6; cursor: pointer; }
+.row:hover { background: #f8f9fa; }
+.row.sel { background: var(--cur); }
+.row.unread .t b { font-weight: 700; }
+.row .t { flex: 1; min-width: 0; }
+.row .t .p { display: block; color: var(--muted); font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row time, .row .r { color: var(--muted); font-size: 0.74rem; white-space: nowrap; }
+.k { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 0.9rem 0.6rem 0.25rem; }
+.card { border: 1px solid var(--line); border-radius: 10px; padding: 0.6rem 0.75rem; background: #fff; cursor: pointer; }
+.card:hover { border-color: #aeb6c0; }
+.card.need { border-left: 4px solid var(--q); }
+.card h4 { margin: 0 0 0.2rem; font-size: 0.92rem; }
+.card .s { font-size: 0.82rem; color: var(--muted); }
+.page { border: 1px solid var(--line); border-radius: 8px; height: 100%; display: grid; place-items: center; color: var(--muted); background: repeating-linear-gradient(45deg, #fafbfc, #fafbfc 10px, #f3f5f7 10px, #f3f5f7 20px); }
+.mono { font-family: var(--mono); font-size: 0.82rem; }
+.btn { font: inherit; font-size: 0.82rem; border: 1px solid #c5cad1; background: #fff; border-radius: 6px; padding: 0.15rem 0.6rem; cursor: pointer; }
+.opts { display: flex; gap: 0.35rem; flex-wrap: wrap; margin-top: 0.4rem; }
+/* workspace */
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.crumb { display: flex; gap: 0.5rem; align-items: center; padding: 0 1rem; height: 40px; border-bottom: 1px solid var(--line); font-size: 0.88rem; flex: none; }
+.desk { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7rem; padding: 1rem; align-content: start; }
+.desk .wide { grid-column: span 3; }
+.ncol { width: 400px; border-left: 1px solid var(--line); display: flex; flex-direction: column; flex: none; }
+/* tabs */
+.tabs { display: flex; gap: 2px; padding: 6px 8px 0; background: #f1f3f5; border-bottom: 1px solid var(--line); flex: none; align-items: flex-end; }
+.tab { display: flex; gap: 0.4rem; align-items: center; padding: 0.35rem 0.75rem; border-radius: 8px 8px 0 0; font-size: 0.86rem; cursor: pointer; background: #e9ecef; max-width: 210px; white-space: nowrap; }
+.tab.on { background: #fff; box-shadow: 0 1px 0 #fff; }
+.tab .x { color: var(--muted); font-size: 0.8rem; }
+.tab.plus { background: none; font-size: 1rem; padding: 0.3rem 0.6rem; }
+.menu { position: absolute; top: 88px; z-index: 5; background: #fff; border: 1px solid #c9ccd1; border-radius: 10px; box-shadow: 0 8px 24px #0002; width: 260px; padding: 0.3rem 0; }
+.app { position: relative; }
+/* inbox */
+.folders { width: 190px; border-right: 1px solid var(--line); padding: 0.5rem 0.3rem; flex: none; }
+.folders .row { border: 0; border-radius: 6px; padding: 0.3rem 0.6rem; }
+.list { width: 400px; border-right: 1px solid var(--line); display: flex; flex-direction: column; flex: none; }
+.read { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mock { color: #a0522d; font-size: 0.72rem; }
+</style>
+</head>
+<body>
+<div class="pick" id="pick"></div>
+<p class="desc" id="desc"></p>
+<div class="app" id="app"></div>
+<script type="module">
+// Real data from Oct 17th 14:01-14:23 (nadya's transcript, blog, ccx list, tracker). "(mock)" marks the two
+// things written for the page.
+const MSG = {
+  nadya: [
+    {me: 1, at: "14:01", t: "quick project: spawn an agent to make a marx:web/spider a spider graph generator, live side by side, the controls and the result. (dribbble references, plz). I want to see gallery of potential spider graphs and some mocks too."},
+    {at: "14:02", t: "spider-a is running on marx in the new <span class=\"mono\">~/web/spider</span> repo. It will first make a gallery of spider chart styles, each from a Dribbble reference, and a few layout mocks. Then it will ask you which to build."},
+    {me: 1, at: "14:21", t: "bring back that spider agent"},
+    {at: "14:21", t: "spider-a is back on marx (pid 61522) in <span class=\"mono\">~/web/spider</span>, with its full context. Its prompt is empty and ready for you."},
+  ],
+  "spider-a": [
+    {agent: 1, at: "14:01", t: "nadya's brief: \"quick project: … a spider graph generator, live side by side… gallery and mocks first, then ask the user.\""},
+    {ask: 1, at: "14:09", t: "Gallery and mocks ready. 17 styles after Dribbble radar-chart shots: <a data-open=\"page:spider/gallery.html\">spider/gallery.html</a>; 5 layouts: <a data-open=\"page:spider/mocks.html\">spider/mocks.html</a>. Which styles and which layout should I build?"},
+    {me: 1, at: "14:13", t: "layout A, CSV input, and these 8 styles… <span class=\"mock\" style=\"color:#fff9\">(mock)</span>"},
+    {at: "14:19", t: "Done: the spider graph app is built and committed: <a data-open=\"page:spider/\">marx.gum.ts.net/spider/</a> (layout A, CSV input, the 8 styles you picked, SVG/PNG export)."},
+    {agent: 1, at: "14:21", t: "resumed by nadya (pid 61522), prompt empty"},
+  ],
+  "screenflow-a": [
+    {at: "13:43", t: "screenflow done: <a data-open=\"page:screenflow/\">marx.gum.ts.net/screenflow/</a> records takes (screen + mic, camera PiP), cuts, reorders, exports H.264+AAC 1080p; headless e2e test all ok."},
+    {agent: 1, at: "14:18", t: "to nadya: News: the user changed screenflow's design today (please update the project note's picks). The timeline gets zoom controls…"},
+  ],
+  "cc-b": [{at: "now", t: "working on assistant mocks round 5"}],
+};
+const SESS = {"spider-a": ["you", "marx:~/web/spider", "with you, prompt empty"], "screenflow-a": ["you", "marx:~/web/screenflow", "with you, bugs"], "cc-b": ["busy", "~/ai/cc/web", "working"]};
+const PKG = [["DORANA initial necklace", "Amazon · ASL", "Arriving today", "today"], ["Ecualama order #109280", "FedEx", "At local FedEx facility, Quito", "no date"], ["ROUNY handheld vacuum", "Amazon · Intelcom", "tracker error (page answered HTML)", "Oct 21"]];
+const POSTS = [["14:18", "spider", "Spider chart generator: paste CSV, pick one of 8 styles, the chart updates beside the controls; SVG/PNG export."],
+  ["14:09", "spider", "17 spider chart styles after Dribbble shots, and 5 layouts."], ["13:43", "screenflow", "screenflow records takes, cuts, reorders, exports 1080p."],
+  ["13:24", "cc", "cc's Terminal view resizes the tmux window to the page."], ["13:04", "cc", "cc's files tab can now search all of ~/nadya as you type."]];
+const PLACES = {blog: "blog", plan: "plan", projects: "projects", packages: "packages", files: "files"};
+
+const chat = (who, opts = {}) => (MSG[who] ?? []).map((m) => `<div class="msg ${m.me ? "me" : ""} ${m.ask ? "ask" : ""} ${m.agent ? "agent" : ""}"><div class="meta">${m.me ? "you" : `<b>${who}</b>`} · ${m.at}${m.ask ? " · asks you" : ""}${m.agent ? " · not to you" : ""}</div><div class="b">${m.t}${m.ask && opts.opts ? `<div class="opts"><button class="btn">write an answer…</button></div>` : ""}</div></div>`).join("");
+const box = (to) => `<div class="compose"><div class="in">Message ${to}</div><button class="send">send</button></div>`;
+const place = (k) => ({
+  blog: POSTS.map(([t, p, x]) => `<div class="row"><time>${t}</time><span class="t"><span class="r">${p}</span> ${x}</span></div>`).join(""),
+  plan: [["Sun 10:10", "online check-in AC 407 Montréal → Toronto, AC 2115 → Nassau"], ["Sun 10:15", "nadya asks: add ~/ai to the nightly backup?"], ["Sun 18:00", "WhatsApp Katrina her todo list"], ["Mon 07:30", "nadya parks the hard queue, stops marx agents"]].map(([t, x]) => `<div class="row"><time>${t}</time><span class="t">${x}</span></div>`).join(""),
+  projects: [["spider", "marx:~/web/spider", "done today"], ["screenflow", "marx:~/web/screenflow", "bugs"], ["design-a", "marx:~/web/design-a", ""], ["arcade (ps3)", "marx:~/web/arcade", ""], ["soccer", "marx:~/web/soccer", ""]].map(([n, d, x]) => `<div class="row"><span class="t"><b>${n}</b> <span class="r">${d}</span></span><span class="r">${x}</span></div>`).join(""),
+  packages: PKG.map(([n, v, s, e]) => `<div class="row"><span class="t"><span class="r">${v}</span><br><b>${n}</b><br>${s}</span><span class="r">${e}</span></div>`).join(""),
+  files: `<div style="margin:.5rem .6rem" class="compose" ><div class="in" style="border-width:1px;border-color:#c5cad1">search ~/nadya</div></div>${["agents/", "briefings/", "dream/", "ideas/", "projects/", "research/", "todo/", "user/", "nadya-log.md", "projects.md"].map((f) => `<div class="row"><span class="t mono">${f}</span></div>`).join("")}`,
+})[k];
+const pageView = (u) => `<div style="padding:1rem;flex:1;display:flex;flex-direction:column;gap:.5rem;min-height:0"><div class="sm mono">https://marx.gum.ts.net/${u}</div><div class="page">the page itself, live</div></div>`;
+const sessView = (n, o = {}) => `<div class="scroll" style="flex:1;padding:.6rem 1rem">${o.head ?? ""}${chat(n, {opts: 1})}</div>${n === "cc-b" ? "" : box(n)}`;
+const qtime = "14:09";
+
+// ---------- A. Workspace: nadya on the right, what you look at in the middle ----------
+const W = {open: "desk"};
+function workspace() {
+  const o = W.open, [kind, arg] = o.split(":");
+  const title = o === "desk" ? "desk" : kind === "s" ? arg : kind === "page" ? arg : PLACES[kind];
+  const desk = `<div class="desk scroll">
+    <div class="wide k" style="margin:0">for you</div>
+    <div class="card need" data-open="s:spider-a"><div class="s"><span class="dot q"></span> spider-a · ${qtime} · asks you</div><h4>Which styles and which layout should I build?</h4><div class="s">17 styles, 5 layouts · <span class="lk" data-open="page:spider/gallery.html">gallery</span> · <span class="lk" data-open="page:spider/mocks.html">mocks</span></div></div>
+    <div class="card" data-open="s:spider-a"><div class="s"><span class="dot ok"></span> spider-a · 14:19 · done</div><h4>Spider chart generator built</h4><div class="s"><span class="lk" data-open="page:spider/">marx.gum.ts.net/spider/</span></div></div>
+    <div class="card" data-open="s:screenflow-a"><div class="s"><span class="dot ok"></span> screenflow-a · 13:43 · done</div><h4>screenflow records, cuts, exports 1080p</h4><div class="s"><span class="lk" data-open="page:screenflow/">open it</span></div></div>
+    <div class="wide k" style="margin:.4rem 0 0">running</div>
+    ${Object.entries(SESS).map(([n, [s, d, g]]) => `<div class="card" data-open="s:${n}"><div class="s"><span class="dot ${s}"></span> ${d}</div><h4>${n}</h4><div class="s">${g}</div></div>`).join("")}
+    <div class="wide k" style="margin:.4rem 0 0">around</div>
+    <div class="card" data-open="packages"><h4>packages · 3</h4><div class="s">necklace arriving today</div></div>
+    <div class="card" data-open="blog"><h4>blog · 5 today</h4><div class="s">14:18 spider chart generator</div></div>
+    <div class="card" data-open="plan"><h4>plan</h4><div class="s">Sun 10:10 check-in AC 407</div></div>
+    <div class="card" data-open="files"><h4>files</h4><div class="s">~/nadya</div></div>
+    <div class="card" data-open="projects"><h4>projects</h4><div class="s">spider, screenflow, design-a…</div></div>
+  </div>`;
+  const main = o === "desk" ? desk : kind === "s" ? sessView(arg) : kind === "page" ? pageView(arg) : `<div class="scroll" style="flex:1">${place(kind)}</div>`;
+  return `<div class="bar"><b>nadya</b><span class="quota">77% · 2.7x · out Sun 1pm</span></div>
+    <div class="body"><div class="main"><div class="crumb"><span class="lk" data-open="desk">desk</span>${o === "desk" ? "" : ` / <b>${title}</b>`}<span style="margin-left:auto" class="r muted sm">${o === "desk" ? "click anything; nadya stays on the right" : ""}</span></div>${main}</div>
+    <div class="ncol"><div class="crumb"><b>nadya</b><span class="muted" style="font-size:.78rem">you and nadya only</span></div><div class="scroll" style="flex:1;padding:.4rem .8rem">${chat("nadya")}</div>${box("nadya")}</div></div>`;
+}
+
+// ---------- B. Tabs ----------
+const T = {tabs: ["nadya", "s:spider-a", "page:spider/"], on: "nadya", menu: false};
+function tabName(k) { const [kind, arg] = k.split(":"); return k === "nadya" ? "nadya" : kind === "s" ? arg : kind === "page" ? arg : PLACES[kind]; }
+function tabs() {
+  const dot = (k) => k === "s:spider-a" ? `<span class="dot q"></span>` : k.startsWith("s:") ? `<span class="dot you"></span>` : "";
+  const strip = T.tabs.map((k) => `<div class="tab ${T.on === k ? "on" : ""}" data-tab="${k}">${dot(k)}${tabName(k)}${k === "nadya" ? "" : ` <span class="x" data-close="${k}">✕</span>`}</div>`).join("") + `<div class="tab plus" data-menu>+</div>`;
+  const [kind, arg] = T.on.split(":");
+  const view = T.on === "nadya" ? `<div class="scroll" style="flex:1;padding:.6rem 0"><div style="max-width:760px;margin:0 auto;padding:0 1rem">${chat("nadya")}</div></div>${box("nadya")}`
+    : kind === "s" ? sessView(arg, {head: `<div class="k" style="margin:0 0 .3rem">${SESS[arg][1]} · ${SESS[arg][2]}</div>`}) : kind === "page" ? pageView(arg) : `<div class="scroll" style="flex:1">${place(kind)}</div>`;
+  const menu = T.menu ? `<div class="menu" style="left:${16 + T.tabs.length * 150}px"><div class="k" style="margin-top:.3rem">open</div>${Object.keys(PLACES).map((k) => `<div class="row" data-add="${k}"><span class="t">${k}</span>${k === "packages" ? `<span class="r">3</span>` : ""}</div>`).join("")}
+    <div class="k">sessions</div>${Object.entries(SESS).map(([n, [s]]) => `<div class="row" data-add="s:${n}"><span class="dot ${s}"></span><span class="t">${n}</span></div>`).join("")}</div>` : "";
+  return `<div class="bar"><b>cc</b><span class="muted" style="font-size:.8rem">a helper that writes to you opens a tab with a dot; links and names open tabs</span><span class="quota">77% · 2.7x · out Sun 1pm</span></div>
+    <div class="tabs">${strip}</div><div class="body"><div class="main">${view}</div></div>${menu}`;
+}
+
+// ---------- C. Inbox ----------
+const I = {folder: "inbox", sel: "q"};
+const ITEMS = [
+  {id: "q", from: "spider-a", at: "14:09", dot: "q", unread: 1, h: "asks you: which styles and which layout should I build?", p: "17 styles after Dribbble radar-chart shots, 5 layouts", s: "spider-a"},
+  {id: "n2", from: "nadya", at: "14:21", dot: "", h: "spider-a is back on marx, prompt empty", p: "with its full context, ready for you", s: "nadya"},
+  {id: "d", from: "spider-a", at: "14:19", dot: "ok", h: "done: spider graph app built and committed", p: "layout A, CSV input, 8 styles, SVG/PNG export", s: "spider-a"},
+  {id: "pk", from: "tracker", at: "today", dot: "", h: "DORANA initial necklace arriving today", p: "Amazon · ASL", s: "pk"},
+  {id: "sf", from: "screenflow-a", at: "13:43", dot: "ok", h: "done: screenflow records, cuts, exports 1080p", p: "headless e2e test all ok", s: "screenflow-a"},
+];
+function inbox() {
+  const f = I.folder;
+  const folders = [["inbox", "inbox", ITEMS.filter((x) => x.unread).length], ["nadya", "nadya", 0], ["sessions", "sessions", 3], ...Object.keys(PLACES).map((k) => [k, k, k === "packages" ? 3 : 0])]
+    .map(([k, n, c]) => `<div class="row ${f === k ? "sel" : ""}" data-folder="${k}"><span class="t">${k === "inbox" ? "<b>inbox</b>" : n}</span>${c ? `<span class="r">${c}</span>` : ""}</div>`).join("");
+  let list = "", read = "";
+  if (f === "inbox") {
+    list = ITEMS.map((x) => `<div class="row ${I.sel === x.id ? "sel" : ""} ${x.unread ? "unread" : ""}" data-sel="${x.id}"><span class="dot ${x.dot}"></span><span class="t"><b>${x.from}</b> · ${x.h}<span class="p">${x.p}</span></span><time>${x.at}</time></div>`).join("") + `<div class="k">archived items: one click away</div>`;
+    const x = ITEMS.find((y) => y.id === I.sel);
+    read = x.s === "pk" ? `<div class="scroll" style="flex:1">${place("packages")}</div>` : `<div class="crumb"><b>${x.from}</b><span class="muted" style="font-size:.78rem">${SESS[x.from]?.[1] ?? "the coordinator"}</span><span style="margin-left:auto;display:flex;gap:.4rem"><button class="btn">archive</button>${SESS[x.from] ? `<button class="btn">terminal</button>` : ""}</span></div>${sessView(x.s)}`;
+  } else if (f === "nadya") { read = sessView("nadya"); }
+  else if (f === "sessions") { list = Object.entries(SESS).map(([n, [s, d, g]]) => `<div class="row ${I.sel === n ? "sel" : ""}" data-sel="${n}"><span class="dot ${s}"></span><span class="t"><b>${n}</b><span class="p">${d} · ${g}</span></span></div>`).join(""); read = SESS[I.sel] ? sessView(I.sel) : `<div class="page" style="margin:1rem">pick one</div>`; }
+  else read = `<div class="scroll" style="flex:1">${place(f)}</div>`;
+  return `<div class="bar"><b>cc</b><button class="btn" data-folder="nadya" style="margin-left:1rem">write to nadya</button><span class="quota">77% · 2.7x · out Sun 1pm</span></div>
+    <div class="body"><div class="folders">${folders}</div>${list ? `<div class="list scroll">${list}</div>` : ""}<div class="read">${read}</div></div>`;
+}
+
+const D = {
+  ws: {n: "A. Workspace", r: workspace, d: "nadya's chat is always the right column, and only you and nadya talk there. The middle shows what you are looking at: the desk (what is for you, what runs, packages, blog), a helper's chat, a page, a list. A helper that writes to you is a card under \"for you\" on the desk; click it and its chat opens in the middle, beside nadya."},
+  tabs: {n: "B. Tabs", r: tabs, d: "Like a browser. nadya's chat is the first tab and cannot close. Everything else opens as a tab: a helper (from + or by writing to you: spider-a's tab has an orange dot because it asks), a page from a link, packages, files. Close what you are done with."},
+  inbox: {n: "C. Inbox", r: inbox, d: "Like mail. Everything addressed to you is a row in the inbox: a helper's question or done, nadya's replies, the tracker. Open one: on the right is the conversation with that sender, and your answer goes to it. Archive when done. nadya's whole chat, the sessions and the other views are folders."},
+};
+let cur = "ws";
+function draw() {
+  document.getElementById("pick").innerHTML = `<b style="margin-right:.5rem">cc mocks 5, desktop:</b>${Object.entries(D).map(([k, v]) => `<button data-d="${k}" aria-pressed="${k === cur}">${v.n}</button>`).join("")}<span class="mock" style="margin-left:auto">click inside each one</span>`;
+  document.getElementById("desc").textContent = D[cur].d;
+  document.getElementById("app").innerHTML = D[cur].r();
+}
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-d],[data-open],[data-tab],[data-close],[data-menu],[data-add],[data-folder],[data-sel]");
+  if (!t) { if (T.menu) { T.menu = false; draw(); } return; }
+  const ds = t.dataset;
+  if (ds.d) cur = ds.d;
+  if (ds.open) {
+    if (cur === "ws") W.open = ds.open;
+    if (cur === "tabs") { if (!T.tabs.includes(ds.open)) T.tabs.push(ds.open); T.on = ds.open; }
+    if (cur === "inbox" && ds.open.startsWith("page:")) { /* links open the page in a new browser tab */ }
+  }
+  if (ds.close) { T.tabs = T.tabs.filter((k) => k !== ds.close); if (T.on === ds.close) T.on = "nadya"; e.stopPropagation(); }
+  else if (ds.tab) T.on = ds.tab;
+  T.menu = ds.menu !== undefined ? !T.menu : false;
+  if (ds.add) { if (!T.tabs.includes(ds.add)) T.tabs.push(ds.add); T.on = ds.add; }
+  if (ds.folder) { I.folder = ds.folder; I.sel = ds.folder === "inbox" ? "q" : ds.folder === "sessions" ? "spider-a" : ""; }
+  if (ds.sel) { I.sel = ds.sel; const it = ITEMS.find((x) => x.id === ds.sel); if (it) it.unread = 0; }
+  draw();
+});
+draw();
+</script>
+</body>
+</html>
