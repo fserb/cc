@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc mock 4: one chat, desktop</title>
+<style>
+:root { --text: #1f2328; --muted: #6b7280; --line: #e5e7eb; --bub: #f1f3f5; --red: #d9100f; --helper: #0c8599; --cur: #fdecec;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #e9eaed; color: var(--text); font: 15px/1.5 var(--font); }
+.note { max-width: 1400px; margin: 0.8rem auto; padding: 0 1rem; font-size: 0.85rem; }
+.app { max-width: 1400px; height: 820px; margin: 0 auto; background: #fff; border: 1px solid #c9ccd1; border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; }
+header { display: flex; align-items: center; gap: 0.2rem; padding: 0 1.2rem; height: 48px; border-bottom: 1px solid var(--line); flex: none; }
+header > b { font-size: 1.05rem; margin-right: 1rem; }
+header nav button { font: inherit; font-size: 0.92rem; border: 0; background: none; padding: 0.25rem 0.6rem; border-radius: 6px; cursor: pointer; color: var(--text); }
+header nav button:hover { background: #f3f4f6; }
+header nav button[aria-pressed="true"] { background: var(--cur); color: var(--red); }
+header nav small { color: var(--muted); font-size: 0.78rem; }
+.quota { margin-left: auto; display: flex; gap: 0.6rem; align-items: center; color: var(--red); font-size: 0.95rem; }
+.quota i { display: inline-block; width: 84px; height: 6px; background: #eee; border-radius: 3px; position: relative; }
+.quota i::before { content: ""; position: absolute; inset: 0 23% 0 0; background: var(--red); border-radius: 3px; }
+.body { flex: 1; display: flex; min-height: 0; }
+.chat { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.thread { flex: 1; overflow: auto; padding: 1rem 0; }
+.col { max-width: 720px; margin: 0 auto; padding: 0 1rem; }
+.msg { margin: 0.5rem 0; max-width: 88%; }
+.msg .meta { font-size: 0.72rem; color: var(--muted); margin: 0 0 0.15rem 0.2rem; display: flex; gap: 0.4rem; align-items: baseline; }
+.msg .meta b { color: var(--text); font-weight: 600; cursor: pointer; }
+.msg .b { background: var(--bub); border-radius: 12px; padding: 0.5rem 0.8rem; }
+.msg.me { margin-left: auto; text-align: left; }
+.msg.me .meta { justify-content: flex-end; }
+.msg.me .b { background: var(--red); color: #fff; }
+.msg.me .b a { color: #fff; }
+.msg.h .b { background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--helper); border-radius: 4px 12px 12px 4px; }
+.msg.h .meta b { color: var(--helper); }
+.msg.h.ask .b { border-left-color: #e8590c; }
+.acts { display: flex; gap: 0.8rem; font-size: 0.78rem; margin-top: 0.3rem; }
+.acts span, .lk { color: var(--red); cursor: pointer; }
+a { color: var(--red); }
+.to { display: inline-block; font-size: 0.7rem; background: #fff3; border-radius: 4px; padding: 0 0.3rem; margin-bottom: 0.15rem; }
+.fold { font-size: 0.8rem; color: var(--muted); margin: 0.4rem 0 0.4rem 0.2rem; cursor: pointer; }
+.fold .x { display: none; background: #fafafa; border: 1px solid var(--line); border-radius: 8px; padding: 0.4rem 0.6rem; margin-top: 0.25rem; color: var(--text); }
+.fold.open .x { display: block; }
+.post { border: 1px solid var(--line); border-radius: 8px; padding: 0.4rem 0.6rem; margin-top: 0.4rem; font-size: 0.85rem; background: #fff; color: var(--text); display: flex; gap: 0.6rem; align-items: center; }
+.post .img { width: 72px; height: 44px; border-radius: 4px; background: repeating-linear-gradient(45deg, #eef1f4, #eef1f4 6px, #e3e7eb 6px, #e3e7eb 12px); flex: none; }
+.chip { display: inline-flex; gap: 0.3rem; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 0 0.55rem; font-size: 0.78rem; background: #fff; cursor: pointer; color: var(--text); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #adb5bd; flex: none; }
+.dot.busy { background: #1971c2; } .dot.wait { background: #e8590c; } .dot.you { background: #7048e8; } .dot.ok { background: #2f9e44; }
+.status { display: flex; gap: 0.5rem; flex-wrap: wrap; padding: 0.35rem 1.2rem; border-top: 1px solid var(--line); font-size: 0.8rem; color: var(--muted); align-items: center; flex: none; }
+.compose { display: flex; gap: 0.6rem; align-items: center; padding: 0.6rem 1.2rem 0.8rem; flex: none; }
+.compose .in { flex: 1; display: flex; align-items: center; gap: 0.5rem; border: 2px solid var(--red); border-radius: 22px; padding: 0.45rem 0.9rem; }
+.compose .in.hlp { border-color: var(--helper); }
+.compose .in span { flex: 1; color: var(--muted); }
+.compose .in span.tag { flex: none; color: #fff; background: var(--helper); border-radius: 6px; padding: 0 0.4rem; font-size: 0.8rem; cursor: pointer; }
+.send { background: var(--red); color: #fff; border: 0; border-radius: 22px; padding: 0.55rem 1.1rem; font: inherit; }
+.in.hlp + .send { background: var(--helper); }
+.side { width: 44%; border-left: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
+.side .sh { display: flex; align-items: center; gap: 0.5rem; padding: 0 1rem; height: 44px; border-bottom: 1px solid var(--line); flex: none; }
+.side .sh b { font-size: 0.95rem; }
+.side .sh .x { margin-left: auto; cursor: pointer; color: var(--muted); font-size: 1.1rem; }
+.side .sb { flex: 1; overflow: auto; padding: 0.6rem 1rem; font-size: 0.88rem; }
+.row { display: flex; gap: 0.6rem; align-items: baseline; padding: 0.35rem 0.3rem; border-bottom: 1px solid #f3f4f6; }
+.row .t { flex: 1; min-width: 0; }
+.row time, .row .r { color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
+.row.click { cursor: pointer; } .row.click:hover { background: #f8f9fa; }
+.k { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 0.7rem 0 0.2rem; }
+.search { border: 1px solid #c5cad1; border-radius: 8px; padding: 0.35rem 0.6rem; color: var(--muted); margin-bottom: 0.4rem; }
+.mono { font-family: var(--mono); font-size: 0.8rem; }
+.mock { color: #a0522d; font-size: 0.72rem; }
+.choices { max-width: 1400px; margin: 1rem auto 3rem; padding: 0 1rem; font-size: 0.88rem; }
+.choices ol { padding-left: 1.3rem; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem 0.8rem 0.6rem 2rem; }
+.choices li { margin: 0.25rem 0; }
+.choices .alt { color: var(--muted); }
+</style>
+</head>
+<body>
+<p class="note"><b>cc mock 4, one chat, desktop.</b> Click the names in the header, the helper names, "reply", the grey lines and the status line. Messages are today's 14:01-14:23, real text. <a href="assistant3.html">round 3</a></p>
+<div class="app" id="app"></div>
+<section class="choices"><ol>
+  <li>A helper writes to you in its own voice, in nadya's thread, with its name and a teal edge. nadya does not repeat it. <span class="alt">Today: nadya rewrites it (14:10 and 14:19 were nadya repeating spider-a).</span></li>
+  <li>"reply" under a helper's message sends your next message to that helper, not to nadya; the box turns teal and says who. nadya's log gets a copy. <span class="alt">Other way: you always talk to nadya, who passes it on.</span></li>
+  <li>What a helper tells nadya, not you (screenflow-a's note about the project file), is one grey line; click to read it.</li>
+  <li>The views are names in the header and open on the right, beside the chat, which always stays. Click the name again to close. <span class="alt">Today: a sidebar, and each view replaces the chat.</span></li>
+  <li>Sessions: their names and states sit in the status line over the box; clicking one opens its chat on the right, where you can also type to it.</li>
+  <li>The hourly check is not a message: it changes the quota in the header. <span class="alt">Today: a 14:23 message.</span></li>
+</ol></section>
+<script type="module">
+const PKG = [["DORANA initial necklace", "Amazon · ASL", "Arriving today", "today"], ["Ecualama order #109280", "FedEx", "At local FedEx facility, Quito", "no date"], ["ROUNY handheld vacuum", "Amazon · Intelcom", "tracker error (page answered HTML)", "Oct 21"]];
+const POSTS = [["14:18", "spider", "spider-a", "Spider chart generator: paste CSV, pick one of 8 styles, the chart updates beside the controls; SVG/PNG export."],
+  ["14:09", "spider", "spider-a", "17 spider chart styles after Dribbble shots, and 5 layouts with controls beside the chart."],
+  ["13:43", "screenflow", "screenflow-a", "screenflow records takes (screen + mic, camera PiP), cuts, reorders, exports 1080p."],
+  ["13:24", "cc", "cc-a", "cc's Terminal view resizes the tmux window to the page."],
+  ["13:04", "cc", "cc-a", "cc's files tab can now search all of ~/nadya as you type, with no index."]];
+const SESS = [["spider-a", "you", "marx:~/web/spider", "back for changes, prompt empty", "61522"], ["screenflow-a", "you", "marx:~/web/screenflow", "bugs, with you", "50272"], ["cc-b", "busy", "~/ai/cc/web", "assistant mocks round 4", "141697"], ["nadya", "ok", "~/nadya", "coordinator", "22715"]];
+const S = {view: "", to: "", open: {}};
+
+const msg = (who, at, html, o = {}) => `<div class="msg ${o.me ? "me" : ""} ${o.h ? "h" : ""} ${o.ask ? "ask" : ""}">
+  <div class="meta">${o.me ? "" : `<b ${o.h ? `data-sess="${who}"` : ""}>${who}</b>`}<span>${at}</span>${o.tag ? `<span>${o.tag}</span>` : ""}</div>
+  <div class="b">${html}</div>${o.h ? `<div class="acts"><span data-reply="${who}">reply to ${who}</span><span data-sess="${who}">open its chat</span></div>` : ""}</div>`;
+const fold = (id, line, body) => `<div class="fold ${S.open[id] ? "open" : ""}" data-fold="${id}">▸ ${line}<div class="x">${body}</div></div>`;
+const post = (t, x) => `<div class="post" data-view="blog"><span class="img"></span><span><span class="mock" style="color:var(--muted)">post · ${t}</span><br>${x}</span></div>`;
+
+function thread() {
+  return `<div class="col">
+    ${msg("you", "14:01", "quick project: spawn an agent to make a marx:web/spider a spider graph generator, live side by side, the controls and the result. (dribbble references, plz). I want to see gallery of potential spider graphs and some mocks too.", {me: 1})}
+    ${msg("nadya", "14:02", `spider-a is running on marx in the new <span class="mono">~/web/spider</span> repo. It will first make a gallery of spider chart styles, each from a Dribbble reference, and a few layout mocks. Then it will ask you which to build. <div style="margin-top:.35rem"><span class="chip" data-sess="spider-a"><span class="dot busy"></span>spider-a · started 14:02</span></div>`)}
+    ${msg("spider-a", "14:09", `Gallery and mocks ready. 17 styles after Dribbble radar-chart shots: <a>spider/gallery.html</a>; 5 layouts: <a>spider/mocks.html</a>. Which styles and which layout should I build?${post("14:09", "17 spider chart styles after Dribbble shots…")}`, {h: 1, ask: 1, tag: "asks you"})}
+    ${msg("you", "14:13", `<span class="to">to spider-a</span><br>layout A, CSV input, and these 8 styles… <span class="mock" style="color:#fff9">(your pick, made in spider-a's pane)</span>`, {me: 1})}
+    ${fold("sf", "screenflow-a → nadya, 14:18: project note update", "[screenflow-a] News: the user changed screenflow's design today (please update the project note's picks). The timeline gets zoom controls (slider, -/=, fit, no auto zoom). Clips are free on one magnetic track… <br><span class=\"muted\" style=\"color:var(--muted)\">nadya updated projects/screenflow.md.</span>")}
+    ${msg("spider-a", "14:19", `Done: the spider graph app is built and committed: <a>marx.gum.ts.net/spider/</a> (layout A, CSV input, the 8 styles you picked, SVG/PNG export).${post("14:18", "Spider chart generator: paste CSV, pick one of 8 styles…")}`, {h: 1, tag: "done · closed 14:19"})}
+    ${msg("you", "14:21", "bring back that spider agent", {me: 1})}
+    ${msg("nadya", "14:21", `spider-a is back on marx (pid 61522) in <span class="mono">~/web/spider</span>, with its full context. Its prompt is empty and ready for you. <div style="margin-top:.35rem"><span class="chip" data-sess="spider-a"><span class="dot you"></span>spider-a · with you</span> <span class="chip" data-reply="spider-a">write to it</span></div>`)}
+    ${fold("hr", "nadya, 14:23: hourly check, nothing for you (the quota in the header changed)", "Hourly check: the weekly quota is at 77%. The pace line plus 5 is at about 77.3% right now, so we're on it. At the last 3 hours' rate (2.7x), the quota runs out around Sunday 1 PM…")}
+  </div>`;
+}
+
+const VIEWS = {
+  blog: ["blog", () => POSTS.map(([t, p, w, x]) => `<div class="row"><time>${t}</time><span class="t"><span class="r">${p} · ${w}</span><br>${x}</span></div>`).join("") + `<div class="k">earlier</div><div class="row click"><span class="t">archive by day</span></div>`],
+  plan: ["plan", () => `<div class="k">reminders</div>${[["Sun 10:10", "you", "online check-in AC 407 Montréal 10:10 → Toronto, AC 2115 → Nassau"], ["Sun 10:15", "nadya", "ask: add ~/ai to the nightly backup?"], ["Sun 18:00", "you", "WhatsApp Katrina her todo list"], ["Mon 07:30", "nadya", "park the hard queue, pause RBC sync, stop marx agents"]]
+    .map(([t, w, x]) => `<div class="row"><time>${t}</time><span class="t">${x}</span><span class="r">${w}</span></div>`).join("")}<div class="k">todo</div><div class="row"><span class="t">todo/todo.md</span></div>`],
+  projects: ["projects", () => [["spider", "marx:~/web/spider", "done today"], ["screenflow", "marx:~/web/screenflow", "bugs, with you"], ["design-a", "marx:~/web/design-a", "60 episodes play"], ["arcade (ps3)", "marx:~/web/arcade", "LBP stopped"], ["soccer", "marx:~/web/soccer", ""], ["gene", "marx:~/web/gene", ""]]
+    .map(([n, d, x]) => `<div class="row click"><span class="t"><b>${n}</b> <span class="r">${d}</span></span><span class="r">${x}</span></div>`).join("")],
+  packages: ["packages", () => PKG.map(([n, v, s, e]) => `<div class="row"><span class="t"><span class="r">${v}</span><br><b>${n}</b><br>${s}</span><span class="r">${e}</span></div>`).join("")],
+  files: ["files", () => `<div class="search">search ~/nadya</div>${["agents/", "briefings/", "dream/", "ideas/", "projects/", "research/", "todo/", "user/", "nadya-log.md", "projects.md"].map((f) => `<div class="row click"><span class="t mono">${f}</span></div>`).join("")}`],
+  sessions: ["sessions", () => SESS.map(([n, s, d, g, p]) => `<div class="row click" data-sess="${n}"><span class="dot ${s}"></span><span class="t"><b>${n}</b> <span class="r">${d}</span><br>${g}</span><span class="r">${p}</span></div>`).join("") + `<div class="k">closed today</div><div class="row"><span class="t">cc-a ×5, cc-c, cc-d, design-a-a, design-a-b, nadya-a, nadya-b, shopping-a…</span></div>`],
+};
+const SESSVIEW = {
+  "spider-a": `<div class="k">its chat · marx:~/web/spider · with you</div>
+    <div class="msg"><div class="meta"><b>nadya</b><span>14:01 · its brief</span></div><div class="b">quick project: … a spider graph generator, live side by side… gallery and mocks first, then ask the user.</div></div>
+    <div class="msg"><div class="meta"><b>spider-a</b><span>14:09</span></div><div class="b">Gallery and mocks ready… Which styles and layout?</div></div>
+    <div class="msg me"><div class="meta"><span>14:13</span></div><div class="b">layout A, CSV input, these 8 styles…</div></div>
+    <div class="msg"><div class="meta"><b>spider-a</b><span>14:19</span></div><div class="b">Built and committed: marx.gum.ts.net/spider/</div></div>
+    <div class="k">tool calls, files, terminal</div><div class="row click"><span class="t">open the terminal (its tmux pane)</span></div>`,
+  "screenflow-a": `<div class="k">its chat · marx:~/web/screenflow · with you</div><div class="msg"><div class="meta"><b>screenflow-a</b><span>13:43</span></div><div class="b">screenflow done: records takes, cuts, reorders, exports H.264+AAC 1080p; headless e2e test all ok.</div></div><div class="msg me"><div class="meta"><span>13:50</span></div><div class="b">when crew… <span class="mock" style="color:#fff9">(draft in its box)</span></div></div>`,
+  "cc-b": `<div class="k">its chat · ~/ai/cc/web · working</div><div class="msg"><div class="meta"><b>cc-b</b><span>now</span></div><div class="b">building assistant4.html</div></div>`,
+  nadya: `<div class="k">this is the main chat</div>`,
+};
+
+function draw() {
+  const v = S.view, sess = v.startsWith("s:") ? v.slice(2) : "";
+  const nav = Object.entries(VIEWS).map(([k, [n]]) => `<button data-view="${k}" aria-pressed="${v === k || (k === "sessions" && sess)}">${n}${k === "packages" ? " <small>3</small>" : k === "sessions" ? " <small>3</small>" : ""}</button>`).join("");
+  const side = v ? `<aside class="side"><div class="sh"><b>${sess ? sess : VIEWS[v][0]}</b>${sess ? `<span class="chip" data-view="sessions">all sessions</span>` : ""}<span class="x" data-view="">✕</span></div><div class="sb">${sess ? SESSVIEW[sess] : VIEWS[v][1]()}</div>
+    ${sess && sess !== "nadya" ? `<div class="compose" style="padding:.5rem .8rem"><div class="in hlp"><span>to ${sess}…</span></div><button class="send">send</button></div>` : ""}</aside>` : "";
+  const status = `<div class="status">${SESS.slice(0, 3).map(([n, s, , g]) => `<span class="chip" data-sess="${n}"><span class="dot ${s}"></span>${n}<span style="color:var(--muted)">${s === "you" ? "with you" : "working"}</span></span>`).join("")}
+    <span class="chip" data-view="packages">📦 necklace arriving today</span></div>`;
+  const compose = `<div class="compose"><div class="in ${S.to ? "hlp" : ""}">${S.to ? `<span class="tag" data-reply="">to ${S.to} ×</span><span>message ${S.to}…</span>` : `<span>Message nadya</span>`}</div><button class="send">send</button></div>`;
+  const app = document.getElementById("app"), top = app.querySelector(".thread")?.scrollTop;
+  app.innerHTML = `<header><b>nadya</b><nav>${nav}</nav><span class="quota">Sun 1pm <i></i> 77% · 2.7x ↑</span></header>
+    <div class="body"><div class="chat"><div class="thread">${thread()}</div>${status}${compose}</div>${side}</div>`;
+  if (top != null) app.querySelector(".thread").scrollTop = top;
+}
+document.getElementById("app").addEventListener("click", (e) => {
+  const t = e.target.closest("[data-view],[data-sess],[data-reply],[data-fold]");
+  if (!t) return;
+  const {view, sess, reply, fold} = t.dataset;
+  if (view !== undefined) S.view = S.view === view ? "" : view;
+  if (sess) S.view = S.view === `s:${sess}` ? "" : `s:${sess}`;
+  if (reply !== undefined) S.to = reply;
+  if (fold) S.open[fold] = !S.open[fold];
+  draw();
+});
+draw();
+</script>
+</body>
+</html>
