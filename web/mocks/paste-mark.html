@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>paste mark: one-colour options for 🖼</title>
+<style>
+  /* option F: a 728-byte font with one glyph, for U+1F5BC only (unicode-range), so the text keeps 🖼 */
+  @font-face { font-family: ccpic; src: url(data:font/ttf;base64,AAEAAAAKAIAAAwAgT1MvMkTfRvcAAAEoAAAAYGNtYXAAHuwrAAABkAAAAFBnbHlmJTJSywAAAegAAABoaGVhZDCN+ZQAAACsAAAANmhoZWEG9gNLAAAA5AAAACRobXR4BXgAPAAAAYgAAAAIbG9jYQA0AAAAAAHgAAAABm1heHAABwAfAAABCAAAACBuYW1lOgtG1AAAAlAAAABacG9zdGppA3AAAAKsAAAAKgABAAAAAQAADeEAlV8PPPUAAwPoAAAAAOb5WyQAAAAA5vlbJAA8/8QDSAKoAAAAAwACAAAAAAAAAAEAAANw/4gAAAOEADwAPANIAAEAAAAAAAAAAAAAAAAAAAACAAEAAAACAB0ABAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAwK8AZAABQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAPz8/PwAA/////wNw/4gAAANwAHgAAAAAAAAAAAAAAAAAAAAgAAAB9AAAA4QAPAAAAAMAAAADAAAAHAADAAEAAAAcAAMACgAAADQABAAYAAAAAgACAAAAAP//AAD//wABAAAADAAAAAAAHAAAAAAAAAABAAH1vAAB9bwAAAABAAAAAAA0AAAABAA8/8QDSAKoAAMABwAMABwAABcRIRElIREhExMXNxcDDwMvAz8DHwI8Awz9OgKA/YAoyGRaqjoFDRQYGBQNBQUNFBgYFA08AuT9HEYCWP3QARiCZPoBrhgUDQUFDRQYGBQNBQUNFAAAAAQANgABAAAAAAABAAUAAAABAAAAAAACAAcABQADAAEECQABAAoADAADAAEECQACAA4AFmNjcGljUmVndWxhcgBjAGMAcABpAGMAUgBlAGcAdQBsAGEAcgAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAQIDcGljAAA=) format("truetype"); unicode-range: U+1F5BC; }
+  :root { --text: #212529; --muted: #6c757d; --line: #e9ecef; --accent: #0b7bd3; --on-accent: #fff; --bubble: #f3f4f6; --good: #2f9e44; --bad: #d63939;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 var(--font); color: var(--text); background: #fff; }
+  header, main { max-width: 64rem; margin: 0 auto; padding: 1rem 1.2rem 0; }
+  h1 { font-size: 1.2rem; margin: 0; } header p, .note { color: var(--muted); font-size: 0.88rem; margin: 0.3rem 0 0; }
+  h2 { font-size: 1rem; margin: 1.6rem 0 0.4rem; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+  th, td { border-bottom: 1px solid var(--line); padding: 0.35rem 0.5rem; text-align: left; vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  td.g { font-size: 1.4rem; line-height: 1; white-space: nowrap; }
+  .y { color: var(--good); } .n { color: var(--bad); } .q { color: var(--muted); }
+  .opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: 1rem; }
+  .opt { border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem 0.8rem 0.8rem; }
+  .opt h3 { font-size: 0.9rem; margin: 0 0 0.4rem; font-weight: 600; } .opt h3 code { font-weight: 400; color: var(--muted); }
+  .opt.pick { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  textarea { width: 100%; font: inherit; line-height: 1.4; border: 1px solid var(--line); border-radius: 1.3rem; padding: 0.55rem 1rem; resize: none; height: 2.6rem; overflow: hidden; }
+  .m { margin: 0.5rem 0 0 auto; width: fit-content; max-width: 90%; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--accent); color: var(--on-accent); }
+  .mono { font-family: var(--mono); font-size: 0.85rem; margin-top: 0.4rem; white-space: pre; color: var(--muted); }
+  .opt.f textarea, .opt.f .m { font-family: ccpic, var(--font); } .opt.f .mono { font-family: ccpic, var(--mono); }
+  .live { font-size: 0.78rem; color: var(--muted); margin-top: 0.4rem; }
+  #ua { font-family: var(--mono); font-size: 0.75rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>paste mark: a one-colour stand-in for 🖼</h1>
+  <p>Today a pasted image is 🖼 (U+1F5BC) in the say box and in the chat log. It draws in colour, from Apple Color Emoji on the Mac and Noto Color Emoji on Android, and in the blue bubble it is the one thing that is not white.
+  cchost replaces each mark with the image's path (host/jump.js <code>IMAGE</code>; typed.js and queue.js match it too), so the mark has to be one fixed character, or one fixed sequence, that people do not type.</p>
+  <p>The "this browser" lines are measured when the page loads: each mark is drawn on a canvas in cc's font, and the page checks for coloured pixels and for the missing-glyph box. Open the page in Arc and on the phone to get those two answers. <span id="ua"></span></p>
+</header>
+<main>
+  <h2>Options</h2>
+  <div class="opts" id="opts"></div>
+
+  <h2>Findings</h2>
+  <table>
+    <thead><tr><th></th><th>mark</th><th>Linux Chrome 1-colour<br>(measured, nadya)</th><th>macOS Arc</th><th>Android Chrome / TWA</th><th>width, cc font / mono</th><th>typed by accident</th><th>code change</th></tr></thead>
+    <tbody id="tab"></tbody>
+  </table>
+  <p class="note">Linux column: headless Chrome on nadya with Noto fonts, measured with this page's probe. macOS and Android columns: from what each font covers (sources at the bottom), not measured; the probe line on each card answers it for the browser you open the page in.
+  Width: advance in em in cc's font, and in cells of the mono font (1 = one "0"). cc shows the mark in the textarea and in bubbles, both in cc's font; the terminal view shows Claude Code's own <code>[Image #N]</code>, not the mark, so the mono width matters only if a mark is ever drawn in mono.</p>
+
+  <h2>Pick: F, the same 🖼 drawn by a one-glyph font</h2>
+  <p>Keep U+1F5BC as the stored character and draw it with a 728-byte font (inline in the CSS, base64) whose only glyph is an outline picture frame, mapped by <code>unicode-range: U+1F5BC</code>, put first in the textarea's and the chat's <code>font-family</code>. It takes the text colour (white in the blue bubble), looks the same on every browser because the glyph comes with the page, and changes no code: the say box, cchost, typed.js, queue.js, old drafts and logs all keep 🖼. A copy out of the box still gives 🖼, which reads right anywhere else.</p>
+  <p>Its costs: the glyph is my drawing (it can be redrawn: it is a few polygons in a 40-line fontTools script); and a 🖼 a person types or an agent writes in a reply shows as the outline frame too, which is arguably right.</p>
+  <p>If a new font is not wanted, the best plain character is <b>⎙</b> (U+2399, print screen symbol): one UTF-16 unit, never an emoji on any platform, rarely typed. But it reads as "print", not "picture", it needs the character changed in index.html and three cchost files plus a reader for old 🖼 drafts, and on Android it depends on a symbol font I could not check. <b>🖼︎</b> (with U+FE0E) is the weakest: two code points to split on, a caret can land between them, and on the Mac and Android no text font has U+1F5BC, so Chrome draws it in colour anyway.</p>
+
+  <h2>Sources</h2>
+  <ul class="note">
+    <li>U+1F5BC is <code>Emoji=Yes, Emoji_Presentation=No</code>, so it defaults to text, but a browser draws it from whatever font has it: <a href="https://www.unicode.org/Public/UCD/latest/ucd/emoji/emoji-data.txt">emoji-data.txt</a>. U+FE0E only asks for text; Chrome falls back to the colour font when no other font has the glyph: <a href="https://unicode.org/reports/tr51/#Emoji_Variation_Sequences">UTS #51 §1.4.3</a>.</li>
+    <li>📎 U+1F4CE is <code>Emoji_Presentation=Yes</code> and has no standard text variation sequence in <a href="https://www.unicode.org/Public/UCD/latest/ucd/emoji/emoji-variation-sequences.txt">emoji-variation-sequences.txt</a>, so U+FE0E after it is not a defined sequence.</li>
+    <li>Font coverage on nadya: <code>fc-list ":charset=1f5bc"</code> lists Noto Color Emoji and Noto Sans Symbols 2 only. Android ships Noto Color Emoji and subsets of Noto Sans Symbols; which of the 1F5xx pictographs those subsets keep I could not confirm, hence "?".</li>
+    <li><code>unicode-range</code> font override: <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/@font-face/unicode-range">MDN</a>; supported in every Chromium.</li>
+  </ul>
+</main>
+<script type="module">
+// [glyph, name, code points, 1-colour on Linux (filled in from the probe on nadya), macOS, Android, accident risk, code change]
+const OPTS = [
+  ["\u{1F5BC}", "today", "U+1F5BC", "yes: Noto Sans Symbols 2 has U+1F5BC, so Linux is the one place today is already one colour", "no: Apple Color Emoji", "no: Noto Color Emoji", "low: emoji keyboard only", "none"],
+  ["\u{1F5BC}︎", "A: 🖼 + text selector", "U+1F5BC U+FE0E", "yes", "no, expected: no text font on macOS has U+1F5BC, so colour", "?: only if the Symbols subset has U+1F5BC", "low", "IMAGE becomes a 2-code-point sequence in index.html and cchost; a lone 🖼 or FE0E left by an edit must still count; old drafts hold the bare 🖼"],
+  ["⎙", "B: print screen", "U+2399", "yes", "yes, expected (Apple Symbols)", "?, expected (Noto Sans Symbols)", "very low", "change one constant in index.html, jump.js, typed.js; read old 🖼 too"],
+  ["▣", "C: square in square", "U+25A3", "yes", "yes (Menlo, Apple Symbols)", "yes, expected", "medium: TUI and list bullets", "same as B"],
+  ["◫", "D: split square", "U+25EB", "yes", "yes, expected", "yes, expected", "low", "same as B"],
+  ["⧉", "E: two joined squares", "U+29C9", "yes", "yes, expected (STIX Two Math)", "yes, expected (Noto Sans Math)", "medium: Claude Code's IDE line \"⧉ Selected N lines\"", "same as B"],
+  ["\u{1F5BC}", "F: 🖼 in a one-glyph font", "U+1F5BC + @font-face", "yes (the page's glyph)", "yes: the glyph comes with the page", "yes: the glyph comes with the page", "low: emoji keyboard only", "none in JS or cchost; 3 lines of CSS"],
+  ["⊡", "G: squared dot", "U+22A1", "yes", "yes, expected", "yes, expected", "low: maths", "same as B"],
+  ["❏", "H: shadowed square", "U+274F", "yes", "yes, expected", "?", "low: Word bullets", "same as B"],
+  ["⬚", "I: dotted square", "U+2B1A", "yes", "yes, expected", "yes, expected", "very low", "same as B"],
+  ["\u{1F5BB}", "J: document with picture", "U+1F5BB", "yes (Noto Sans Symbols 2)", "?: few fonts have it", "?", "very low", "same as B, plus a surrogate pair like today"],
+  ["\u{1F4CE}︎", "K: paperclip + text selector", "U+1F4CE U+FE0E", "no: Noto Color Emoji", "no: not a defined text sequence", "no", "low", "same as A"],
+  ["⛰︎", "L: mountain + text selector", "U+26F0 U+FE0E", "yes", "?", "?, expected yes (Noto Sans Symbols has it)", "low", "same as A"],
+];
+
+const off = new OffscreenCanvas(80, 80), ctx = off.getContext("2d", {willReadFrequently: true});
+const css = getComputedStyle(document.documentElement), FONT = css.getPropertyValue("--font"), MONO = css.getPropertyValue("--mono");
+await document.fonts.load("40px ccpic", "\u{1F5BC}");
+function draw(t, fam) {
+  ctx.clearRect(0, 0, 80, 80); ctx.font = `40px ${fam}`; ctx.fillStyle = "#000"; ctx.textBaseline = "middle"; ctx.fillText(t, 10, 40);
+  return ctx.getImageData(0, 0, 80, 80).data;
+}
+const MISSING = draw("͸", FONT);  // an unassigned code point: the missing-glyph box
+function probe(t, fam) {
+  const d = draw(t, fam);
+  let colour = false, ink = false, same = true;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] > 40) ink = true;
+    if (d[i + 3] > 40 && Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]) > 40) colour = true;
+    if (d[i + 3] !== MISSING[i + 3]) same = false;
+  }
+  ctx.font = `40px ${fam}`; const w = ctx.measureText(t).width / 40;
+  ctx.font = `40px ${MONO}`; const cells = ctx.measureText(t).width / ctx.measureText("0").width;
+  return {colour, missing: !ink || same, w, cells};
+}
+const say = (r) => r.missing ? `<b class="n">missing glyph</b>` : r.colour ? `<b class="n">colour</b>` : `<b class="y">one colour</b>`;
+const results = [];
+for (const [g, name, cp, , , , risk] of OPTS) {
+  const f = name.startsWith("F:"), r = probe(g, f ? `ccpic, ${FONT}` : FONT), rm = probe(g, f ? `ccpic, ${MONO}` : MONO);
+  r.cells = rm.cells; results.push({name, ...r});
+  const el = document.createElement("section");
+  el.className = `opt${f ? " f pick" : ""}`;
+  el.innerHTML = `<h3>${name} <code>${cp}</code></h3>
+    <textarea rows="1">fix the header like ${g} and drop this ${g}</textarea>
+    <div class="m">fix the header like ${g} and drop this ${g}</div>
+    <div class="mono">mono: [${g}] x${g}x</div>
+    <div class="live">this browser: ${say(r)}, ${r.w.toFixed(2)} em, ${r.cells.toFixed(2)} mono cells</div>`;
+  $("#opts").append(el);
+}
+function $(s) { return document.querySelector(s); }
+$("#tab").innerHTML = OPTS.map(([g, name, cp, lin, mac, and, risk, code], i) => {
+  const r = results[i], cls = (s) => s.startsWith("yes") ? "y" : s.startsWith("no") ? "n" : "q";
+  return `<tr><td class="g"${name.startsWith("F:") ? ` style="font-family: ccpic, var(--font)"` : ""}>${g}</td><td>${name}<br><span class="q">${cp}</span></td>
+    <td class="${cls(lin)}">${lin}</td><td class="${cls(mac)}">${mac}</td><td class="${cls(and)}">${and}</td>
+    <td>${r.w.toFixed(2)} em / ${r.cells.toFixed(1)}</td><td>${risk}</td><td>${code}</td></tr>`;
+}).join("");
+$("#ua").textContent = `(this browser: ${navigator.userAgent})`;
+window.probeResults = results;
+</script>
+</body>
+</html>
