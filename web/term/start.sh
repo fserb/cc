@@ -18,23 +18,17 @@ case "$host" in nadya | marx) ;; *) echo "bad host: $host"; sleep 3600; exit 1 ;
 case "$pane" in %*[!0-9]* | % | "") echo "bad pane: $pane"; sleep 3600; exit 1 ;; %*) ;; *) echo "bad pane: $pane"; sleep 3600; exit 1 ;; esac
 
 # Run on the pane's host. A session of our own grouped with the pane's, on the pane's window,
-# on the pane (which a window with several makes its active pane for everyone too), attached
-# with ignore-size: the user's clients stay on their windows, and destroy-unattached
-# drops it when the page closes. tmux honours ignore-size only while some client without it is
-# attached somewhere, so a control client sits on a throwaway session of its own (its size
-# reaches only that session); the hangup when ssh closes ends it. new-session takes the
-# terminal's size, so it gets the window's own.
+# on the pane (which a window with several makes its active pane for everyone too), attached as
+# a plain client: the user's clients stay on their windows, and destroy-unattached drops it when
+# the page closes. Both hosts run tmux's default window-size latest, so the window takes this
+# client's size, follows the page as it resizes, and goes back to the user's terminal as soon
+# as they type there.
 attach="p=$pane
 $(cat <<'EOF'
 s=$(tmux display -p -t "$p" '#{session_id}') || exit 1
 w=$(tmux display -p -t "$p" '#{window_id}')
-x=$(tmux display -p -t "$p" '#{window_width}')
-y=$(tmux display -p -t "$p" '#{window_height}')
-g=cc-term-$$ h=cc-term-hold-$$
-{ echo 'set destroy-unattached on'; echo 'refresh-client -C 10x10'; exec sleep 86400; } | tmux -C new-session -s $h >/dev/null 2>&1 &
-trap 'kill 0' EXIT
-until [ "$(tmux list-clients -t $h -F '#{client_width}' 2>/dev/null)" = 10 ]; do sleep 0.05; done
-tmux new-session -d -x $x -y $y -t "$s" -s $g \; set -t $g destroy-unattached on \; set -t $g status off \; select-window -t "$g:$w" \; select-pane -t "$p" \; attach -f ignore-size -t $g
+g=cc-term-$$
+tmux new-session -d -t "$s" -s $g \; set -t $g destroy-unattached on \; set -t $g status off \; select-window -t "$g:$w" \; select-pane -t "$p" \; attach -t $g
 EOF
 )"
 
