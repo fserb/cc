@@ -10,7 +10,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: #e9eaed; color: var(--text); font: 15px/1.45 var(--font); }
 h1 { font-size: 1rem; margin: 0.8rem 1rem 0.6rem; }
-.grid { display: grid; grid-template-columns: repeat(4, 330px); gap: 1rem; padding: 0 1rem 3rem; justify-content: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; padding: 0 1rem 3rem; max-width: 1440px; margin: 0 auto; }
 .bar { background: #fff; border: 1px solid #c9ccd1; border-radius: 8px; height: 760px; display: flex; flex-direction: column; overflow: hidden; }
 .cap { font-size: 0.82rem; margin-top: 0.4rem; }
 .cap b { display: block; font-size: 0.95rem; margin-bottom: 0.15rem; }
