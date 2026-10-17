@@ -147,6 +147,10 @@
   .tbl { overflow-x: auto; margin: 0 0 1rem; } .tbl table { border-collapse: collapse; font-size: 0.86rem; } .tbl th, .tbl td { border: 1px solid var(--line); padding: 0.35rem 0.55rem; text-align: left; vertical-align: top; min-width: 7rem; } .tbl th { background: var(--track); }
   .doc blockquote { margin: 0 0 0.8rem; padding: 0 0 0 0.9rem; border-left: 3px solid var(--line); color: var(--muted); } .doc hr { border: 0; border-top: 1px solid var(--line); margin: 1.4rem 0; } .doc li > input { margin: 0 0.35rem 0 0; }
   .fl li span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .fl li.dir span { font-weight: 600; } .fl li small { font-variant-numeric: tabular-nums; } .fl li small i { font-style: normal; } .doc ul.fl { padding: 0; } .doc .fl li { margin: 0; }
+  .fsearch input { width: 100%; box-sizing: border-box; font: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 0.4rem 0.6rem; margin: 0 0 0.8rem; background: none; color: inherit; } .fsearch input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .hits h3 { font-size: 0.95em; margin: 1rem 0 0.2rem; cursor: pointer; overflow-wrap: anywhere; } .hits h3:hover { color: var(--accent); }
+  .fl li .ln { font-style: normal; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2.5em; text-align: right; flex: none; } .hits .fl li span { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+  .hits mark { background: color-mix(in srgb, var(--yel) 45%, transparent); color: inherit; border-radius: 2px; } ::highlight(hit) { background: color-mix(in srgb, var(--yel) 60%, transparent); }
   .crumbs a { color: var(--accent); text-decoration: none; } .crumbs a:hover { text-decoration: underline; } .doc pre.plain { margin: 0; } .doc pre.fm { background: var(--track); color: var(--muted); margin: 0 0 1.2rem; }
   .rows li.x span { text-decoration: line-through; color: var(--muted); }
   .add { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 0.35rem 0; text-align: center; font-size: 1.3rem; line-height: 1.2; color: var(--muted); border: 1px dashed var(--gray); border-radius: 6px; cursor: pointer; }
@@ -183,7 +187,7 @@
     #left { border-right: 0; } .addbar { padding: 0; } .add { border-width: 1px 0 0; border-radius: 0; padding: 0.6rem 0 calc(0.6rem + env(safe-area-inset-bottom)); }
     .it { padding: 10px 14px; gap: 2px 10px; line-height: 1.4; min-height: 44px; } .it .tx div, .it .d { font-size: 17px; } .it .tx small { font-size: 15px; line-height: 1.25; } .it time { font-size: 14px; }
     .sec { font-size: 13px; padding: 1rem 14px 0.35rem; }
-    article { padding: 1rem; } .fl .sz { display: none; } #say { padding: 0.6rem 0.8rem calc(0.7rem + env(safe-area-inset-bottom)); } #say textarea, .free input { font-size: 16px; }
+    article { padding: 1rem; } .fl .sz { display: none; } #say { padding: 0.6rem 0.8rem calc(0.7rem + env(safe-area-inset-bottom)); } #say textarea, .free input, .fsq { font-size: 16px; }
   }
 </style>
 </head>
@@ -200,6 +204,7 @@
 //   ../blog/              the blog (its #posts are inserted here)
 //   files/                todo.md, reminders.md, ideas/, projects/, research/: links to ~/nadya (caddy lists the dirs)
 //   ../nadya/             all of ~/nadya, for the files tab: a dir asked with Accept: application/json is caddy's listing as JSON
+//   api/grep?q=           the files tab's search: a live grep over ~/nadya (api/lemon.js, a box of its own)
 const CCX = "../ccapi/api";
 const NADYA = "../nadya/";
 const BLOG = "../blog/";
@@ -710,11 +715,11 @@ function drawView(soft) {
   lastView = html;
   const t = same && view.querySelector(".msgs > .typing");
   if (t) dots = {cur, at: Date.now(), rect: t.getBoundingClientRect()};
-  const fi = view.querySelector(".free input") === document.activeElement && document.activeElement;
+  const fi = view.querySelector(".free input, .fsq") === document.activeElement && document.activeElement;
   view.innerHTML = html;
   fitTerm();
   // a redraw keeps the free-text box focused, its caret where it was
-  if (fi) { const n = view.querySelector(".free input"); n?.focus(); n?.setSelectionRange(fi.selectionStart, fi.selectionEnd); }
+  if (fi) { const n = view.querySelector(fi.matches(".fsq") ? ".fsq" : ".free input"); n?.focus(); n?.setSelectionRange(fi.selectionStart, fi.selectionEnd); }
   if (!soft) growing = 0;
   // keep the dots' bounce going across redraws; a reply that arrives grows out of the dots bubble
   view.querySelector(".typing")?.style.setProperty("--t", `-${Date.now() % 1200}ms`);
@@ -747,6 +752,7 @@ function drawView(soft) {
   if (a) view.scrollTop += a.getBoundingClientRect().top - vt - anchor.off;
   autoTop = view.scrollTop;
   if (chatty && same && view.querySelector(".msgs")?.lastElementChild?.outerHTML !== tail) $("#newer").hidden = false;
+  jumpTo(view);
 }
 // the terminal view keeps the pane's columns and rows: its font shrinks until the whole screen fits the view, never grows past 12.5px
 function fitTerm() {
@@ -956,17 +962,77 @@ function changed(iso) {
   const t = Date.parse(iso);
   return Date.now() - t < 7 * 864e5 ? ago(t / 1000) : new Date(t).toLocaleDateString("en-CA", {year: Date.now() - t > 300 * 864e5 ? "numeric" : undefined, month: "short", day: "numeric"});
 }
+// the files tab's search: S.grep.q as typed, S.grep.res the answer for S.grep.res.q; a hit opens its file at its line (S.jump)
+S.grep = {q: "", res: null};
+let grepT = 0;
+function grepSoon(now) {
+  clearTimeout(grepT);
+  grepT = setTimeout(async () => {
+    const q = S.grep.q.trim();
+    if (q.length < 2) { S.grep.res = null; return drawView(true); }
+    try { const res = await json(`api/grep?q=${encodeURIComponent(q)}`); if (S.grep.q.trim() === q) S.grep.res = res; }
+    catch (e) { S.grep.res = {q, error: e.message}; }
+    drawView(true);
+  }, now ? 0 : 250);
+}
+// text with every case-insensitive q in it marked
+function hl(text, q) {
+  const low = text.toLowerCase(), lq = q.toLowerCase();
+  let out = "", at = 0;
+  for (let k = low.indexOf(lq); lq && k >= 0; k = low.indexOf(lq, at)) { out += `${esc(text.slice(at, k))}<mark>${esc(text.slice(k, k + q.length))}</mark>`; at = k + q.length; }
+  return out + esc(text.slice(at));
+}
+// a long line starts a little before its first match, so the match is in the two lines a hit shows
+function around(text, q) {
+  const k = text.toLowerCase().indexOf(q.toLowerCase());
+  return k > 50 ? `…${text.slice(k - 30)}` : text;
+}
+function grepView() {
+  const q = S.grep.q.trim(), r = S.grep.res;
+  if (q.length < 2) return "";
+  if (!r) return `<p class="meta">searching…</p>`;  // while a new query runs, the last answer stays
+  if (r.error) return `<p class="meta err">${esc(r.error)}</p>`;
+  if (!r.hits.length) return `<p class="meta">no match</p>`;
+  const by = Map.groupBy(r.hits, (h) => h.file);
+  return `<p class="meta">${r.hits.length}${r.more ? "+" : ""} lines in ${by.size} files</p>${[...by].map(([file, hs]) => `<section class="hits"><h3 class="go" data-go="files/${esc(file)}">${esc(file)}</h3><ul class="rows fl">${hs.map((h) => `<li class="go" data-go="files/${esc(file)}" data-line="${h.line}"><i class="ln">${h.line}</i><span>${hl(around(h.text.trim(), r.q), r.q)}</span></li>`).join("")}</ul></section>`).join("")}`;
+}
+// after a hit's file is drawn: scroll to the match on its line and mark it. The rendered text is not the raw one (markdown),
+// so it takes the query's k-th occurrence in the view, k being how many come before that line in the raw text
+function jumpTo(view) {
+  const j = S.jump;
+  if (!j || cur !== `files/${j.path}`) return;
+  const f = S.fs[j.path];
+  if (!f) return;
+  S.jump = null;
+  if (f.text == null) return;
+  const q = j.q.toLowerCase(), count = (t) => t.toLowerCase().split(q).length - 1;
+  const k = count(f.text.split("\n").slice(0, j.line - 1).join("\n"));
+  const art = view.querySelector("article"), ranges = [];
+  const w = document.createTreeWalker(art, NodeFilter.SHOW_TEXT);
+  for (let n = w.nextNode(); n; n = w.nextNode()) {
+    if (n.parentElement.closest(".crumbs")) continue;
+    const low = n.data.toLowerCase();
+    for (let i = low.indexOf(q); i >= 0; i = low.indexOf(q, i + q.length)) { const r = new Range(); r.setStart(n, i); r.setEnd(n, i + q.length); ranges.push(r); }
+  }
+  const r = ranges[Math.min(k, ranges.length - 1)];
+  if (!r) return;
+  view.scrollTop += r.getBoundingClientRect().top - view.getBoundingClientRect().top - view.clientHeight / 3;
+  autoTop = view.scrollTop;
+  if (window.Highlight) CSS.highlights.set("hit", new Highlight(r));
+}
 function filesView(path) {
   const parts = path.split("/").filter(Boolean), dir = path === "" || path.endsWith("/");
   const go = (p, t) => `<a href="#files/${esc(p)}" data-go="files/${esc(p)}">${esc(t)}</a>`;
   const crumbs = [go("", "nadya"), ...parts.map((x, k) => k === parts.length - 1 ? `<b>${esc(x)}</b>` : go(`${parts.slice(0, k + 1).join("/")}/`, x))].join(" / ");
   const raw = NADYA + encodeURI(path).replace(/#/g, "%23"), f = S.fs[path];
   const head = `<p class="meta crumbs">${crumbs}${dir ? "" : ` · <a href="${esc(raw)}" target="_blank" rel="noopener" data-out>open ↗</a>`}</p>`;
+  const search = `<form class="fsearch" role="search"><input type="search" class="fsq" name="q" value="${esc(S.grep.q)}" placeholder="search nadya" aria-label="search nadya" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search"></form>`;
+  if (dir && S.grep.q.trim().length >= 2) return `<article class="doc">${head}${search}${grepView()}</article>`;
   if (!f) return `<article class="doc">${head}<p class="meta">loading…</p></article>`;
   if (f.error) return `<article class="doc">${head}<p class="meta err">${esc(f.error)}</p></article>`;
   if (f.list) {
     const ls = [...f.list].sort((a, b) => b.is_dir - a.is_dir || a.name.localeCompare(b.name));
-    return `<article class="doc">${head}<ul class="rows fl">${ls.map((x) => `<li class="go${x.is_dir ? " dir" : ""}" data-go="files/${esc(path + x.name)}"><span>${esc(x.name)}</span><small>${x.is_dir ? "" : `<i class="sz">${fsize(x.size)} · </i>`}${changed(x.mod_time)}</small></li>`).join("") || "<li><span class=meta>empty</span></li>"}</ul></article>`;
+    return `<article class="doc">${head}${search}<ul class="rows fl">${ls.map((x) => `<li class="go${x.is_dir ? " dir" : ""}" data-go="files/${esc(path + x.name)}"><span>${esc(x.name)}</span><small>${x.is_dir ? "" : `<i class="sz">${fsize(x.size)} · </i>`}${changed(x.mod_time)}</small></li>`).join("") || "<li><span class=meta>empty</span></li>"}</ul></article>`;
   }
   if (f.page) return `<article class="doc page">${head}<iframe src="${esc(f.page)}" title="${esc(parts.at(-1))}" onload="this.contentDocument?.addEventListener('click', (e) => window.filesLink(e))"></iframe></article>`;
   if (f.img) return `<article class="doc">${head}<img src="${esc(f.img)}" alt="${esc(parts.at(-1))}"></article>`;
@@ -1346,7 +1412,7 @@ document.addEventListener("click", async (e) => {
   if (e.target.closest("#back, #title")) { if (history.state?.cc) history.back(); else document.body.classList.remove("view"); return; }
   const row = e.target.closest(".it"); if (row) { cur = row.dataset.id; push(); if (cur === "blog") localStorage.cc_blog_seen = Math.max(Date.now(), ...S.posts.map((x) => Date.parse(x.time) || 0)); open(); if ((cur === "nadya" || cur.includes(".")) && matchMedia("(hover: hover) and (pointer: fine)").matches) $("#say").q.focus(); return; }
   if (filesLink(e)) return;
-  const go = e.target.closest("[data-go]"); if (go) { e.preventDefault(); cur = go.dataset.go; push(isDoc(cur) || isFiles(cur)); open(); return; }
+  const go = e.target.closest("[data-go]"); if (go) { e.preventDefault(); S.jump = go.dataset.line ? {path: go.dataset.go.slice(6), line: +go.dataset.line, q: S.grep.res.q} : null; cur = go.dataset.go; push(isDoc(cur) || isFiles(cur)); open(); return; }
   const tb = e.target.closest("[data-tabs] button");
   if (tb) {
     if (tb.getAttribute("aria-pressed") === "true") return;
@@ -1375,6 +1441,9 @@ document.addEventListener("click", async (e) => {
   } catch (err) { box.insertAdjacentHTML("afterend", `<p class="err">${esc(err.message)}</p>`); [...box.children].forEach((x) => x.disabled = false); }
 });
 document.addEventListener("input", (e) => { if (e.target.matches(".free input") && freeText) freeText.value = e.target.value; });
+document.addEventListener("input", (e) => { if (!e.target.matches(".fsq")) return; S.grep.q = e.target.value; if (S.grep.q.trim().length < 2) { clearTimeout(grepT); S.grep.res = null; drawView(true); } else { if (!S.grep.res) drawView(true); grepSoon(); } });
+// enter searches at once; on a phone it also closes the keyboard so the results show
+document.addEventListener("submit", (e) => { if (!e.target.matches(".fsearch")) return; e.preventDefault(); grepSoon(true); if (narrow()) e.target.q.blur(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && e.target.matches(".free input")) { freeText = null; lastView = null; drawView(true); } });
 document.addEventListener("submit", async (e) => {
   const f = e.target.closest(".free"); if (!f) return;
