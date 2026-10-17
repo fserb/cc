@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc mocks 6: the left bar</title>
+<style>
+:root { --text: #1f2328; --muted: #6b7280; --line: #e5e7eb; --red: #d9100f; --cur: #fdecec; --q: #e8590c;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #e9eaed; color: var(--text); font: 15px/1.45 var(--font); }
+h1 { font-size: 1rem; margin: 0.8rem 1rem 0.6rem; }
+.grid { display: grid; grid-template-columns: repeat(4, 330px); gap: 1rem; padding: 0 1rem 3rem; justify-content: center; }
+.bar { background: #fff; border: 1px solid #c9ccd1; border-radius: 8px; height: 760px; display: flex; flex-direction: column; overflow: hidden; }
+.cap { font-size: 0.82rem; margin-top: 0.4rem; }
+.cap b { display: block; font-size: 0.95rem; margin-bottom: 0.15rem; }
+.cap ul { margin: 0.2rem 0 0; padding-left: 1rem; }
+.it { display: flex; gap: 0.55rem; align-items: baseline; padding: 0.42rem 1rem; cursor: pointer; }
+.it:hover { background: #f8f9fa; }
+.it.on { background: var(--cur); }
+.it .t { flex: 1; min-width: 0; }
+.it .t .p { display: block; color: var(--muted); font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.it .r { color: var(--muted); font-size: 0.72rem; font-family: var(--mono); white-space: nowrap; }
+.it .n { color: var(--muted); font-size: 0.78rem; }
+.it.dim { color: var(--muted); }
+.sec { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; padding: 0.8rem 1rem 0.2rem; display: flex; justify-content: space-between; }
+.sec .lk { text-transform: none; letter-spacing: 0; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: transparent; flex: none; }
+.dot.ok { background: #2f9e44; } .dot.busy { background: #1971c2; } .dot.q { background: var(--q); } .dot.you { background: #7048e8; } .dot.grey { background: #ced4da; }
+.lk { color: var(--red); cursor: pointer; }
+.more { padding: 0.25rem 1rem; font-size: 0.8rem; color: var(--muted); cursor: pointer; }
+.more:hover { color: var(--text); }
+.fill { flex: 1; overflow: auto; }
+.foot { border-top: 1px solid var(--line); padding: 0.5rem 0.8rem; flex: none; }
+.plus { border: 1px dashed #c5cad1; border-radius: 6px; text-align: center; color: var(--muted); padding: 0.2rem; }
+.dock { display: flex; justify-content: space-between; gap: 0.2rem; }
+.dock span { flex: 1; text-align: center; font-size: 0.72rem; color: var(--muted); padding: 0.3rem 0; border-radius: 6px; cursor: pointer; }
+.dock span:hover, .dock span.on { background: #f1f3f5; color: var(--text); }
+.dock span i { display: block; font-style: normal; font-size: 1rem; }
+.search { margin: 0.6rem 0.8rem 0.2rem; border: 1px solid #c5cad1; border-radius: 8px; padding: 0.3rem 0.6rem; color: var(--muted); font-size: 0.88rem; display: flex; justify-content: space-between; cursor: text; }
+.search.typed { color: var(--text); border-color: var(--red); }
+.kbd { font-size: 0.7rem; border: 1px solid var(--line); border-radius: 4px; padding: 0 0.3rem; color: var(--muted); }
+.pop { margin: 0 0.8rem; border: 1px solid #c9ccd1; border-radius: 8px; box-shadow: 0 6px 18px #0002; padding: 0.2rem 0; }
+.pop .it { padding: 0.3rem 0.7rem; }
+.pop .g { font-size: 0.66rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; padding: 0.35rem 0.7rem 0; }
+.proj { font-weight: 600; }
+.chev { color: var(--muted); font-size: 0.75rem; width: 0.8rem; }
+.tag { font-size: 0.68rem; border-radius: 4px; padding: 0 0.3rem; background: #fff4e6; color: var(--q); white-space: nowrap; }
+.tag.g { background: #f1f3f5; color: var(--muted); }
+.drawer { margin: 0 0.6rem 0.4rem; background: #f8f9fa; border-radius: 8px; padding: 0.2rem 0; }
+</style>
+</head>
+<body>
+<h1>cc mocks 6 · the left bar · Oct 17th 14:30 · four versions, same data, click inside</h1>
+<div class="grid" id="g"></div>
+<script type="module">
+// Data at 14:30: ccx list, nadya-log.md (closed today), the blog (posts today), tracker, reminders.
+const CLOSED = ["cc-a (×5)", "cc-c", "cc-d", "design-a-a", "design-a-b", "nadya-a", "nadya-b", "shopping-a", "arcist-a", "arcade-lbp-a", "arcade-lbp-b"];
+const S = {a: {closed: false, quiet: false}, b: {q: false}, c: {open: {spider: true, screenflow: true, cc: true}, more: false}, d: {drawer: ""}};
+const it = (h, o = {}) => `<div class="it ${o.on ? "on" : ""} ${o.dim ? "dim" : ""}" ${o.act ? `data-act="${o.act}"` : ""}>${o.dot !== undefined ? `<span class="dot ${o.dot}"></span>` : ""}<span class="t">${h}${o.p ? `<span class="p">${o.p}</span>` : ""}</span>${o.r ? `<span class="r">${o.r}</span>` : ""}</div>`;
+const sec = (t, right = "") => `<div class="sec"><span>${t}</span>${right}</div>`;
+const nadya = it("nadya", {on: 1, dot: "ok", p: "spider-a is back on marx, prompt empty", r: "14:21"});
+
+// A. by what it wants from you
+function a(s) {
+  return `<div class="fill">${nadya}
+    ${sec("waiting for you")}
+    ${it("spider-a", {dot: "you", p: "you asked for it back; prompt empty", r: "7 min"})}
+    ${it("screenflow-a", {dot: "you", p: "back for your bugs; draft \"when crew\"", r: "40 min"})}
+    ${sec("working")}
+    ${it("cc-b", {dot: "busy", p: "assistant mocks round 6", r: "ai/cc/web"})}
+    ${sec("today")}
+    ${it("blog <span class=\"n\">3 new</span>", {p: "14:18 spider chart generator", r: "12 today"})}
+    ${it("necklace arriving today", {p: "packages: DORANA, Amazon · ASL"})}
+    ${it("Sun 10:10 check-in AC 407", {p: "plan: next reminder"})}
+    ${sec("quiet", `<span class="lk" data-act="a.quiet">${s.quiet ? "hide" : "show"}</span>`)}
+    ${s.quiet ? ["plan", "projects", "packages <span class=\"n\">3</span>", "files"].map((x) => it(x, {dim: 1})).join("") : `<div class="more" data-act="a.quiet">plan, projects, packages, files</div>`}
+    ${sec(`closed today · ${CLOSED.length + 4}`, `<span class="lk" data-act="a.closed">${s.closed ? "hide" : "show"}</span>`)}
+    ${s.closed ? CLOSED.map((x) => it(x, {dim: 1, dot: "grey"})).join("") : ""}
+  </div><div class="foot"><div class="plus">+</div></div>`;
+}
+// B. pinned + search for everything else
+function b(s) {
+  const pop = s.q ? `<div class="pop"><div class="g">places</div>${it("packages <span class=\"n\">3</span>", {p: "necklace arriving today"})}<div class="g">files</div>${it("research/package-tracking.md")}${it("agents/shopping/2026-10-17-footrest.md")}<div class="g">closed sessions</div>${it("shopping-a", {dot: "grey", p: "09:37-09:43 · amazon.ca footrest"})}<div class="g">posts</div>${it("09:43 footrest equivalents on amazon.ca")}</div>` : "";
+  return `<div class="search ${s.q ? "typed" : ""}" data-act="b.q"><span>${s.q ? "pack" : "find anything"}</span><span class="kbd">⌘K</span></div>${pop}
+    <div class="fill">${sec("pinned", `<span class="lk">edit</span>`)}${nadya}${it("blog <span class=\"n\">3 new</span>", {p: "14:18 spider chart generator", r: "8min"})}
+    ${sec("recent")}
+    ${it("spider-a", {dot: "you", p: "14:19 done: spider graph app built and committed", r: "web/spider"})}
+    ${it("cc-b", {dot: "busy", p: "assistant mocks round 6", r: "ai/cc/web"})}
+    ${it("screenflow-a", {dot: "you", p: "13:43 done: screenflow records, cuts, exports", r: "web/screenflow"})}
+    ${it("design-a-b", {dot: "grey", dim: 1, p: "10:49 3-16 in the viewer · closed", r: "web/design-a"})}
+    ${it("shopping-a", {dot: "grey", dim: 1, p: "09:43 footrest equivalents · closed", r: "agents/shopping"})}
+    <div class="more">older: type to find</div></div><div class="foot"><div class="plus">+</div></div>`;
+}
+// C. by project
+function c(s) {
+  const P = [
+    ["spider", "web/spider", [["spider-a", "you", "prompt empty, for you"]], "14:18 post: spider chart generator"],
+    ["screenflow", "web/screenflow", [["screenflow-a", "you", "back for your bugs"]], "13:43 post: records, cuts, exports"],
+    ["cc", "ai/cc", [["cc-b", "busy", "assistant mocks round 6"]], "13:24 post: terminal resizes tmux"],
+    ["design-a", "web/design-a", [], "10:48 post: all 60 episodes play"],
+    ["arcade", "web/arcade", [], "12:53 LBP blocks 14, 24 done"],
+  ];
+  const proj = ([n, d, ss, last]) => `<div class="it" data-act="c.${n}"><span class="chev">${ss.length ? (s.open[n] ? "▾" : "▸") : ""}</span><span class="t"><span class="proj">${n}</span>${ss.length ? "" : `<span class="p">${last}</span>`}</span><span class="r">${ss.length ? ss.length : ""}</span></div>
+    ${ss.length && s.open[n] ? ss.map(([sn, st, g]) => `<div class="it" style="padding-left:2.2rem"><span class="dot ${st}"></span><span class="t">${sn}<span class="p">${g}</span></span></div>`).join("") + `<div class="it dim" style="padding-left:2.2rem;padding-top:0"><span class="t"><span class="p">${last}</span></span></div>` : ""}`;
+  return `<div class="fill">${nadya}${it("home", {p: "necklace today · Sun 10:10 check-in"})}
+    ${sec("projects", `<span class="lk">all 17</span>`)}${P.slice(0, 3).map(proj).join("")}${sec("quiet today")}${P.slice(3).map(proj).join("")}
+    </div><div class="foot" style="display:flex;gap:.5rem;font-size:.8rem;color:var(--muted)"><span class="lk" data-act="c.more">more ▾</span>${s.more ? "<span>blog · plan · packages · files · quota</span>" : ""}<span style="margin-left:auto;width:4rem" class="plus">+</span></div>`;
+}
+// D. a dock for the less common things
+function d(s) {
+  const DR = {packages: [it("DORANA initial necklace", {p: "Amazon · ASL · arriving today"}), it("Ecualama order #109280", {p: "FedEx · Quito · no date"}), it("ROUNY handheld vacuum", {p: "Intelcom · tracker error · Oct 21"})],
+    files: [it("research/", {}), it("ideas/", {}), it("todo/", {}), it("search ~/nadya…", {dim: 1})],
+    plan: [it("Sun 10:10 check-in AC 407"), it("Sun 10:15 nadya: ~/ai in the backup?"), it("Sun 18:00 Katrina's list")],
+    projects: [it("all 17 projects, done ones folded")], quota: [it("77% · 2.7x · out Sun 1pm")]};
+  return `<div class="fill">${nadya}
+    ${it("blog <span class=\"n\">3 new</span>", {p: "14:18 spider chart generator", r: "8min"})}
+    ${sec("sessions")}
+    ${it("spider-a <span class=\"tag\">your turn</span>", {dot: "you", p: "prompt empty since 14:21", r: "web/spider"})}
+    ${it("screenflow-a <span class=\"tag\">your turn</span>", {dot: "you", p: "back for your bugs", r: "web/screenflow"})}
+    ${it("cc-b", {dot: "busy", p: "assistant mocks round 6", r: "ai/cc/web"})}
+    ${sec("projects today")}
+    ${it("spider", {p: "built today · 14:18 post", r: "1 running"})}
+    ${it("screenflow", {p: "built today · bugs next", r: "1 running"})}
+    ${it("cc", {p: "files search, terminal, mocks", r: "1 running"})}
+    ${it("design-a", {p: "10:48 all 60 episodes play"})}
+    ${it("arcade", {p: "12:53 LBP stopped, you on marx"})}
+    ${sec("comes and goes")}
+    ${it("📦 necklace arriving today", {p: "goes when delivered"})}
+    ${it("⏰ Sun 10:10 check-in AC 407", {p: "shows from 12h before"})}
+    </div>${s.drawer ? `<div class="drawer">${DR[s.drawer].join("")}</div>` : ""}
+    <div class="foot"><div class="dock">${[["packages", "📦", "3"], ["files", "🗂", ""], ["plan", "📅", ""], ["projects", "▦", ""], ["quota", "◔", "77%"]].map(([k, i, n]) => `<span class="${s.drawer === k ? "on" : ""}" data-act="d.${k}"><i>${i}</i>${k}${n ? ` ${n}` : ""}</span>`).join("")}</div></div>`;
+}
+
+const V = [
+  {k: "a", r: a, n: "A. Sorted by what it wants from you", cap: ["Sessions waiting for you first, then working ones, then today's things (new posts, a parcel due, the next reminder).", "Places you open rarely sit folded under \"quiet\". Closed sessions are a count; click to list them.", "A row moves up when it starts waiting for you and down when it closes."]},
+  {k: "b", r: b, n: "B. A few pinned, the rest found", cap: ["You pin what you open every day (nadya, blog). Under it, sessions by last activity, each with its last line; closed ones stay a day, greyed.", "Everything else, files, packages, plan, closed sessions, old posts, is one search at the top (⌘K). Click it: \"pack\" shows packages, matching files, shopping-a."]},
+  {k: "c", r: c, n: "C. Grouped by project", cap: ["Sessions sit under their project; a project with nothing running is one line with its last news. Projects busy today first, quiet ones below.", "\"home\" holds the non-project things: parcels, reminders. Blog, plan, packages, files and quota are under \"more\" at the bottom."]},
+  {k: "d", r: d, n: "D. Bar for now, a dock for the rest", cap: ["The bar holds what is live: nadya, the blog, sessions (\"your turn\" when one waits for you), the projects that moved today, and things that come and go: a parcel today, a reminder in the next 12h.", "Packages, files, plan, all projects and quota are a dock at the bottom; click one to open it in place above the dock."]},
+];
+const G = document.getElementById("g");
+function draw() { G.innerHTML = V.map((v) => `<figure style="margin:0"><div class="bar">${v.r(S[v.k])}</div><div class="cap"><b>${v.n}</b><ul>${v.cap.map((x) => `<li>${x}</li>`).join("")}</ul></div></figure>`).join(""); }
+G.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-act]");
+  if (!t) return;
+  const [k, x] = t.dataset.act.split(".");
+  if (k === "a") S.a[x] = !S.a[x];
+  if (k === "b") S.b.q = !S.b.q;
+  if (k === "c") x === "more" ? (S.c.more = !S.c.more) : (S.c.open[x] = !S.c.open[x]);
+  if (k === "d") S.d.drawer = S.d.drawer === x ? "" : x;
+  draw();
+});
+draw();
+</script>
+</body>
+</html>
