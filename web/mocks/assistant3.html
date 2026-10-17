@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc assistant mocks 3: one chat</title>
+<style>
+:root { --page: #f3f4f6; --text: #1f2328; --muted: #6b7280; --line: #e2e4e8; --hover: #f3f4f6; --cur: #e8f0fb;
+  --accent: #1f6feb; --q: #d9480f; --ok: #2b8a3e; --busy: #1971c2; --nadya: #c92a2a; --helper: #0c8599; --co: #7048e8;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text); font: 14px/1.4 var(--font); }
+body > header { position: sticky; top: 0; z-index: 9; background: #fff; border-bottom: 1px solid var(--line); padding: 0.45rem 1rem; display: flex; gap: 1rem; align-items: baseline; flex-wrap: wrap; }
+body > header a { color: var(--accent); text-decoration: none; font-size: 0.86rem; }
+main { max-width: 1480px; margin: 0 auto; padding: 0 1rem 3rem; }
+h2 { font-size: 1.1rem; margin: 1.6rem 0 0.5rem; }
+.grid { display: grid; gap: 0.8rem; align-items: start; }
+.g4 { grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); }
+.g2 { grid-template-columns: repeat(auto-fill, minmax(640px, 1fr)); }
+figure { margin: 0; }
+figcaption { font-size: 0.8rem; margin-top: 0.35rem; }
+figcaption b { display: block; font-size: 0.9rem; margin-bottom: 0.1rem; }
+figcaption ul { margin: 0.2rem 0 0; padding-left: 1rem; }
+.fr { background: #fff; border: 1px solid #c9ccd1; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; position: relative; font-size: 13px; }
+.ph { height: 600px; border: 5px solid #2b2b2b; border-radius: 22px; }
+.dk { height: 430px; flex-direction: row; }
+.top { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.7rem; border-bottom: 1px solid var(--line); flex: none; }
+.top .r { margin-left: auto; color: var(--muted); font-size: 0.74rem; }
+.th { flex: 1; overflow: auto; padding: 0.3rem 0.7rem; min-height: 0; }
+.foot { border-top: 1px solid var(--line); padding: 0.4rem 0.6rem; flex: none; }
+.in { display: flex; gap: 0.4rem; align-items: center; border: 1px solid #c5cad1; border-radius: 10px; padding: 0.3rem 0.55rem; background: #fff; }
+.in span { flex: 1; color: var(--muted); }
+.in .to { flex: none; color: #fff; background: var(--helper); border-radius: 6px; padding: 0 0.35rem; font-size: 0.74rem; }
+.b { font: inherit; font-size: 0.78rem; border: 1px solid #c5cad1; background: #fff; border-radius: 6px; padding: 0.1rem 0.45rem; cursor: pointer; color: var(--text); white-space: nowrap; }
+.b.pri { background: var(--accent); border-color: var(--accent); color: #fff; }
+.who { font-size: 0.68rem; color: var(--muted); margin-top: 0.5rem; display: flex; gap: 0.3rem; align-items: center; }
+.who.me { justify-content: flex-end; }
+.who b { color: var(--text); font-weight: 600; }
+.bub { border-radius: 12px; padding: 0.35rem 0.6rem; margin: 0.2rem 0; max-width: 86%; background: #f1f3f5; }
+.bub.me { background: #dbe7fb; margin-left: auto; }
+.bub.h { background: #fff; border: 1px solid var(--line); border-left: 3px solid var(--helper); border-radius: 4px 12px 12px 4px; }
+.bub.co { border-left-color: var(--co); }
+.bub.ask { border-left-color: var(--q); }
+.av { width: 16px; height: 16px; border-radius: 50%; display: inline-grid; place-items: center; color: #fff; font-size: 0.6rem; font-weight: 700; flex: none; }
+.av.n { background: var(--nadya); } .av.h { background: var(--helper); } .av.co { background: var(--co); } .av.ds { background: #1971c2; }
+.opts { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.3rem; }
+.sm { font-size: 0.78rem; } .xs { font-size: 0.7rem; } .muted { color: var(--muted); }
+.lk { color: var(--accent); cursor: pointer; }
+.thr { margin: 0.2rem 0 0 1.2rem; border-left: 2px solid var(--line); padding-left: 0.5rem; }
+.thr .who { margin-top: 0.3rem; }
+.tline { font-size: 0.75rem; color: var(--accent); margin: 0.15rem 0 0 0; cursor: pointer; display: flex; gap: 0.35rem; align-items: center; }
+.strip { display: flex; gap: 0.3rem; overflow-x: auto; padding: 0.35rem 0.6rem; border-top: 1px solid var(--line); flex: none; }
+.pill { display: inline-flex; gap: 0.3rem; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 0.1rem 0.5rem; font-size: 0.74rem; white-space: nowrap; background: #fff; cursor: pointer; }
+.pill.q { border-color: #ffc9a8; background: #fff4e6; }
+.pill.on { background: var(--text); color: #fff; border-color: var(--text); }
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #adb5bd; flex: none; }
+.dot.busy { background: var(--busy); } .dot.q { background: var(--q); } .dot.wait { background: #f59f00; } .dot.you { background: var(--co); }
+.card { border: 1px solid var(--line); border-radius: 8px; padding: 0.4rem 0.55rem; background: #fff; margin: 0.25rem 0; max-width: 92%; }
+.card .k { font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.card.need { border-left: 3px solid var(--q); }
+.fr:not(.open) > .sheet { display: none; }
+.tline b { white-space: nowrap; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; top: 30%; background: #fff; border-top: 1px solid #c9ccd1; border-radius: 14px 14px 0 0; box-shadow: 0 -6px 18px #0002; display: flex; flex-direction: column; z-index: 3; }
+.sheet .grab { width: 36px; height: 4px; border-radius: 2px; background: #ced4da; margin: 0.35rem auto 0.1rem; }
+/* desktop parts */
+.chat { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.side { width: 46%; border-left: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
+.side .top b { font-size: 0.85rem; }
+.rail { width: 92px; border-right: 1px solid var(--line); padding: 0.4rem 0.3rem; display: flex; flex-direction: column; gap: 0.1rem; flex: none; }
+.rail button, .nav button { font: inherit; font-size: 0.78rem; border: 0; background: none; padding: 0.25rem 0.4rem; border-radius: 6px; text-align: left; cursor: pointer; color: var(--text); white-space: nowrap; }
+.rail button[aria-pressed="true"], .nav button[aria-pressed="true"] { background: var(--cur); font-weight: 600; }
+.nav { display: flex; gap: 0.1rem; padding: 0.25rem 0.5rem; border-bottom: 1px solid var(--line); flex: none; flex-wrap: wrap; }
+.row { display: flex; gap: 0.45rem; align-items: baseline; padding: 0.2rem 0.3rem; border-radius: 5px; }
+.row:hover { background: var(--hover); }
+.row .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row time { color: var(--muted); font-size: 0.7rem; white-space: nowrap; }
+.pal { position: absolute; left: 12%; right: 12%; bottom: 52px; background: #fff; border: 1px solid #c9ccd1; border-radius: 10px; box-shadow: 0 6px 20px #0002; padding: 0.3rem; z-index: 4; }
+.pal .row { cursor: pointer; }
+.pal .row.sel { background: var(--cur); }
+.kbd { font-size: 0.68rem; border: 1px solid var(--line); border-radius: 4px; padding: 0 0.25rem; color: var(--muted); }
+.stat { display: flex; gap: 0.6rem; flex-wrap: wrap; padding: 0.3rem 0.7rem; border-bottom: 1px solid var(--line); font-size: 0.74rem; color: var(--muted); flex: none; }
+.stat .lk { color: var(--accent); }
+</style>
+</head>
+<body>
+<header><b>cc · one chat · mocks 3 · Oct 17th</b><a href="#q1">1 a helper writes to you</a><a href="#q2">2 files, packages and the other views</a><a href="#q3">3 things that are not messages</a><a href="assistant2.html" class="muted">round 2</a></header>
+<main id="m"></main>
+<script type="module">
+// Data from Oct 17th: nadya-log.md, the blog, ccx list, ccx usage, ~/nadya, the tracker (13:05). Wording of
+// design-a-b's question is rebuilt from its done message; screenflow-a's line is written for the page.
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
+const av = (k, l) => `<span class="av ${k}">${l}</span>`;
+const N = av("n", "n"), H = av("h", "h"), CO = av("co", "co"), DS = av("ds", "d");
+const me = (at, t) => `<div class="who me">you · ${at}</div><div class="bub me">${t}</div>`;
+const ny = (at, t) => `<div class="who">${N}<b>nadya</b> · ${at}</div><div class="bub">${t}</div>`;
+const box = (ph = "message nadya…", to = "") => `<div class="in">${to ? `<span class="to">to ${to} ×</span>` : ""}<span>${ph}</span><button class="b pri">send</button></div>`;
+const QOPTS = `<div class="opts"><button class="b">Yes, take it</button><button class="b">Keep looking</button><button class="b">write…</button></div>`;
+const DQ = "No English-subtitled copy of 3-16 anywhere (IA, YouTube, Nyaa, Prowlarr). Take the only full copy, Bilibili, Chinese burned-in subtitles, 720p?";
+const phone = (title, right, body, foot, extra = "") => `<div class="fr ph"><div class="top"><b>${title}</b><span class="r">${right}</span></div>${body}${foot}${extra}</div>`;
+
+// ---------- 1. A helper writes to you ----------
+const Q1 = [
+  {n: "A. Its own voice in the thread", cap: ["A helper's message is a bubble with its name and a coloured edge, at its time, like nadya's.", "Tap reply: the box says \"to design-a-b\" and sends to its socket; nadya gets a copy line, not a turn.", "Routine lines (started, a peer note) are not shown; done and questions are."],
+    html: phone("nadya", "76%", `<div class="th">
+      ${me("09:28", "design-a: do you think you can find the missing episode?")}
+      ${ny("09:29", "design-a-b is on it, on marx.")}
+      <div class="who">${H}<b>design-a-b</b> · 09:42 · asks you</div><div class="bub h ask">${DQ}${QOPTS}</div>
+      ${me("12:59", "cc: live grep in the files tab, a lemon box in web/api, host=on")}
+      ${ny("12:59", "I started cc-a on it.")}
+      <div class="who">${H}<b>cc-a</b> · 13:03</div><div class="bub h">Files-tab search is in: live grep over ~/nadya, hits grouped by file, a click opens the file at that line. <span class="lk">a14839a</span> <span class="lk">/cc/#files</span><div class="xs muted" style="margin-top:.2rem"><span class="lk">reply to cc-a</span></div></div>
+      <div class="who">${CO}<b>screenflow-a</b> · 13:12 · with you</div><div class="bub h co">Two layouts for the flow view are up; which one? <span class="lk">open its pane</span> <span class="xs muted">(line written for the mock)</span></div>
+    </div>`, `<div class="foot">${box("reply to design-a-b…", "design-a-b")}</div>`)},
+  {n: "B. A thread under the request", cap: ["nadya's \"I started cc-a\" message gets a thread line: the helper's state, its last line, a count.", "Its messages live in the thread; open it to read or answer. A question shows on the thread line in orange and opens by itself.", "The main thread stays you and nadya."],
+    html: phone("nadya", "76%", `<div class="th">
+      ${me("09:28", "design-a: do you think you can find the missing episode?")}
+      ${ny("09:29", "design-a-b is on it, on marx.")}
+      <div class="tline" style="color:var(--q)"><span class="dot q"></span><b>design-a-b</b> asks you · 09:42 · open ▾</div>
+      <div class="thr"><div class="who">${H}<b>design-a-b</b> · 09:42</div><div class="bub h ask">${DQ}${QOPTS}</div></div>
+      ${me("12:59", "cc: live grep in the files tab, a lemon box in web/api, host=on")}
+      ${ny("12:59", "I started cc-a on it.")}
+      <div class="tline"><span class="dot"></span><b>cc-a</b> closed 13:04 · 2 messages · "files-tab search is in… a14839a" ▸</div>
+      ${me("13:04", "cc web: file search, cursor on clear search, also increase the clear search area of click.")}
+      ${ny("13:05", "Started cc-a again for that.")}
+      <div class="tline"><span class="dot busy"></span><b>cc-a</b> working · 1 message ▸</div>
+    </div>`, `<div class="foot">${box()}</div>`)},
+  {n: "C. nadya speaks for it", cap: ["Helpers never write to you; nadya reads their messages and writes one line when it matters (today's rule for done; questions too).", "You answer nadya; nadya answers the helper.", "One voice, but every question costs a nadya turn and the helper waits for it."],
+    html: phone("nadya", "76%", `<div class="th">
+      ${me("09:28", "design-a: do you think you can find the missing episode?")}
+      ${ny("09:29", "design-a-b is on it, on marx.")}
+      ${ny("09:43", `design-a-b has no English-subtitled copy of 3-16. The only full one is Bilibili, Chinese subtitles, 720p. Take it?${QOPTS}`)}
+      ${me("12:59", "cc: live grep in the files tab, a lemon box in web/api, host=on")}
+      ${ny("12:59", "I started cc-a on it.")}
+      ${ny("13:04", "The files search is live: typing in the files tab greps all of ~/nadya; a click opens the file at that line. <span class=\"lk\">a14839a</span>")}
+      <div class="xs muted" style="margin:.4rem 0">cc-a's own words: <span class="lk">open cc-a</span> (closed, read-only)</div>
+    </div>`, `<div class="foot">${box()}</div>`)},
+  {n: "D. A strip above the box", cap: ["Helpers do not enter the thread. Each one that wrote to you is a pill above the box: orange if it asks, a dot for its state.", "Tap a pill: its messages open in a sheet over the chat, with its own box. Close it and you are back with nadya.", "A done helper's pill stays until you open it or a day passes. (Tap the orange pill.)"],
+    html: phone("nadya", "76%", `<div class="th">
+      ${me("12:59", "cc: live grep in the files tab, a lemon box in web/api, host=on")}
+      ${ny("12:59", "I started cc-a on it.")}
+      ${ny("13:04", "The files search is live. <span class=\"lk\">a14839a</span>")}
+      ${me("13:04", "cc web: file search, cursor on clear search…")}
+      ${ny("13:05", "Started cc-a again for that.")}</div>`,
+      `<div class="strip"><span class="pill q" data-tg><span class="dot q"></span>design-a-b asks</span><span class="pill"><span class="dot busy"></span>cc-a</span><span class="pill"><span class="dot you"></span>screenflow-a</span></div><div class="foot">${box()}</div>`,
+      `<div class="sheet"><div class="grab"></div><div class="top"><b>design-a-b</b><span class="xs muted">marx · ~/web/design-a · find 3-16</span><span class="r lk" data-tg>✕</span></div>
+        <div class="th"><div class="who">${N}<b>nadya</b> · 09:29 · its brief</div><div class="bub">design-a: do you think you can find the missing episode?</div>
+        <div class="who">${H}<b>design-a-b</b> · 09:42</div><div class="bub h ask">${DQ}${QOPTS}</div></div><div class="foot">${box("to design-a-b…")}</div></div>`)},
+];
+
+// ---------- 2. files, packages and the other views ----------
+const PANELS = {
+  files: {n: "files", h: `<div class="in" style="margin:.4rem .6rem"><span>search ~/nadya</span></div><div class="th">${["agents/", "briefings/", "dream/", "ideas/", "projects/", "research/", "todo/", "user/", "nadya-log.md", "projects.md"].map((f) => `<div class="row"><span class="t">${f}</span></div>`).join("")}
+    <div class="xs muted" style="margin-top:.3rem">today: research/self-host.html · agents/shopping/2026-10-17-footrest.md</div></div>`},
+  packages: {n: "packages", badge: "4", h: `<div class="th">${[["Dönerino", "Uber Eats", "Preparing your order", "13:28"], ["DORANA initial necklace", "Amazon · ASL", "Arriving today", "today"], ["Ecualama order #109280", "FedEx", "At local FedEx facility, Quito", "no date"], ["ROUNY handheld vacuum", "Amazon · Intelcom", "tracker error (page answered HTML)", "Oct 21"]]
+    .map(([n, v, s, e]) => `<div class="card" style="max-width:none"><div class="k">${v}</div><b>${n}</b><div class="sm">${s} · ${e}</div></div>`).join("")}</div>`},
+  blog: {n: "blog", h: `<div class="th">${[["13:04", "cc", "cc's files tab can now search all of ~/nadya as you type, with no index."], ["10:58", "cc", "15 clickable cc mocks: recent links, important messages, chat vs blog, questions."], ["10:48", "design-a", "Design Ah episode 3-16 found and added, so all 60 episodes now play."], ["09:28", "design-a", "First Design Ah episode explainer page is final (episode 1-14)."], ["09:21", "nadya", "21 services worth self-hosting; top picks Vaultwarden, Immich, Audiobookshelf."]]
+    .map(([t, p, x]) => `<div class="row" style="align-items:flex-start"><time>${t}</time><span class="t" style="white-space:normal"><span class="xs muted">${p}</span> ${x}</span></div>`).join("")}</div>`},
+  projects: {n: "projects", h: `<div class="th">${[["arcade (ps3)", "marx:~/web/arcade", "no -co since Oct 12"], ["soccer", "marx:~/web/soccer", "soccer-co stopped Oct 10"], ["bb", "marx:~/web/bb", "bb-co stopped Oct 7"], ["gene", "marx:~/web/gene", "Zoe's genealogy tree"], ["french", "marx:~/web/french", ""], ["launcher", "marx:~/prj/launcher", "Android app"]]
+    .map(([n, d, x]) => `<div class="row"><span class="t"><b>${n}</b> <span class="xs muted">${d}</span></span><time>${x}</time></div>`).join("")}</div>`},
+  sessions: {n: "sessions", badge: "3", h: `<div class="th">${[["busy", "cc-b", "~/ai/cc/web", "assistant mocks round 3"], ["wait", "nadya", "~/nadya", "coordinator"], ["busy", "screenflow-a", "marx:~/web/screenflow", "screenflow design with the user"]]
+    .map(([s, n, d, g]) => `<div class="row" style="align-items:flex-start"><span class="dot ${s}" style="margin-top:.35rem"></span><span class="t" style="white-space:normal"><b>${n}</b> <span class="xs muted">${d}</span><br><span class="sm">${g}</span></span></div>`).join("")}
+    <div class="xs muted" style="margin-top:.3rem">tap one: its chat, its pane, close</div></div>`},
+  quota: {n: "quota", badge: "76%", h: `<div class="th"><div style="font-size:1.4rem;font-weight:600">76%</div><div class="sm">3.9x pace over 1h, 2.0x over 3h · out Sun 1am · resets Mon</div>
+    <div class="sm muted" style="margin-top:.4rem">this week by project: arcade, nadya, cc, design-a…</div></div>`},
+};
+const ORDER = ["files", "packages", "blog", "projects", "sessions", "quota"];
+const dchat = (extra = "") => `<div class="th">${me("13:20", "where's the necklace?")}${ny("13:20", "Amazon says arriving today, with ASL.")}${extra}</div>`;
+const Q2 = [
+  {id: "a", n: "A. A row of names over the chat, a panel beside it", cap: ["The chat is always the left side. Each view is a word in the row, with a count when it has one.", "Click a word: its view opens on the right; the chat stays, so you can ask about what you see. Click again to close.", "Phone: the row scrolls; a view opens as a sheet over the chat."],
+    r: (v) => `<div class="chat"><div class="top"><b>nadya</b></div><div class="nav">${ORDER.map((k) => `<button data-v="${k}" aria-pressed="${v === k}">${PANELS[k].n}${PANELS[k].badge ? ` <span class="xs muted">${PANELS[k].badge}</span>` : ""}</button>`).join("")}</div>${dchat()}<div class="foot">${box()}</div></div>
+      ${v ? `<div class="side"><div class="top"><b>${PANELS[v].n}</b><span class="r lk" data-v="">✕</span></div>${PANELS[v].h}</div>` : ""}`},
+  {id: "b", n: "B. Type / in the box", cap: ["Nothing but the chat on screen. \"/\" lists the views; \"/pa\" picks packages; Enter opens it beside the chat (desktop) or as a sheet (phone).", "The same list holds sessions by name, so \"/cc-a\" opens cc-a's chat.", "No counts on screen until you type /, so a parcel at the door needs a message in the chat."],
+    r: (v) => `<div class="chat"><div class="top"><b>nadya</b><span class="r">76%</span></div>${dchat()}<div class="foot"><div class="in"><span style="color:var(--text)">/${v ? "" : "pa"}</span><button class="b pri">send</button></div></div>
+      ${v ? "" : `<div class="pal">${ORDER.map((k, i) => `<div class="row ${k === "packages" ? "sel" : ""}" data-v="${k}"><span class="t">/${PANELS[k].n}</span>${PANELS[k].badge ? `<time>${PANELS[k].badge}</time>` : ""}${k === "packages" ? `<span class="kbd">↵</span>` : ""}</div>`).join("")}<div class="row" data-v="sessions"><span class="t">/cc-a <span class="xs muted">session</span></span></div></div>`}</div>
+      ${v ? `<div class="side"><div class="top"><b>${PANELS[v].n}</b><span class="r lk" data-v="">✕</span></div>${PANELS[v].h}</div>` : ""}`, start: ""},
+  {id: "c", n: "C. Ask, and the view comes as a card", cap: ["You ask nadya; the answer has a card with the live view inside (packages here). The card stays current.", "\"open\" on the card makes it full size beside the chat. Pinned cards stay above the box.", "Files and quota the same way: \"show me the self-host report\", \"how much is left\"."],
+    r: (v) => `<div class="chat"><div class="top"><b>nadya</b><span class="r">pinned: <span class="lk" data-v="packages">packages</span> · <span class="lk" data-v="quota">quota</span></span></div>
+      <div class="th">${me("13:20", "where's the necklace?")}<div class="who">${N}<b>nadya</b> · 13:20</div><div class="card" style="max-width:86%"><div class="k">packages · live · <span class="lk" data-v="packages">open</span> · pin</div><b>DORANA initial necklace</b><div class="sm">Amazon · ASL · Arriving today</div><div class="xs" style="margin-top:.2rem"><span class="lk" data-v="packages">3 more packages</span></div></div></div><div class="foot">${box()}</div></div>
+      ${v ? `<div class="side"><div class="top"><b>${PANELS[v].n}</b><span class="r lk" data-v="">✕</span></div>${PANELS[v].h}</div>` : ""}`},
+  {id: "d", n: "D. A rail, with the chat first", cap: ["Today's tabs, kept, but the chat is the home and the rail is narrow. Each view replaces the chat; a small chat box stays at the bottom of every view.", "Phone: the rail is a bottom tab bar, chat first.", "Closest to cc today; the cost is that a view hides the chat."],
+    r: (v) => `<div class="rail"><button data-v="" aria-pressed="${!v}">chat</button>${ORDER.map((k) => `<button data-v="${k}" aria-pressed="${v === k}">${PANELS[k].n}${PANELS[k].badge ? ` <span class="xs muted">${PANELS[k].badge}</span>` : ""}</button>`).join("")}</div>
+      <div class="chat">${v ? `<div class="top"><b>${PANELS[v].n}</b></div>${PANELS[v].h}<div class="foot">${box("ask nadya about this…")}</div>` : `<div class="top"><b>nadya</b></div>${dchat()}<div class="foot">${box()}</div>`}</div>`},
+];
+const S2 = {a: "packages", b: "", c: "", d: "files"};
+
+// ---------- 3. things that are not messages ----------
+const Q3 = [
+  {n: "A. A card that changes in place", cap: ["A parcel, a post, a session's state: one card each, placed in the thread when it starts, updated where it is.", "When it changes in a way that needs you (at the door, a question), it moves to the bottom once and pushes the phone. (The 13:27 arrival is written for the mock; the 13:28 ETA is the tracker's.)"],
+    html: phone("nadya", "76%", `<div class="th">${me("12:59", "cc: live grep in the files tab…")}${ny("12:59", "I started cc-a on it.")}
+      <div class="card"><div class="k">post · 13:04 · cc</div>cc's files tab can now search all of ~/nadya as you type, with no index. <span class="lk">open</span></div>
+      <div class="card need"><div class="k">Uber Eats · updated 13:27</div><b>Dönerino is at the door</b><div class="xs muted">preparing 12:58 → picked up → at the door</div></div></div>`, `<div class="foot">${box()}</div>`)},
+  {n: "B. A status line over the box", cap: ["Nothing that is not a message enters the thread. One line above the box holds the parcel, the running sessions, the quota.", "Tap a word to open its view (question 2). Posts are in blog only."],
+    html: phone("nadya", "76%", `<div class="th">${me("12:59", "cc: live grep in the files tab…")}${ny("12:59", "I started cc-a on it.")}${ny("13:04", "The files search is live. <span class=\"lk\">a14839a</span>")}</div>`,
+      `<div class="stat"><span style="color:var(--q);font-weight:600">🛵 Dönerino at the door</span><span><span class="dot busy"></span> cc-a</span><span><span class="dot you"></span> screenflow-a</span><span>76%</span><span class="lk">2 posts</span></div><div class="foot">${box()}</div>`)},
+  {n: "C. A digest at quiet points", cap: ["What happened while you were away comes as one nadya message when you return (cc sees the phone or the laptop active), listing posts, done helpers and parcels.", "Only questions and \"at the door\" interrupt."],
+    html: phone("nadya", "76%", `<div class="th">${me("09:28", "design-a: do you think you can find the missing episode?")}
+      <div class="who">${N}<b>nadya</b> · 11:05 · while you were out</div><div class="bub">
+      <div>✓ design-a-b: 3-16 found, all 60 play <span class="lk">post</span></div><div>✓ cc-a: 15 flow mocks <span class="lk">mocks/flow.html</span></div><div>⏸ arcade-lbp-a/b paused (you on marx)</div><div>📦 necklace arriving today</div></div></div>`, `<div class="foot">${box()}</div>`)},
+];
+
+const M = document.getElementById("m");
+const fig = (o, html) => `<figure>${html}<figcaption><b>${o.n}</b><ul>${o.cap.map((c) => `<li>${c}</li>`).join("")}</ul></figcaption></figure>`;
+function drawQ2() {
+  document.getElementById("q2g").innerHTML = Q2.map((o) => fig(o, `<div class="fr dk" data-q2="${o.id}">${o.r(S2[o.id])}</div>`)).join("");
+}
+M.innerHTML = `<section id="q1"><h2>1. A helper writes to you</h2><div class="grid g4">${Q1.map((o) => fig(o, o.html)).join("")}</div></section>
+  <section id="q2"><h2>2. Files, packages and the other views <span class="sm muted">(click the names)</span></h2><div class="grid g2" id="q2g"></div></section>
+  <section id="q3"><h2>3. Things that are not messages</h2><div class="grid g4">${Q3.map((o) => fig(o, o.html)).join("")}</div></section>`;
+drawQ2();
+M.addEventListener("click", (e) => {
+  const g = e.target.closest("[data-tg]");
+  if (g) return g.closest(".fr").classList.toggle("open");
+  const t = e.target.closest("[data-v]"), f = e.target.closest("[data-q2]");
+  if (!t || !f) return;
+  S2[f.dataset.q2] = S2[f.dataset.q2] === t.dataset.v ? "" : t.dataset.v;
+  drawQ2();
+});
+</script>
+</body>
+</html>
