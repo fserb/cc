@@ -249,6 +249,8 @@ const FILES = [
   {n: "todo/", k: "dir", c: 6, t: "today"}, {n: "days/", k: "dir", c: 8, t: "02:58"}, {n: "dream/", k: "dir", c: 4, t: "07:41"},
   {n: "user/", k: "dir", c: 3, t: "Oct 15"}, {n: "CLAUDE.md", t: "2h"}, {n: "nadya-log.md", t: "4 min"}, {n: "projects.md", t: "Oct 16"},
 ];
+const RUNS = [["research", "password sync", "3h ago, done"], ["track", "LX123456789CA", "this morning"], ["dream", "", "02:45, 4 ideas"], ["nightly", "", "02:41, digest Oct 16"], ["mocks", "less used place", "today"], ["daily", "", "08:07"]];
+const RECENT2 = [["projects/cc.md", "12 min"], ["nadya-log.md", "14 min"], ["todo/todo.md", "1h"], ["research/password-sync.md", "3h"], ["ideas/yt-witch.md", "5h"], ["days/2026-10-16.md", "02:58"], ["dream/2026-10-17/README.md", "07:41"], ["user/prefs.md", "Oct 15"]];
 const RECENT = ["projects/cc.md", "todo/todo.md", "research/password-sync.md", "ideas/yt-witch.md", "days/2026-10-16.md"];
 const DIRS = ["ai/cc", "web/tracker", "marx:web/arcade", "marx:web/soccer", "nadya", "web/blog", "ai/trig"];
 
@@ -293,12 +295,13 @@ function center(st) {
   const c = st.cur;
   if (!c) return `<div class="chat"><p style="color:var(--muted)">nothing open</p></div>`;
   if (VIEW[c]) return VIEW[c](st);
+  if (c.startsWith("f:")) return `<article><p style="font:0.8rem var(--mono);color:var(--muted);margin:0 0 .4rem">~/nadya/${esc(c.slice(2))}</p><h1>${esc(c.slice(2).split("/").pop())}</h1><p style="color:var(--muted)">the file, as the files page shows it</p></article>`;
   const all = [...FIXED, ...TEMP, ...SESS];
   const it = all.find((i) => i.id === c) ?? {title: c.replace(/^run-/, ""), sub: ""};
   if (FIXED.includes(it) && it.id === "blog" || TEMP.includes(it)) return `<article><h1>${esc(it.title)}</h1><p style="color:var(--muted)">${esc(it.sub)}</p></article>`;
   return `<div class="chat"><p class="me">how is it going?</p><p>${esc(it.sub || "started")}: working on it, two of five done.</p><div class="say">message ${esc(it.title)}</div></div>`;
 }
-const title = (st) => st.cur ? ({files: "files", closed: "closed sessions", new: "new session", tasks: "tasks", more: "more"})[st.cur] ?? st.cur.replace(/^run-/, "") : "nadya";
+const title = (st) => st.cur?.startsWith("f:") ? st.cur.slice(2).split("/").pop() : st.cur ? ({files: "files", closed: "closed sessions", new: "new session", tasks: "tasks", more: "more"})[st.cur] ?? st.cur.replace(/^run-/, "") : "nadya";
 const quota = `<span class="q"><i></i><b>41%</b>1.1x</span>`;
 
 // ---------- the options
@@ -319,9 +322,9 @@ function ipop(st, top) {
   const at = KINDS.findIndex(([v]) => v === st.ip), l = KINDS[at][1];
   const body = {
     new: () => `<h4>${l}</h4><div class="pad">${newForm(st)}</div>`,
-    tasks: () => `<h4>${l}</h4><div class="pad">${taskList(st, 99)}</div>`,
+    tasks: () => `<h4>recent tasks</h4><div class="pad"><ul class="rows tight">${RUNS.map(([t, a, w]) => { const on = st.running.includes(t); return `<li><span class="nm"><b>${t}</b>${a ? `<code>${esc(a)}</code>` : ""}</span><small>${w}</small><span class="r"><button class="mini ${on ? "on" : ""}" data-act="run:${t}">${on ? "running" : "again"}</button></span></li>`; }).join("")}</ul><button class="go" data-act="open:tasks" style="display:block;text-align:center;margin-top:.7rem">${I.tasks.replace("<svg", '<svg style="width:15px;height:15px;vertical-align:-2px;margin-right:.4rem"')}all tasks</button></div>`,
     closed: () => `<h4>${l}</h4><div class="pad">${closedList(st, 99, true)}</div>`,
-    files: () => `<h4>${l}<a data-act="open:files">open the files page</a></h4><div class="pad"><input class="search" placeholder="search ~/nadya" style="margin-bottom:.3rem"></div><h4>recent</h4><div class="pad"><ul class="rows fl tight">${RECENT.map((f) => `<li data-act="open:files"><span class="ico">·</span><span class="nm">${f}</span><time></time></li>`).join("")}</ul></div><h4>~/nadya</h4><div class="pad">${filesList(7, true)}</div>`,
+    files: () => `<h4>recent files</h4><div class="pad"><ul class="rows fl tight">${RECENT2.map(([f, t]) => `<li data-act="open:f:${f}"><span class="ico">·</span><span class="nm"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f}</span></span><time>${t}</time></li>`).join("")}</ul><button class="go" data-act="open:files" style="display:block;text-align:center;margin-top:.7rem">${I.files.replace("<svg", '<svg style="width:15px;height:15px;vertical-align:-2px;margin-right:.4rem"')}all files</button></div>`,
   }[st.ip]();
   return `<div class="shade ${st.phone ? "dim" : ""}" data-act="ip:"></div><div class="pop ipop" style="top:${top - 46 + 4}px;left:${12 + at * 32}px">${body}</div>`;
 }
