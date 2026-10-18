@@ -68,8 +68,10 @@ export function weigh(model = "", u) {
     u.out * pout) / 5;
 }
 
-async function* walk(dir, depth = 0) {
-  for await (const e of Deno.readDir(dir)) {
+// Sync on purpose: on marx (14k transcripts) the async readDir and stat per file took
+// 10-20s a scan (2026-10-18)
+function* walk(dir, depth = 0) {
+  for (const e of Deno.readDirSync(dir)) {
     const p = `${dir}/${e.name}`;
     if (e.isFile && e.name.endsWith(".jsonl")) yield p;
     else if (e.isDirectory && depth < 3) yield* walk(p, depth + 1);
@@ -210,10 +212,10 @@ export function projectOf(cwd, name) {
 // the session's name
 export async function scan(from, to, step = HOUR) {
   const live = liveNames(), seen = new Set(), sessions = new Map();
-  for await (const path of walk(ROOT)) {
+  for (const path of walk(ROOT)) {
     let st;
     try {
-      st = await Deno.stat(path);
+      st = Deno.statSync(path);
     } catch {
       continue;
     }

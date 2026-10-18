@@ -125,7 +125,8 @@ async function allSeries(n, step, now, wait = 10_000) {
 // follows the plan's quota as it changes: 3.0M-4.2M on 2026-10-16 over 1 to 7 days, at the
 // prices of burn.js since that day. PER_PCT when no span has 3% (`calib` null).
 // Re-measured at most every 10 min, and at once when the reading drops. In the 6h after
-// a drop, while the hours since it hold under 3%, by the minute from the drop on
+// a drop, while the hours since it hold under 3%, by the minute from the drop on. `calib.drop`
+// is set when the measurement is from before that drop, with under 3% added since
 const MEASURE_EVERY = 10 * 60_000, FINE = 6 * 3600_000;
 let lastMeasure = null, measuring = null;
 export function measured(u, now = Date.now()) {
@@ -153,7 +154,8 @@ async function measure(u, now) {
     }
   }
   const m = {at: now, resetsAt: u.resetsAt, used: u.used, perPct: c?.perPct ?? PER_PCT,
-    calib: c && {from: c.from, to: c.to, added: c.added, w: c.w}};
+    calib: c && {from: c.from, to: c.to, added: c.added, w: c.w,
+      drop: drop && c.to <= drop.at ? drop.at : undefined}};
   if (keep) lastMeasure = m;
   return m;
 }

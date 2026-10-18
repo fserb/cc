@@ -1012,8 +1012,10 @@ async function cmdUsage() {
   console.log(`${line.text}\n`);
   const t = u.paceTokens, when = (ms) => new Date(ms).toLocaleString("en-US",
     {weekday: "short", hour: "numeric", minute: "2-digit"});
-  if (t) console.log(t.calib ? `${(t.perPct / 1e6).toFixed(1)}M weighted tokens per 1%, measured ` +
-    `since ${when(t.calib.from)}: ${(t.calib.w / 1e6).toFixed(0)}M for +${Math.round(t.calib.added)}%\n`
+  const c = t?.calib, upTo = c?.drop ? when(c.to) : "now";
+  if (t) console.log(c ? `${(t.perPct / 1e6).toFixed(1)}M weighted tokens per 1%, measured ` +
+    `${when(c.from)} to ${upTo}: ${(c.w / 1e6).toFixed(0)}M for +${Math.round(c.added)}%` +
+    (c.drop ? `, from before the drop at ${when(c.drop)}: under 3% added since it` : "") + "\n"
     : `${(t.perPct / 1e6).toFixed(1)}M weighted tokens per 1%, the fixed fallback: ` +
       "the log added under 3% in the last 7 days\n");
   const table = paceTable(u);
