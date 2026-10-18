@@ -37,6 +37,12 @@
 - Round 3 (F): "yeah, let's do this version." That is what got built.
 
 ## Open / next
+- **Next, decided by the user** (after the files answer below): "ahn, no. I don't care about a list of all files, I
+  only care about docs/trackers/mocks/etc". So: drop the files tab, and drop file changes from history (keep
+  commits). Make docs the place for the project's docs, trackers and mocks: the notes files and their links (as
+  now), plus doc-like files found in the project's dir (*.md, mocks/*.html, docs/, research pages), not the whole
+  dir. `api/files` would need a filter for that. Reading marx's dirs is only worth it for those docs; ask the user
+  before adding a cchost route on marx.
 - The user asked "which 'files' are you planning to add here?" and got this answer: the files tab is the
   project dir's 40 files changed last, names only, plus its git log as history. marx's dirs (arcade, iron, bb,
   soccer, ~/prj/*, most web apps) are not read yet. Doing it means a cchost route on marx (restart cchost on both
