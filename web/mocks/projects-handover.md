@@ -39,8 +39,8 @@
 ## Open / next
 - Done in 6441dc6: history = posts + commits (user: "history/posts are supposed to be the same thing"); the files tab
   is gone; docs = notes, their links, and the docs found in the project's dir on nadya (web/api `docs`, `doc`).
-- **Waiting on the user**: read marx's project dirs (most projects: arcade, iron, bb, soccer, ~/web/*) for their docs
-  and commits? Needs a cchost route on marx (restart cchost on both hosts) or the api box doing `ssh marx`.
+- Done in 7a66867: no Next on the overview (user: the todo tab has it); marx's dirs read by the api box over
+  `ssh marx` (user: "fair to allow the server to ssh marx to list/fetch files only").
 - Not built: the "out of date" flags shown in the mocks (they were hand-made); cc and ccx stay two projects;
   `~/nadya` files that only mention a project are not listed (the docs tab has the notes' own links).
 - Peers: cc-d is doing sidebar mocks (`mocks/sidebar-rich-*.html`) with fixed rows nadya, blog, projects, and will
