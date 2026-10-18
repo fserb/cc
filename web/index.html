@@ -1157,8 +1157,8 @@ function popBody() {
     return `<h4>recent files</h4>${!fs ? `<p class="meta">loading…</p>` : `<ul class="pl">${fs.map((f) => `<li data-go="files/${esc(f.file)}"><span>${esc(f.file)}</span><time>${ago2(f.at)}</time></li>`).join("")}</ul>`}
       <div class="pbtn"><button type="button" data-go="files">${TOOLS.files[1]}all files</button></div>`;
   }
-  const cs = S.closed;
-  return `<h4>restore session</h4>${!cs ? `<p class="meta">loading…</p>` : !cs.length ? `<p class="meta">none in the last week</p>` : `<ul class="pl">${cs.map((c, k) => `<li data-restore="${k}" title="restore"${c.busy ? ` class="busy"` : ""}><span><b>${esc(c.name || c.title || "unnamed")}</b><code>${esc(`${c.host === "nadya" ? "" : `${c.host}:`}${tilde(c.cwd).replace(/^~\/?/, "") || "~"}`)}</code></span><time>${c.busy ? "restoring…" : ago2(c.at)}</time><small>${esc(c.goal || (c.name ? c.title : "") || c.prompt || " ")}</small>${c.err ? `<p class="err">${esc(c.err)}</p>` : ""}</li>`).join("")}</ul>`}`;
+  const cs = S.closed;  // the 8 newest; cchost sends up to 40 a host, the new pop-up's recent dirs read them all (user)
+  return `<h4>restore session</h4>${!cs ? `<p class="meta">loading…</p>` : !cs.length ? `<p class="meta">none in the last week</p>` : `<ul class="pl">${cs.slice(0, 8).map((c, k) => `<li data-restore="${k}" title="restore"${c.busy ? ` class="busy"` : ""}><span><b>${esc(c.name || c.title || "unnamed")}</b><code>${esc(`${c.host === "nadya" ? "" : `${c.host}:`}${tilde(c.cwd).replace(/^~\/?/, "") || "~"}`)}</code></span><time>${c.busy ? "restoring…" : ago2(c.at)}</time><small>${esc(c.goal || (c.name ? c.title : "") || c.prompt || " ")}</small>${c.err ? `<p class="err">${esc(c.err)}</p>` : ""}</li>`).join("")}</ul>`}`;
 }
 function drawPop() {
   const pop = $("#pop");
