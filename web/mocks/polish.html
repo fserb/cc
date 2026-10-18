@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc mocks: a design pass (apple + emil)</title>
+<style>
+  :root {
+    --bg: #fff; --text: #212529; --muted: #6c757d; --line: #e9ecef; --track: #f7f8f9; --hover: #f3f4f6; --press: #e9ecef;
+    --accent: #0b7bd3; --on-accent: #fff; --red: #d63939; --green: #2f9e44; --gray: #ced4da;
+    --cur: #e7f1fb; --bubble: #f1f2f4;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f1f3f5; color: var(--text); font: 15px/1.5 var(--font); padding: 1.5rem; }
+  body > h1 { font-size: 1.4rem; letter-spacing: -0.01em; margin: 0 0 0.3rem; }
+  body > p { margin: 0 0 1.5rem; color: var(--muted); max-width: 60rem; }
+  section.opt { margin-bottom: 3rem; }
+  section.opt > h2 { font-size: 1.05rem; margin: 0 0 0.6rem; }
+  section.opt > h2 small { font-weight: 400; color: var(--muted); margin-left: 0.6rem; }
+  .pair { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-start; }
+  .cap { font-size: 0.8rem; color: var(--muted); margin: 0 0 0.4rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  button { font: inherit; color: inherit; }
+
+  /* ---------- shared frame */
+  .app { background: var(--bg); border: 1px solid #dee2e6; border-radius: 10px; overflow: hidden; display: grid; grid-template-rows: 48px minmax(0, 1fr); width: 900px; height: 560px; position: relative; box-shadow: 0 1px 3px #0001; }
+  .app > header { display: grid; grid-template-columns: 280px minmax(0, 1fr) auto; align-items: center; border-bottom: 1px solid var(--line); }
+  .tools { display: flex; align-items: center; gap: 2px; height: 100%; padding: 0 0.7rem; border-right: 1px solid var(--line); } .tools .sp { flex: 1; }
+  .tool { all: unset; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; color: var(--muted); }
+  .tool svg { width: 18px; height: 18px; } .tool:hover { background: var(--hover); color: var(--text); } .tool[aria-pressed=true] { background: var(--cur); color: var(--accent); }
+  .app > header > b { padding: 0 1.2rem; font-size: 1.05rem; }
+  .q { display: flex; align-items: center; gap: 0.55rem; padding-right: 1.2rem; font-size: 1.05rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .q .bar { position: relative; width: 84px; height: 6px; border-radius: 3px; background: var(--line); } .q .bar i { position: absolute; inset: 0 80% 0 0; border-radius: 3px; background: var(--red); }
+  .home { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 0; }
+  .left { border-right: 1px solid var(--line); overflow: hidden; user-select: none; }
+  .sec { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 0.8rem 1.1rem 0.25rem; }
+  .it { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 0 0.7rem; padding: 0.35rem 1.1rem; cursor: pointer; align-items: baseline; }
+  .it .d { width: 8px; height: 8px; border-radius: 50%; position: relative; top: calc(4px - 0.5ex); } .d.green { background: var(--green); }
+  .it .t1 { display: flex; gap: 0.5rem; align-items: baseline; white-space: nowrap; } .it .tag { font-size: 0.75rem; color: var(--muted); }
+  .it .at { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; direction: rtl; font: 0.66rem var(--mono); color: var(--muted); }
+  .it small { display: block; color: var(--muted); font-size: 0.82rem; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .center { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; position: relative; }
+  .view { overflow: auto; padding: 1rem 2rem; display: flex; flex-direction: column; justify-content: flex-end; }
+  .msgs { display: flex; flex-direction: column; max-width: 34rem; margin: 0 auto; width: 100%; }
+  .m { align-self: flex-start; max-width: 88%; padding: 0.5rem 0.8rem; background: var(--bubble); overflow-wrap: anywhere; }
+  .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); }
+  .typing { align-self: flex-start; display: flex; gap: 4px; padding: 0.75rem 0.9rem; border-radius: 12px; background: var(--bubble); margin-top: 0.5rem; }
+  .typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: bob 1.2s ease-in-out infinite; } .typing i:nth-child(2) { animation-delay: 0.15s; } .typing i:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes bob { 0%, 60%, 100% { opacity: 0.3; transform: none; } 30% { opacity: 1; transform: translateY(-3px); } }
+
+  /* ---------- BEFORE: as index.html is today */
+  .before .it:hover { background: var(--hover); } .before .it.cur { background: var(--cur); }
+  .before .q { color: var(--red); } .before .q b { color: var(--red); }
+  .before .msgs { gap: 0.5rem; } .before .m { border-radius: 12px; } .before .m small { display: block; font-size: 0.6rem; opacity: 0.7; margin-top: 0.15rem; }
+  .before .say { display: flex; align-items: flex-end; gap: 0.5rem; padding: 0.7rem 2rem 0.9rem; border-top: 1px solid var(--line); }
+  .before .say textarea { flex: 1; min-height: 2.6rem; font: inherit; line-height: 1.4; border: 1px solid var(--line); border-radius: 1.3rem; padding: 0.55rem 1rem; resize: none; }
+  .before .say .sq { height: 2.6rem; width: 2.6rem; border: 1px solid var(--line); background: none; border-radius: 999px; color: var(--muted); display: grid; place-items: center; }
+  .before .say .sq svg { width: 1rem; height: 1rem; }
+  .before .say .send { height: 2.6rem; border: 0; background: var(--accent); color: #fff; border-radius: 999px; padding: 0 1.1rem; }
+  .before .pop { position: absolute; z-index: 5; left: 38px; top: 46px; width: 300px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgb(0 0 0 / 0.13); padding: 0.3rem 0 0.8rem; }
+  .before .pop[hidden] { display: none; }
+  .pop h4 { margin: 0.6rem 1rem 0.3rem; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 400; }
+  .pop ul { list-style: none; margin: 0; padding: 0; } .before .pop li { padding: 0.35rem 1rem; cursor: pointer; } .before .pop li:hover { background: var(--hover); }
+  .before .pop .pbtn { display: flex; justify-content: flex-end; padding: 0.6rem 1rem 0; } .before .pop .pbtn button { border: 0; background: var(--accent); color: #fff; border-radius: 6px; padding: 0.35rem 1rem; }
+
+  /* ---------- AFTER */
+  /* 1. press feedback on everything pressable, on pointer-down */
+  .after .tool { transition: transform 120ms var(--ease-out), background-color 120ms ease; }
+  .after .tool:active { transform: scale(0.94); background: var(--press); }
+  @media (hover: hover) and (pointer: fine) { .after .it:hover { background: var(--hover); } }
+  /* 2. the list: inset rounded selection, a press state, 11px paths */
+  .after .left { padding: 0.25rem 0; }
+  .after .it { margin: 1px 6px; padding: 0.35rem calc(1.1rem - 6px); border-radius: 8px; transition: background-color 80ms ease; }
+  .after .it:active { background: var(--press); }
+  .after .it.cur { background: var(--cur); }
+  .after .it .at { font-size: 0.72rem; }
+  .after .sec { padding-left: 1.1rem; }
+  /* 3. the quota: one colour signal, not three */
+  .after .q { color: var(--muted); } .after .q b { color: var(--text); font-weight: 600; } .after .q .out { color: var(--red); }
+  /* 4. replies grouped: 2px apart in a run, the joined corners small, one time per run */
+  .after .msgs { gap: 2px; }
+  .after .m { border-radius: 6px 16px 16px 6px; position: relative; }
+  .after .m.first { border-top-left-radius: 16px; } .after .m.last { border-bottom-left-radius: 16px; }
+  .after .m.first:not(:first-child) { margin-top: 0.6rem; }
+  .after .stamp { align-self: center; font-size: 0.72rem; color: var(--muted); margin: 0.9rem 0 0.3rem; font-variant-numeric: tabular-nums; }
+  .after .m time { position: absolute; left: calc(100% + 0.6rem); bottom: 0.45rem; font-size: 0.72rem; color: var(--muted); white-space: nowrap; opacity: 0; transition: opacity 120ms ease; font-variant-numeric: tabular-nums; }
+  @media (hover: hover) { .after .m:hover time { opacity: 1; } }
+  /* 5. the composer: one field, controls inside it, send is an arrow that wakes when there is text */
+  .after .say { padding: 0.6rem 2rem 0.9rem; }
+  .after .field { display: flex; align-items: flex-end; gap: 0.15rem; border: 1px solid var(--line); border-radius: 1.3rem; padding: 0.25rem; transition: border-color 120ms ease, box-shadow 120ms ease; }
+  .after .field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent); }
+  .after .field textarea { flex: 1; min-height: 2.1rem; font: inherit; line-height: 1.4; border: 0; outline: 0; padding: 0.3rem 0.5rem; resize: none; background: none; }
+  .after .field .ib { all: unset; cursor: pointer; width: 2.1rem; height: 2.1rem; border-radius: 999px; display: grid; place-items: center; color: var(--muted); transition: transform 120ms var(--ease-out), background-color 120ms ease; }
+  .after .field .ib:hover { background: var(--hover); color: var(--text); } .after .field .ib:active { transform: scale(0.92); }
+  .after .field .ib svg { width: 17px; height: 17px; }
+  .after .field .send { background: var(--accent); color: #fff; opacity: 0.35; transition: opacity 150ms ease, transform 120ms var(--ease-out); }
+  .after .field .send:hover { background: var(--accent); color: #fff; }
+  .after .field.has .send { opacity: 1; }
+  .after .field .mode { font: 0.78rem var(--mono); }
+  /* 6. the pop-up grows out of its button, a light material over the list, and leaves faster than it came */
+  .after .pop { position: absolute; z-index: 5; left: 38px; top: 46px; width: 300px; border-radius: 12px; padding: 0.3rem 0 0.4rem;
+    background: rgb(255 255 255 / 0.82); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgb(0 0 0 / 0.06); box-shadow: 0 12px 32px rgb(0 0 0 / 0.14), 0 1px 2px rgb(0 0 0 / 0.06);
+    transform-origin: 22px 0; transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out), visibility 0s; }
+  .after .pop.closed { opacity: 0; transform: scale(0.96) translateY(-4px); visibility: hidden; pointer-events: none; transition: opacity 100ms ease-out, transform 100ms ease-out, visibility 0s 100ms; }
+  .after .pop li { margin: 0 6px; padding: 0.35rem calc(1rem - 6px); border-radius: 7px; cursor: pointer; }
+  .after .pop li:hover { background: rgb(0 0 0 / 0.05); } .after .pop li:active { background: rgb(0 0 0 / 0.09); }
+  .after .pop .more { margin-top: 0.3rem; padding-top: 0.3rem; border-top: 1px solid rgb(0 0 0 / 0.06); }
+  .after .pop .more li { color: var(--accent); display: flex; justify-content: space-between; }
+  @media (prefers-reduced-transparency: reduce) { .after .pop { background: var(--bg); backdrop-filter: none; } }
+  @media (prefers-reduced-motion: reduce) { .after .pop, .after .pop.closed { transform: none; } }
+  /* 7. the "new" pill rises in from where it points */
+  .newer { position: absolute; bottom: 5.2rem; left: 50%; border: 0; background: var(--accent); color: #fff; border-radius: 999px; padding: 0.35rem 1rem; font-size: 0.85rem; cursor: pointer; box-shadow: 0 1px 4px #0003;
+    transform: translateX(-50%); transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out); }
+  .newer.off { opacity: 0; transform: translate(-50%, 8px); pointer-events: none; transition-duration: 120ms; }
+  .after .newer:active { transform: translateX(-50%) scale(0.96); }
+
+  /* ---------- the list motion demo */
+  .lists { display: flex; gap: 1.5rem; }
+  .mini { width: 280px; background: var(--bg); border: 1px solid #dee2e6; border-radius: 10px; padding: 0.4rem 0; height: 250px; overflow: hidden; position: relative; }
+  .mini .it { background: var(--bg); }
+  .after .mini .it { margin: 1px 6px; border-radius: 8px; }
+  .demo-btns { display: flex; gap: 0.5rem; margin: 0.6rem 0 0; }
+  .demo-btns button { border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 0.25rem 0.8rem; cursor: pointer; transition: transform 120ms var(--ease-out); }
+  .demo-btns button:active { transform: scale(0.97); }
+  label.slow { font-size: 0.85rem; color: var(--muted); display: inline-flex; gap: 0.3rem; align-items: center; margin-left: 0.6rem; }
+
+  table { border-collapse: collapse; background: #fff; font-size: 0.88rem; max-width: 1100px; }
+  th, td { border: 1px solid #dee2e6; padding: 0.45rem 0.6rem; text-align: left; vertical-align: top; }
+  th { background: var(--track); } td code { font: 0.82rem var(--mono); }
+  td:first-child { white-space: nowrap; color: var(--muted); }
+</style>
+</head>
+<body>
+<h1>cc: a design pass</h1>
+<p>What I would change after reading the apple-design and emil-design-eng skills against cc as it is today (screenshots of
+nadya.gum.ts.net/cc at 1280x800). Before is a copy of today's CSS; after is the proposal. The after frame works: click the tool
+buttons, press rows, hover a reply, type in the box. The table at the end lists each change and the rule behind it.</p>
+
+<section class="opt">
+  <h2>Desktop, a session open <small>tasks pop-up: click ▷ in each frame</small></h2>
+  <div class="pair">
+    <div class="before"><p class="cap">before</p><div class="app" data-frame></div></div>
+    <div class="after"><p class="cap">after</p><div class="app" data-frame></div></div>
+  </div>
+</section>
+
+<section class="opt">
+  <h2>The list when sessions come and go <small>today a new row slides in from the left and a gone one leaves to the right</small></h2>
+  <div class="lists">
+    <div class="before"><p class="cap">before</p><div class="mini" id="lb"></div></div>
+    <div class="after"><p class="cap">after</p><div class="mini" id="la"></div></div>
+  </div>
+  <div class="demo-btns"><button id="add">a session starts</button><button id="drop">one ends</button><button id="bump">one moves to the top</button><label class="slow"><input type="checkbox" id="slow"> 4x slower</label></div>
+</section>
+
+<section class="opt">
+  <h2>The changes</h2>
+  <table>
+    <tr><th>Where</th><th>Before</th><th>After</th><th>Why</th></tr>
+    <tr><td>buttons, rows</td><td>no <code>:active</code> state; a row shows nothing until the pointer comes up and the page changes</td><td><code>:active</code> with <code>scale(0.94)</code> on icon buttons, a darker fill on rows and pop-up items, 80-120ms</td><td>Apple §1, Emil "buttons must feel responsive": feedback on pointer-down</td></tr>
+    <tr><td>session list</td><td>selection and hover fill the full width, square</td><td>inset 6px, radius 8px, as macOS sidebars and the pop-up items do</td><td>Familiarity; the tool buttons are already 8px rounded squares, so the rows match them</td></tr>
+    <tr><td>row path</td><td><code>0.66rem</code> mono, about 10px</td><td><code>0.72rem</code>, about 11px</td><td>11px is the smallest size Apple uses for text meant to be read</td></tr>
+    <tr><td>header quota</td><td>date, %, pace all red, plus the red bar and tick</td><td>the bar and the date stay red; the % in text colour, the pace muted</td><td>Simplicity: when four things are red none stands out. The date is the one to act on</td></tr>
+    <tr><td>replies</td><td>every reply its own bubble, 8px apart, its own 9px time at 70% opacity</td><td>a run of replies 2px apart with small joined corners (Messages); a time label between runs more than 5 min apart; each time on hover, beside the bubble</td><td>Grouping: proximity says these belong together. A 9px time on every bubble is noise you cannot read anyway</td></tr>
+    <tr><td>composer</td><td>four separate controls: two bordered circles, the box, a "send" pill</td><td>one field; pop-out and <code>&gt;_</code> inside it on the left, a round ↑ send on the right, faded until there is text; focus is a soft 3px ring</td><td>Grouping and mapping: the controls act on the box, so they sit in it. The faded send shows the state without words</td></tr>
+    <tr><td>pop-ups</td><td>appear and vanish in one frame; opaque</td><td>grow from the button that opened them (origin under it), <code>scale(0.96)</code>+opacity, 160ms in, 100ms out, custom ease-out; translucent material with blur; reduced motion and reduced transparency respected</td><td>Emil: opened a few times an hour, so a short animation; origin-aware; exit faster than enter. Apple §7, §12</td></tr>
+    <tr><td>pop-up footer</td><td>"all tasks" is a filled blue button, the loudest thing in the pop-up</td><td>a plain accent row under a hairline, with a chevron</td><td>Hierarchy: the tasks are the content; "all" is a way out, not the main action</td></tr>
+    <tr><td>list motion</td><td>new row in from the left, gone row out to the right, <code>ease-out</code></td><td>new row fades in from 4px above at <code>scale(0.98)</code>; a gone row fades out in place; both custom ease-out, 200ms; the others still slide</td><td>Apple §7: enter and leave the same way. Nothing comes from off-screen here, so nothing should go there</td></tr>
+    <tr><td>"↓ new" pill</td><td>appears and goes in one frame</td><td>rises 8px with a fade, 200ms in, 120ms out</td><td>it points down at new messages, so it comes from below (Apple §8)</td></tr>
+    <tr><td>easing</td><td>browser <code>ease-out</code></td><td><code>cubic-bezier(0.23, 1, 0.32, 1)</code> as one <code>--ease-out</code> for all of cc</td><td>Emil: the built-in curves are too weak to read as intentional</td></tr>
+  </table>
+  <p style="color:var(--muted);max-width:60rem;margin-top:1rem">Left out on purpose: no animation on list navigation or anything opened by a key (Emil: used tens of times a day);
+  no springs or drag gestures, since cc has nothing you drag. Not mocked, worth asking: a dark scheme (Apple's "colours that adapt to light and dark");
+  cc has none, and it would touch every colour in index.html. The phone keeps its pop-up under the tool buttons with the dimmed page, which you already chose.</p>
+</section>
+
+<script type="module">
+const ic = {
+  plus: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M10 4v12M4 10h12"/></svg>`,
+  play: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M7 5l8 5-8 5z"/></svg>`,
+  folder: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3 6.5h5l1.5 1.5H17v7.5H3z"/></svg>`,
+  hist: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 10a6 6 0 1 0 2-4.5M4 4v3h3M10 7v3l2 1.5"/></svg>`,
+  out: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4h5v5M16 4l-7 7M14 12v4H4V6h4"/></svg>`,
+  up: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15V5M5.5 9.5 10 5l4.5 4.5"/></svg>`,
+};
+const rows = [
+  {n: "nadya", tag: "", at: "nadya", d: "green"}, {n: "blog", s: "The tracker now reads FedEx throu…"}, {n: "plan"}, {n: "projects"}, {n: "packages", tag: "2"},
+  {sec: "sessions"}, {n: "arcade-lbp-d", at: "marx:web/arcade", s: "hard queue: LBP quality"}, {n: "iron-f", tag: "+2", at: "marx:web/iron", s: "hard queue: iron"},
+  {n: "soccer-c", tag: "+5", at: "marx:web/soccer", s: "hard queue: soccer", cur: true}, {n: "cc-a", at: "ai/cc/web", s: "cc web design talk with the user"},
+];
+const row = (r) => r.sec ? `<div class="sec">${r.sec}</div>` : `<div class="it${r.cur ? " cur" : ""}"><span class="d ${r.d ?? ""}"></span><span class="tx"><div class="t1"><b style="font-weight:400">${r.n}</b>${r.tag ? `<span class="tag">${r.tag}</span>` : ""}${r.at ? `<span class="at">${r.at}</span>` : ""}</div>${r.s ? `<small>${r.s}</small>` : ""}</span></div>`;
+const msgs = [
+  ["00:37", "All of batch 10 is written: 186 rows over leaf32-39. Waiting for the batch 8-9 checks."],
+  ["00:44", "Found several new differing rows, plus older ones like player_motion_facing and aim_* that likely contain a newly nested call."],
+  ["00:44", "I'll bisect using OVROFF: Run A tests demo with the 8 differing new rows disabled, Run B adds the 4 body_point rows."],
+  ["00:44", "While those run, applying the first fix set to src/match and starting a second fix fork for the 8 new differing rows."],
+  ["00:45", "Meanwhile, collecting batch 10's rows and checking them for clashes:"],
+  ["00:46", "The bisect runs and the second fix fork are going, and 4 forks are writing batch 11 (leaf40-47)."],
+];
+const tasks = ["Start dream now", "Do some hard work", "Restart nadya (loop)", "Run the nightly check", "Run the daily check", "Back up now", "Track a package…"];
+const mins = (t) => +t.slice(0, 2) * 60 + +t.slice(3);
+
+function frame(after) {
+  let chat = "";
+  if (!after) chat = msgs.map(([t, x]) => `<div class="m">${x}<small>${t}</small></div>`).join("");
+  else {
+    // a run breaks when replies are more than 5 minutes apart
+    const runs = [];
+    for (const m of msgs) { const last = runs.at(-1); if (last && mins(m[0]) - mins(last.at(-1)[0]) <= 5) last.push(m); else runs.push([m]); }
+    for (const run of runs) {
+      chat += `<div class="stamp">${run[0][0]}</div>`;
+      run.forEach(([t, x], i) => chat += `<div class="m${i === 0 ? " first" : ""}${i === run.length - 1 ? " last" : ""}">${x}<time>${t}</time></div>`);
+    }
+  }
+  const say = after
+    ? `<div class="say"><div class="field"><button class="ib" title="open in a terminal">${ic.out}</button><button class="ib mode" title="raw mode">&gt;_</button><textarea rows="1" placeholder="Message soccer-c"></textarea><button class="ib send" title="send">${ic.up}</button></div></div>`
+    : `<div class="say"><button class="sq">${ic.out}</button><button class="sq" style="font:0.85rem var(--mono)">&gt;_</button><textarea rows="1" placeholder="Message soccer-c"></textarea><button class="send">send</button></div>`;
+  const quota = after
+    ? `<span class="out">Sun 12pm</span><span class="bar"><i></i></span><b>20%</b><span>3.3x ↑</span>`
+    : `<span>Sun 12pm</span><span class="bar"><i></i></span><b>20%</b><span>3.3x ↑</span>`;
+  const pop = `<div class="pop${after ? " closed" : ""}"${after ? "" : " hidden"}><h4>tasks</h4><ul>${tasks.map((t) => `<li>${t}</li>`).join("")}</ul>${after ? `<ul class="more"><li>all tasks <span>›</span></li></ul>` : `<div class="pbtn"><button>▷ all tasks</button></div>`}</div>`;
+  return `<header><div class="tools"><button class="tool">${ic.plus}</button><button class="tool" data-t>${ic.play}</button><button class="tool">${ic.folder}</button><span class="sp"></span><button class="tool">${ic.hist}</button></div><b>soccer-c</b><div class="q">${quota}</div></header>
+  <div class="home"><nav class="left">${rows.map(row).join("")}</nav><section class="center"><div class="view"><div class="msgs">${chat}<div class="typing"><i></i><i></i><i></i></div></div></div>
+  <button class="newer${after ? " off" : ""}"${after ? "" : " hidden"}>↓ new</button>${say}</section></div>${pop}`;
+}
+
+for (const el of document.querySelectorAll("[data-frame]")) {
+  const after = !!el.closest(".after");
+  el.innerHTML = frame(after);
+  const pop = el.querySelector(".pop"), t = el.querySelector("[data-t]");
+  const open = () => after ? !pop.classList.contains("closed") : !pop.hidden;
+  const set = (on) => { after ? pop.classList.toggle("closed", !on) : (pop.hidden = !on); t.setAttribute("aria-pressed", on); };
+  t.onclick = (e) => { e.stopPropagation(); set(!open()); };
+  el.addEventListener("click", (e) => { if (open() && !e.target.closest(".pop")) set(false); });
+  for (const r of el.querySelectorAll(".it")) r.onclick = () => { el.querySelector(".it.cur")?.classList.remove("cur"); r.classList.add("cur"); };
+  const view = el.querySelector(".view"), newer = el.querySelector(".newer");
+  view.onscroll = () => { const away = view.scrollHeight - view.scrollTop - view.clientHeight > 40; after ? newer.classList.toggle("off", !away) : (newer.hidden = !away); };
+  newer.onclick = () => view.scrollTo({top: view.scrollHeight, behavior: "smooth"});
+  if (after) {
+    const field = el.querySelector(".field"), ta = field.querySelector("textarea");
+    ta.oninput = () => field.classList.toggle("has", ta.value.trim() !== "");
+  }
+}
+
+// ---------- the list motion demo: today's slide() against the proposal
+const ease = "cubic-bezier(0.23, 1, 0.32, 1)";
+let names = ["arcade-lbp-d", "iron-f", "soccer-c", "cc-a"], next = 0;
+const fresh = ["web-1b", "voices-a", "blog-b", "trig-a"];
+const mrow = (n) => `<div class="it" data-id="${n}"><span class="d"></span><span class="tx"><div class="t1"><b style="font-weight:400">${n}</b></div><small>hard queue</small></span></div>`;
+function places(box) { const m = new Map(), br = box.getBoundingClientRect(); for (const e of box.children) if (!e.classList.contains("gone")) m.set(e.dataset.id, {e, y: e.getBoundingClientRect().top - br.top}); return m; }
+function draw(box, after) {
+  const dur = (document.querySelector("#slow").checked ? 4 : 1) * 200;
+  const was = box.children.length ? places(box) : null;
+  for (const c of [...box.children]) if (!c.classList.contains("gone")) c.remove();
+  box.insertAdjacentHTML("afterbegin", names.map(mrow).join(""));
+  if (!was) return;
+  const now = places(box);
+  for (const [k, n] of now) {
+    const o = was.get(k);
+    if (o) { if (o.y !== n.y) n.e.animate([{transform: `translateY(${o.y - n.y}px)`}, {transform: "none"}], {duration: dur, easing: after ? ease : "ease-out"}); continue; }
+    n.e.animate(after ? [{transform: "translateY(-4px) scale(0.98)", opacity: 0}, {transform: "none", opacity: 1}] : [{transform: "translateX(-100%)", opacity: 0}, {transform: "none", opacity: 1}], {duration: dur, easing: after ? ease : "ease-out"});
+  }
+  for (const [k, o] of was) {
+    if (now.has(k)) continue;
+    const g = o.e; g.classList.add("gone"); g.style.cssText = `position:absolute;left:0;right:0;top:${o.y}px;pointer-events:none`; box.append(g);
+    g.animate(after ? [{opacity: 1}, {opacity: 0, transform: "scale(0.98)"}] : [{transform: "none", opacity: 1}, {transform: "translateX(100%)", opacity: 0}], {duration: after ? dur * 0.75 : dur, easing: after ? ease : "ease-out"}).onfinish = () => g.remove();
+  }
+}
+const both = () => { draw(document.querySelector("#lb"), false); draw(document.querySelector("#la"), true); };
+both();
+document.querySelector("#add").onclick = () => { names.splice(1, 0, fresh[next++ % fresh.length]); both(); };
+document.querySelector("#drop").onclick = () => { if (names.length > 1) names.splice(1, 1); both(); };
+document.querySelector("#bump").onclick = () => { names.unshift(names.pop()); both(); };
+</script>
+</body>
+</html>
