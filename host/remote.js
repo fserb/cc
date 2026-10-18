@@ -140,18 +140,18 @@ export async function measured(u, now = Date.now()) {
   return m;
 }
 
-// The pace over the last 15 min (`short`) and 1h (`long`) from every host's weighted tokens
-// (usage.js tokenPace), which cc's header shows (user, 2026-10-14), at measured()'s tokens
+// The pace over the last 5 min (`short`) and 15 min (`long`) from every host's weighted tokens
+// (usage.js tokenPace), which cc's header shows (user, 2026-10-14; 15m and 1h until 2026-10-17), at measured()'s tokens
 // per %. Each window is whole minutes back from the one in progress, so a window is up to
 // 1 min long.
 export async function tokenPace(u, now = Date.now()) {
   if (!u || now >= u.resetsAt) return null;
-  const [{perPct, calib}, s] = await Promise.all([measured(u, now), allSeries(60, 60_000, now)]);
+  const [{perPct, calib}, s] = await Promise.all([measured(u, now), allSeries(15, 60_000, now)]);
   const win = (mins) => {
     const k = s.w.length - mins;
     return tokenPaceOf(u, s.w.slice(k).reduce((a, b) => a + b, 0), now - (s.from + k * s.step), perPct, now);
   };
-  return {perPct, calib, short: win(15), long: win(60), down: s.down};
+  return {perPct, calib, short: win(5), long: win(15), down: s.down};
 }
 
 // Reads one SSE stream at `url`, onFrame(event, data text) for each frame, until it ends
