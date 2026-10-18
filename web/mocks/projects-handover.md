@@ -37,16 +37,10 @@
 - Round 3 (F): "yeah, let's do this version." That is what got built.
 
 ## Open / next
-- **Next, decided by the user** (after the files answer below): "ahn, no. I don't care about a list of all files, I
-  only care about docs/trackers/mocks/etc". So: drop the files tab, and drop file changes from history (keep
-  commits). Make docs the place for the project's docs, trackers and mocks: the notes files and their links (as
-  now), plus doc-like files found in the project's dir (*.md, mocks/*.html, docs/, research pages), not the whole
-  dir. `api/files` would need a filter for that. Reading marx's dirs is only worth it for those docs; ask the user
-  before adding a cchost route on marx.
-- The user asked "which 'files' are you planning to add here?" and got this answer: the files tab is the
-  project dir's 40 files changed last, names only, plus its git log as history. marx's dirs (arcade, iron, bb,
-  soccer, ~/prj/*, most web apps) are not read yet. Doing it means a cchost route on marx (restart cchost on both
-  hosts) or the api box doing `ssh marx`. I offered to skip marx. **Waiting on the user's answer.**
+- Done in 6441dc6: history = posts + commits (user: "history/posts are supposed to be the same thing"); the files tab
+  is gone; docs = notes, their links, and the docs found in the project's dir on nadya (web/api `docs`, `doc`).
+- **Waiting on the user**: read marx's project dirs (most projects: arcade, iron, bb, soccer, ~/web/*) for their docs
+  and commits? Needs a cchost route on marx (restart cchost on both hosts) or the api box doing `ssh marx`.
 - Not built: the "out of date" flags shown in the mocks (they were hand-made); cc and ccx stay two projects;
   `~/nadya` files that only mention a project are not listed (the docs tab has the notes' own links).
 - Peers: cc-d is doing sidebar mocks (`mocks/sidebar-rich-*.html`) with fixed rows nadya, blog, projects, and will
