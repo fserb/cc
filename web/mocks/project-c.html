@@ -110,8 +110,14 @@ function sidebar(cur) {
 function shell(variant, page, title) {
   document.body.insertAdjacentHTML("afterbegin", `<header><div id="tools"><i></i><i></i><i></i><i></i></div><b>${title}</b><div class="sum"><span class="bar"><i></i></span><b>63%</b> 1.3x</div></header>`);
   document.getElementById("left").innerHTML = sidebar("projects");
+  if (variant === "d" || variant === "e") {
+    // round 2: two indexes, one project page
+    if (page === "index") sessionStorage.ix = variant;
+    document.body.insertAdjacentHTML("beforeend", `<nav id="mocknav"><span>round 2</span><a class="${page === "index" && variant === "d" ? "on" : ""}" href="projects-d.html">index D</a><a class="${page === "index" && variant === "e" ? "on" : ""}" href="projects-e.html">index E</a><span>|</span><a class="${page === "arcade" ? "on" : ""}" href="project-d.html?p=arcade">arcade</a><a class="${page === "tracker" ? "on" : ""}" href="project-d.html?p=tracker">tracker</a><span>|</span><a href="projects-a.html">round 1</a></nav>`);
+    return;
+  }
   const v = (x) => `<a class="${x === variant ? "on" : ""}" href="${page === "index" ? `projects-${x}.html` : `project-${x}.html${location.search}`}">${x.toUpperCase()}</a>`;
-  document.body.insertAdjacentHTML("beforeend", `<nav id="mocknav"><span>mock</span>${["a", "b", "c"].map(v).join("")}<span>|</span><a class="${page === "index" ? "on" : ""}" href="projects-${variant}.html">index</a><a class="${page === "arcade" ? "on" : ""}" href="project-${variant}.html?p=arcade">arcade</a><a class="${page === "tracker" ? "on" : ""}" href="project-${variant}.html?p=tracker">tracker</a></nav>`);
+  document.body.insertAdjacentHTML("beforeend", `<nav id="mocknav"><span>mock</span>${["a", "b", "c"].map(v).join("")}<span>|</span><a class="${page === "index" ? "on" : ""}" href="projects-${variant}.html">index</a><a class="${page === "arcade" ? "on" : ""}" href="project-${variant}.html?p=arcade">arcade</a><a class="${page === "tracker" ? "on" : ""}" href="project-${variant}.html?p=tracker">tracker</a><a href="projects-d.html">round 2</a></nav>`);
 }
 
 const fileRow = (f) => `<li><span class="mono" style="color:var(--text)">${f.host === "nadya" ? "" : `<span style="color:var(--muted)">${f.host}:</span>`}${esc(f.path.replace(/^~\//, ""))}</span>${f.note ? `<span class="tag">${esc(f.note)}</span>` : ""}${f.guess ? `<span class="guess">mentions it? <button>✓</button><button>✕</button></span>` : ""}<small>${f.size ? f.size + " · " : ""}${f.d ? ago(f.d + " 12:00") : "date on marx"}</small></li>`;
@@ -125,6 +131,11 @@ function matchProject(q, p) {
   const ws = q.toLowerCase().split(/\s+/).filter(Boolean);
   if (ws.every((w) => w.length > 2 && p.sub.toLowerCase().includes(w))) return {score: 1, html: esc(p.title)};
   return null;
+}
+
+function inside(p, words) {
+  const has = (s) => words.every((w) => s.toLowerCase().includes(w)), hl = (s) => { let h = esc(s.length > 120 ? s.slice(0, 120) + "…" : s); for (const w of words) h = h.replace(new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), (x) => `<mark>${x}</mark>`); return h; };
+  return [...postsOf(p.id).filter((x) => has(x.text)).map((x) => `post · ${hl(x.text)}`), ...todosOf(p.id).filter((t) => !t.done && has(t.text)).map((t) => `todo · ${hl(t.text)}`), ...(D.files[p.id] ?? []).filter((x) => has(x.path)).map((x) => `file · ${hl(x.path)}`)];
 }
 
 const id = new URLSearchParams(location.search).get("p") ?? "arcade", p = P[id] ?? P.arcade;
