@@ -124,18 +124,19 @@ async function allSeries(n, step, now) {
 // (usage.js calibrate: the last 1, 3 or 7 days, the first where the log added 3%+), so it
 // follows the plan's quota as it changes: 3.0M-4.2M on 2026-10-16 over 1 to 7 days, at the
 // prices of burn.js since that day. PER_PCT when no span has 3% (`calib` null).
-// Re-measured at most every 10 min
+// Re-measured at most every 10 min, and at once when the reading drops
 const MEASURE_EVERY = 10 * 60_000;
 let lastMeasure = null;
 export async function measured(u, now = Date.now()) {
-  if (lastMeasure && now - lastMeasure.at < MEASURE_EVERY && lastMeasure.resetsAt === u.resetsAt) {
+  if (lastMeasure && now - lastMeasure.at < MEASURE_EVERY && lastMeasure.resetsAt === u.resetsAt &&
+    u.used >= lastMeasure.used - 1) {
     return lastMeasure;
   }
   const oldest = Math.ceil((now - CALIB_SPANS.at(-1)) / 3600_000) * 3600_000;
   const {rows, down} = await allRows(oldest, now, localRows);
   const c = calibrate(u, rows, now);
-  const m = {at: now, resetsAt: u.resetsAt, perPct: c?.perPct ?? PER_PCT,
-    calib: c && {from: c.from, added: c.added, w: c.w}};
+  const m = {at: now, resetsAt: u.resetsAt, used: u.used, perPct: c?.perPct ?? PER_PCT,
+    calib: c && {from: c.from, to: c.to, added: c.added, w: c.w}};
   if (!down.length) lastMeasure = m;
   return m;
 }

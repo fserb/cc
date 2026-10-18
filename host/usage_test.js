@@ -196,3 +196,51 @@ Deno.test("calibrate: the shortest span the log added 3%+ over, across a reset",
   assertEquals(calibrate({used: 1, resetsAt, history: history.slice(2)}, rows, now), null);
   assertEquals(addedSince({used: 1, resetsAt, history: history.slice(2)}, now - 3 * D, now), null);
 });
+
+// The log's real shapes: 88 -> 10 under the same reset (the 5x -> 20x change, 2026-10-18
+// 03:11Z), 10 -> 0 with a stale 10 between (Anthropic's reset, 2026-10-13 07:45Z), and
+// whole-percent jitter (29 and 30 in the same second, 2026-10-15)
+Deno.test("calibrate: only after a mid-week drop, the measurement before it until CALIB_MIN", () => {
+  const H = 3600_000, D = 24 * H, resetsAt = 1_000 * D, start = resetsAt - 7 * D, drop = start + 5 * D + 10 * 60_000;
+  const before = [{at: start + 4 * D, used: 70, resetsAt}, {at: drop - H, used: 88, resetsAt}];
+  // 10% at 5x before the drop over 20M; 14% at 20x after it would be 4M per 1%
+  const rows = [{h: drop - 2 * H - 10 * 60_000, w: 20e6}, {h: drop - 10 * 60_000, w: 4e6}, {h: drop + 50 * 60_000, w: 16e6}];
+  const early = [...before, {at: drop, used: 10, resetsAt}, {at: drop + 10 * 60_000, used: 11, resetsAt}];
+  const c0 = calibrate({used: 11, resetsAt, history: early}, rows, drop + 20 * 60_000);
+  assertEquals([c0.to, c0.added], [drop - 10 * 60_000, 18]);
+  const later = [...early, {at: drop + 50 * 60_000, used: 11, resetsAt}, {at: drop + 2 * H, used: 14, resetsAt}];
+  const c = calibrate({used: 14, resetsAt, history: later}, rows, drop + 3 * H);
+  assertEquals([c.from, c.added, c.w, c.perPct], [drop + 50 * 60_000, 3, 16e6, 16e6 / 3]);
+});
+
+Deno.test("calibrate: an Anthropic reset to 0 with a stale reading after it", () => {
+  const H = 3600_000, D = 24 * H, resetsAt = 1_000 * D, start = resetsAt - 7 * D, drop = start + D;
+  const history = [{at: drop - 3 * H, used: 9, resetsAt}, {at: drop - H, used: 10, resetsAt},
+    {at: drop, used: 0, resetsAt}, {at: drop + 3 * H, used: 10, resetsAt}, {at: drop + 3 * H + 9e3, used: 0, resetsAt},
+    {at: drop + 5 * H, used: 2, resetsAt}, {at: drop + 9 * H, used: 5, resetsAt}];
+  const rows = [{h: drop - 2 * H, w: 99e6}, {h: drop + 6 * H, w: 25e6}];
+  assertEquals(weekSamples({used: 5, resetsAt, history}, drop + 10 * H).drops, [{at: drop, by: 10}]);
+  const c = calibrate({used: 5, resetsAt, history}, rows, drop + 10 * H);
+  assertEquals([c.from, c.added, c.perPct], [drop, 5, 5e6]);
+});
+
+Deno.test("calibrate and weekSamples: no drop, through 1-point jitter", () => {
+  const H = 3600_000, D = 24 * H, resetsAt = 1_000 * D, now = resetsAt - 3 * D;
+  const history = [{at: now - 10 * H, used: 28, resetsAt}, {at: now - 9 * H, used: 30, resetsAt},
+    {at: now - 9 * H, used: 29, resetsAt}, {at: now - 8 * H, used: 29, resetsAt}, {at: now - 7 * H, used: 29, resetsAt},
+    {at: now - 2 * H, used: 34, resetsAt}];
+  const u = {used: 34, resetsAt, history}, rows = [{h: now - 12 * H, w: 30e6}, {h: now - 5 * H, w: 30e6}];
+  assertEquals(weekSamples(u, now).drops, []);
+  const c = calibrate(u, rows, now);
+  assertEquals([c.from, c.w], [now - D, 60e6]);
+});
+
+Deno.test("pace: the window starts at a mid-week drop, at least 15 min back", () => {
+  const H = 3600_000, M = 60_000, resetsAt = 1_000 * 24 * H, drop = resetsAt - 40 * H;
+  const history = [{at: drop - 30 * M, used: 80, resetsAt}, {at: drop - M, used: 88, resetsAt},
+    {at: drop, used: 10, resetsAt}, {at: drop + 10 * M, used: 12, resetsAt}];
+  const u = {used: 14, resetsAt, history};
+  const p = pace(u, drop + 20 * M);
+  assertEquals(p.added, 4);
+  assertEquals(p.used, 14);
+});

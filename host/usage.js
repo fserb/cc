@@ -18,6 +18,8 @@ const WEEK = 7 * 24 * 3600_000;
 const SETTLE = 3600_000; // under an hour into a week the average rate is noise
 const RECENT = 1 * 3600_000; // the rate is what the last 1h added
 export const LONGER = 3 * 3600_000; // the second rate, over 3h (usageLine, api/usage paceLong)
+const DIP = 1;
+const MIN_SPAN = 15 * 60_000; // pace() after a drop: the rate over at least the last 15 min
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 // {used, resetsAt, at, history} with every time in ms, `at` being when the file was
@@ -78,7 +80,8 @@ export function usedAt(samples, t) {
 // reading after the last high one, a lone high between lows being an instance with older
 // numbers. Each drop is kept in `samples.drops` as {at, by} and the samples run on as if it
 // had not happened, `by` higher, so what a span added is still a difference; usedNow()
-// takes them back off. `u` is left out when it is at or above the last drop's max: that is
+// takes them back off. A reading DIP points or less under the max is not a drop: the log is
+// whole percents and two instances can write one second apart in either order. `u` is left out when it is at or above the last drop's max: that is
 // an older reading, and anything real since is in the history.
 export function weekSamples(u, now) {
   const start = u.resetsAt - WEEK, raw = [];
@@ -90,12 +93,12 @@ export function weekSamples(u, now) {
   const drops = new Map(), skip = new Set();
   let top = 0;
   for (let i = 0; i < raw.length; i++) {
-    if (!(raw[i].used < top && raw[i + 1]?.used < top)) {
+    if (!(raw[i].used < top - DIP && raw[i + 1]?.used < top - DIP)) {
       top = Math.max(top, raw[i].used);
       continue;
     }
     let j = i;
-    while (j >= 2 && raw[j - 1].used >= top && raw[j - 2].used < top) {
+    while (j >= 2 && raw[j - 1].used >= top && raw[j - 2].used <= raw[i + 1].used) {
       skip.add(j - 1);
       j -= 2;
     }
@@ -164,6 +167,9 @@ export function byDay(u, now = Date.now()) {
 // means no instance calling, so the usage has not moved since. Use from claude.ai or another machine counts against the same limit and
 // is not seen until something here makes a call. With no history, or under 1h of it, the
 // 1h falls between the week's start and the first sample, so the rate is the average.
+// The window starts no earlier than the last mid-week drop (but spans at least MIN_SPAN):
+// a plan change (5x to 20x, 2026-10-17) changes what 1% is, so the %s before it are in
+// other units.
 export function pace(u, now = Date.now(), window = RECENT) {
   if (!u || now >= u.resetsAt) return null;
   const start = u.resetsAt - WEEK, elapsed = Math.max(0, now - start);
@@ -182,7 +188,8 @@ export function pace(u, now = Date.now(), window = RECENT) {
       added: null,
     };
   }
-  const span = Math.min(window, elapsed);
+  const drop = samples.drops.at(-1)?.at ?? -Infinity;
+  const span = Math.min(window, elapsed, Math.max(MIN_SPAN, now - drop));
   const added = total - usedAt(samples, now - span), perMs = added / span;
   const end = used + perMs * (u.resetsAt - now);
   const out = end > 100 ? now + (100 - used) / perMs : null;
@@ -249,17 +256,37 @@ export function addedSince(u, from, now = Date.now()) {
 
 // Weighted tokens per 1% of the week, measured: `rows` (burn rows, {h, w}) against what the
 // log added, over the last 1, 3 or 7 days, the first in which the log added CALIB_MIN% or
-// more (the log is whole percents, +-1 each). {perPct, from, added, w}, or null when none did
+// more (the log is whole percents, +-1 each). {perPct, from, to, added, w}, or null when none did.
+// Never from before the last mid-week drop (this week's or last week's): a plan change
+// changes what 1% is (5x to 20x, 2026-10-17), and after an Anthropic reset it costs only
+// the days before it. Until CALIB_MIN% is added after one, the measurement up to it: right
+// after a reset, wrong by the plan's ratio after a plan change, as PER_PCT would be
 export const CALIB_SPANS = [1, 3, 7].map((d) => d * 24 * 3600_000),
   CALIB_MIN = 3;
+const H = 3600_000;
 export function calibrate(u, rows, now = Date.now()) {
+  const drop = lastDrop(u, now), floor = drop ? Math.ceil(drop.at / H) * H : 0;
   for (const span of CALIB_SPANS) {
-    const from = Math.ceil((now - span) / 3600_000) * 3600_000,
+    const from = Math.max(floor, Math.ceil((now - span) / H) * H),
       added = addedSince(u, from, now);
-    const w = rows.reduce((n, r) => r.h >= from ? n + r.w : n, 0);
+    const w = rows.reduce((n, r) => r.h >= from && r.h < now ? n + r.w : n, 0);
     if (added >= CALIB_MIN && w > 0) {
-      return { perPct: w / added, from, added, w };
+      return { perPct: w / added, from, to: now, added, w };
     }
+    if (from === floor) break;
+  }
+  if (!drop) return null;
+  const to = Math.floor(drop.at / H) * H;
+  return calibrate({ resetsAt: drop.resetsAt, used: 0, history: u.history }, rows, to);
+}
+
+// The last mid-week drop before `now` (weekSamples), this week's or last week's, as
+// {at, resetsAt}, or null
+function lastDrop(u, now) {
+  for (const resetsAt of [u.resetsAt, u.resetsAt - WEEK]) {
+    const at = weekSamples({ ...u, resetsAt, used: 0 }, Math.min(now, resetsAt))
+      .drops.filter((d) => d.at < now).at(-1)?.at;
+    if (at) return { at, resetsAt };
   }
   return null;
 }
