@@ -260,14 +260,16 @@ export function addedSince(u, from, now = Date.now()) {
 // Never from before the last mid-week drop (this week's or last week's): a plan change
 // changes what 1% is (5x to 20x, 2026-10-17), and after an Anthropic reset it costs only
 // the days before it. Until CALIB_MIN% is added after one, the measurement up to it: right
-// after a reset, wrong by the plan's ratio after a plan change, as PER_PCT would be
+// after a reset, wrong by the plan's ratio after a plan change, as PER_PCT would be.
+// `step` is the rows' bucket (burn rows are hours; remote.js measured passes minutes in the
+// hours after a drop, where hours would leave out the one the drop is in)
 export const CALIB_SPANS = [1, 3, 7].map((d) => d * 24 * 3600_000),
   CALIB_MIN = 3;
 const H = 3600_000;
-export function calibrate(u, rows, now = Date.now()) {
-  const drop = lastDrop(u, now), floor = drop ? Math.ceil(drop.at / H) * H : 0;
+export function calibrate(u, rows, now = Date.now(), step = H) {
+  const drop = lastDrop(u, now), floor = drop ? Math.ceil(drop.at / step) * step : 0;
   for (const span of CALIB_SPANS) {
-    const from = Math.max(floor, Math.ceil((now - span) / H) * H),
+    const from = Math.max(floor, Math.ceil((now - span) / step) * step),
       added = addedSince(u, from, now);
     const w = rows.reduce((n, r) => r.h >= from && r.h < now ? n + r.w : n, 0);
     if (added >= CALIB_MIN && w > 0) {
@@ -276,13 +278,13 @@ export function calibrate(u, rows, now = Date.now()) {
     if (from === floor) break;
   }
   if (!drop) return null;
-  const to = Math.floor(drop.at / H) * H;
-  return calibrate({ resetsAt: drop.resetsAt, used: 0, history: u.history }, rows, to);
+  const to = Math.floor(drop.at / step) * step;
+  return calibrate({ resetsAt: drop.resetsAt, used: 0, history: u.history }, rows, to, step);
 }
 
 // The last mid-week drop before `now` (weekSamples), this week's or last week's, as
 // {at, resetsAt}, or null
-function lastDrop(u, now) {
+export function lastDrop(u, now) {
   for (const resetsAt of [u.resetsAt, u.resetsAt - WEEK]) {
     const at = weekSamples({ ...u, resetsAt, used: 0 }, Math.min(now, resetsAt))
       .drops.filter((d) => d.at < now).at(-1)?.at;

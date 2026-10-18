@@ -1,7 +1,7 @@
 // The other machines' daemons, as cchost reaches them: the host list, a call, the merged
 // usage and burn, and the list stream it follows for the relay and api/list?all=1.
 
-import {calibrate, CALIB_SPANS, readUsage, tokenPace as tokenPaceOf, usedAt, usedNow, weekSamples}
+import {calibrate, CALIB_SPANS, lastDrop, readUsage, tokenPace as tokenPaceOf, usedAt, usedNow, weekSamples}
   from "./usage.js";
 import {breakdown, group, localRows, PER_PCT, series} from "./burn.js";
 
@@ -124,8 +124,9 @@ async function allSeries(n, step, now) {
 // (usage.js calibrate: the last 1, 3 or 7 days, the first where the log added 3%+), so it
 // follows the plan's quota as it changes: 3.0M-4.2M on 2026-10-16 over 1 to 7 days, at the
 // prices of burn.js since that day. PER_PCT when no span has 3% (`calib` null).
-// Re-measured at most every 10 min, and at once when the reading drops
-const MEASURE_EVERY = 10 * 60_000;
+// Re-measured at most every 10 min, and at once when the reading drops. In the 6h after
+// a drop, while the hours since it hold under 3%, by the minute from the drop on
+const MEASURE_EVERY = 10 * 60_000, FINE = 6 * 3600_000;
 let lastMeasure = null;
 export async function measured(u, now = Date.now()) {
   if (lastMeasure && now - lastMeasure.at < MEASURE_EVERY && lastMeasure.resetsAt === u.resetsAt &&
@@ -134,7 +135,16 @@ export async function measured(u, now = Date.now()) {
   }
   const oldest = Math.ceil((now - CALIB_SPANS.at(-1)) / 3600_000) * 3600_000;
   const {rows, down} = await allRows(oldest, now, localRows);
-  const c = calibrate(u, rows, now);
+  let c = calibrate(u, rows, now);
+  const drop = lastDrop(u, now), M = 60_000;
+  if ((!c || c.to < now) && drop && now - drop.at < FINE) {
+    // still measuring from before the drop: by the minute since it, if that has CALIB_MIN%
+    const s = await allSeries(Math.ceil((now - drop.at) / M) + 1, M, now);
+    if (!s.down.length) {
+      const fine = calibrate(u, s.w.map((w, i) => ({h: s.from + i * M, w})), now, M);
+      if (fine?.to === now) c = fine;
+    }
+  }
   const m = {at: now, resetsAt: u.resetsAt, used: u.used, perPct: c?.perPct ?? PER_PCT,
     calib: c && {from: c.from, to: c.to, added: c.added, w: c.w}};
   if (!down.length) lastMeasure = m;

@@ -211,6 +211,10 @@ Deno.test("calibrate: only after a mid-week drop, the measurement before it unti
   const later = [...early, {at: drop + 50 * 60_000, used: 11, resetsAt}, {at: drop + 2 * H, used: 14, resetsAt}];
   const c = calibrate({used: 14, resetsAt, history: later}, rows, drop + 3 * H);
   assertEquals([c.from, c.added, c.w, c.perPct], [drop + 50 * 60_000, 3, 16e6, 16e6 / 3]);
+  // by the minute, the hour the drop is in counts from the drop on
+  const M = 60_000, mins = [{h: drop - M, w: 9e6}, {h: drop, w: 2e6}, {h: drop + 30 * M, w: 2e6}];
+  const f = calibrate({used: 14, resetsAt, history: later}, mins, drop + 3 * H, M);
+  assertEquals([f.from, f.added, f.w], [drop, 4, 4e6]);
 });
 
 Deno.test("calibrate: an Anthropic reset to 0 with a stale reading after it", () => {
