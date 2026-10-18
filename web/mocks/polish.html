@@ -83,7 +83,6 @@
   .after .m { border-radius: 6px 16px 16px 6px; position: relative; }
   .after .m.first { border-top-left-radius: 16px; } .after .m.last { border-bottom-left-radius: 16px; }
   .after .m.first:not(:first-child) { margin-top: 0.6rem; }
-  .after .stamp { align-self: center; font-size: 0.72rem; color: var(--muted); margin: 0.9rem 0 0.3rem; font-variant-numeric: tabular-nums; }
   /* the time only on hover, inside the bubble at its bottom right; a spacer at the end of the text keeps the last line clear of it */
   .after .m::after { content: ""; display: inline-block; width: 2.6rem; }
   .after .m time { position: absolute; right: 0.7rem; bottom: 0.35rem; font-size: 0.72rem; color: var(--muted); white-space: nowrap; opacity: 0; transition: opacity 120ms ease; font-variant-numeric: tabular-nums; }
@@ -147,7 +146,7 @@ buttons, press rows, hover a reply, type in the box. The table at the end lists 
     <tr><td>session list</td><td>selection and hover fill the full width, square</td><td>inset 6px, radius 8px, as macOS sidebars and the pop-up items do</td><td>Familiarity; the tool buttons are already 8px rounded squares, so the rows match them</td></tr>
     <tr><td>row path</td><td><code>0.66rem</code> mono, about 10px</td><td><code>0.72rem</code>, about 11px</td><td>11px is the smallest size Apple uses for text meant to be read</td></tr>
     <tr><td>header quota</td><td>date, %, pace all red, plus the red bar and tick</td><td>the bar and the date stay red; the % in text colour, the pace muted</td><td>Simplicity: when four things are red none stands out. The date is the one to act on</td></tr>
-    <tr><td>replies</td><td>every reply its own bubble, 8px apart, its own 9px time at 70% opacity</td><td>a run of replies 2px apart with small joined corners (Messages), a time label between runs more than 5 min apart; each time on hover, at the bubble's bottom right</td><td>Grouping: proximity says these belong together. A 9px time on every bubble is noise you cannot read anyway</td></tr>
+    <tr><td>replies</td><td>every reply its own bubble, 8px apart, its own 9px time at 70% opacity</td><td>a run of replies 2px apart with small joined corners (Messages), a larger gap where replies are more than 5 min apart; the time only on hover, at the bubble's bottom right</td><td>Grouping: proximity says these belong together. A 9px time on every bubble is noise you cannot read anyway</td></tr>
     <tr><td>composer</td><td>four separate controls: two bordered circles, the box, a "send" pill</td><td>one field; pop-out and <code>&gt;_</code> inside it on the left, a round ↑ send on the right, faded until there is text; focus is a soft 3px ring</td><td>Grouping and mapping: the controls act on the box, so they sit in it. The faded send shows the state without words</td></tr>
     <tr><td>pop-ups</td><td>appear and vanish in one frame; opaque</td><td>grow from the button that opened them (origin under it), <code>scale(0.96)</code>+opacity, 160ms in, 100ms out, custom ease-out; translucent material with blur; reduced motion and reduced transparency respected</td><td>Emil: opened a few times an hour, so a short animation; origin-aware; exit faster than enter. Apple §7, §12</td></tr>
     <tr><td>pop-up footer</td><td>"all tasks" is a filled blue button, the loudest thing in the pop-up</td><td>a plain accent row under a hairline, with a chevron</td><td>Hierarchy: the tasks are the content; "all" is a way out, not the main action</td></tr>
@@ -193,7 +192,6 @@ function frame(after) {
     const runs = [];
     for (const m of msgs) { const last = runs.at(-1); if (last && mins(m[0]) - mins(last.at(-1)[0]) <= 5) last.push(m); else runs.push([m]); }
     for (const run of runs) {
-      chat += `<div class="stamp">${run[0][0]}</div>`;
       run.forEach(([t, x], i) => chat += `<div class="m${i === 0 ? " first" : ""}${i === run.length - 1 ? " last" : ""}">${x}<time>${t}</time></div>`);
     }
   }
