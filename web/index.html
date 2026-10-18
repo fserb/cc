@@ -740,10 +740,10 @@ function updates() {
   // parcels not yet delivered, with a tracking number or not (an order the tracker read from a shop's mail), and the front desk
   const desk = pk?.desk.count ?? 0, ps = (pk?.packages.filter((x) => x.carrier !== "ubereats" && !x.unknown && !x.delivered) ?? []).sort((a, b) => Date.parse(b.last) - Date.parse(a.last));
   if (desk || ps.length || cur === "packages") {
-    const err = (x) => /^error/.test(x.status ?? ""), latest = ps.find((x) => !err(x));
+    const err = (x) => /^error/.test(x.status ?? "");
     up.push({id: "packages", title: "parcels", tags: ps.length ? `<span class="tag">${ps.length}</span>` : "", r: pk ? ago(Date.parse(ps[0]?.last ?? pk.updated) / 1000) : "",
-      sub: desk ? `${desk} at the front desk` : latest ? `${carrier(latest)}: ${latest.status}` : "",
-      list: ps.slice(0, 3).map((x) => [`${carrier(x)}, ${shortLabel(x)}`, err(x) ? "tracking error" : x.eta ? weekday(x.eta) : x.status ?? "", err(x)]), more: ps.length > 3 ? `${ps.length - 3} more` : ""});
+      sub: "",  // the lines say it (user, Oct 18th: the subline repeated them); the front desk is a line of its own
+      list: [...desk ? [["front desk", `${desk} waiting`]] : [], ...ps.slice(0, desk ? 2 : 3).map((x) => [`${carrier(x)}, ${shortLabel(x)}`, err(x) ? "tracking error" : x.eta ? weekday(x.eta) : x.status ?? "", err(x)])], more: ps.length > (desk ? 2 : 3) ? `${ps.length - (desk ? 2 : 3)} more` : ""});
   }
   for (const u of up) { u.sec = "updates"; u.ver = `${u.sub}|${u.r}`; }
   for (const k of Object.keys(upHidden)) if (!up.some((u) => u.id === k)) delete upHidden[k];
@@ -838,7 +838,7 @@ function draw() {
     const below = i.bar !== undefined ? `<span class="bar"><i style="width:${(i.bar * 100).toFixed(1)}%"></i></span>`
       : i.list ? `<ul>${i.list.map(([a, b, e]) => `<li class="${e ? "e" : ""}" data-k="${esc(a)}"${v(b)}><span>${esc(a)}</span><span>${esc(b)}</span></li>`).join("")}${i.more ? `<li><span>${esc(i.more)}</span></li>` : ""}</ul>` : "";
     const on = i.id === (isDoc(cur) ? "projects" : isFiles(cur) ? "files" : cur) || (i.open && i.open === cur && !all.some((x) => x.id === cur));
-    html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""} ${i.done ? "done" : ""}" data-id="${esc(i.id)}" aria-current="${on}"><span class="d ${i.d ?? ""}">${i.d === "q" ? "?" : ""}</span><span class="tx">${right === null ? `<div>${esc(i.title)}${i.tags ?? ""}</div>` : `<div class="t1"><b>${esc(i.title)}</b>${i.tags ?? ""}${right}</div>`}<small${v(i.sub)}>${esc(i.sub)}</small>${below}</span>${right === null ? `<time>${esc(i.t)}</time>` : ""}${up ? `<button class="hide" data-hide="${esc(i.id)}" aria-label="hide" title="hide">×</button>` : ""}</div>`;
+    html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""} ${i.done ? "done" : ""}" data-id="${esc(i.id)}" aria-current="${on}"><span class="d ${i.d ?? ""}">${i.d === "q" ? "?" : ""}</span><span class="tx">${right === null ? `<div>${esc(i.title)}${i.tags ?? ""}</div>` : `<div class="t1"><b>${esc(i.title)}</b>${i.tags ?? ""}${right}</div>`}${up && !i.sub ? "" : `<small${v(i.sub)}>${esc(i.sub)}</small>`}${below}</span>${right === null ? `<time>${esc(i.t)}</time>` : ""}${up ? `<button class="hide" data-hide="${esc(i.id)}" aria-label="hide" title="hide">×</button>` : ""}</div>`;
   }
   if (S.offline) html += `<p class="meta" style="padding:0 1.1rem">${esc(S.offline)}</p>`;
   const left = $("#left"), was = slid && places(left);
