@@ -107,10 +107,10 @@ export async function burnSeries(n, step, now = Date.now()) {
 }
 
 // Every host's burn.js series() summed, with the hosts that did not answer as `down`
-async function allSeries(n, step, now, wait = 10_000) {
+async function allSeries(n, step, now) {
   const q = `/api/burn/series?local=1&n=${n}&step=${step}&at=${now}`;
   const [mine, rest] = await Promise.all([series(n, step, now),
-    Promise.all(others().map((h) => call(h, q, undefined, wait)))]);
+    Promise.all(others().map((h) => call(h, q, undefined, 10_000)))]);
   const down = [];
   others().forEach((h, i) => {
     const [body, err] = rest[i];
@@ -134,7 +134,7 @@ export function measured(u, now = Date.now()) {
     u.used >= lastMeasure.used - 1) {
     return Promise.resolve(lastMeasure);
   }
-  // one at a time: the by-the-minute one can wait 40s on a host
+  // one at a time: each reads every host's rows
   return measuring ??= measure(u, now).finally(() => measuring = null);
 }
 
@@ -145,8 +145,7 @@ async function measure(u, now) {
   const drop = lastDrop(u, now), M = 60_000;
   if ((!c || c.to < now) && drop && now - drop.at < FINE) {
     // still measuring from before the drop: by the minute since it, if that has CALIB_MIN%
-    // marx's series took 10-20s on 2026-10-18 (14k transcripts stat'd), over allSeries' 10s
-    const s = await allSeries(Math.ceil((now - drop.at) / M) + 1, M, now, 40_000);
+    const s = await allSeries(Math.ceil((now - drop.at) / M) + 1, M, now);
     if (s.down.length) keep = false;
     else {
       const fine = calibrate(u, s.w.map((w, i) => ({h: s.from + i * M, w})), now, M);
