@@ -314,8 +314,14 @@
 //   api/grep?q=           the files tab's search: a live grep over ~/nadya, every matching file and its count (api/lemon.js, a box of its own)
 const CCX = "../ccapi/api";
 const NADYA = "../nadya/";
-// a file of the files tab: a path in ~/nadya, or ~/<dir>/... for a project's doc elsewhere on nadya (api/doc; ~/web as served)
-const fileUrl = (path) => path.startsWith("~/web/") ? `../${encodeURI(path.slice(6))}` : path.startsWith("~/") ? `api/doc?path=${encodeURIComponent(path)}` : NADYA + encodeURI(path).replace(/#/g, "%23");
+// a file of the files tab: a path in ~/nadya, or [marx:]~/<dir>/... for a project's doc elsewhere (api/doc, which reads marx
+// over ssh; a ~/web page where it is served, so its own files load)
+function fileUrl(path) {
+  const [, m, p] = path.match(/^(marx:)?(~\/.*)$/) ?? [];
+  if (!p) return NADYA + encodeURI(path).replace(/#/g, "%23");
+  if (p.startsWith("~/web/") && (!m || !/\.(md|txt)$/.test(p))) return `${m ? "https://marx.gum.ts.net/" : "../"}${encodeURI(p.slice(6))}`;
+  return `api/doc?${m ? "host=marx&" : ""}path=${encodeURIComponent(p)}`;
+}
 const BLOG = "../blog/";
 const PACKAGES = "../tracker/";  // ~/ai/tracker/web: the package tracker, its page and packages.json
 navigator.serviceWorker?.register("sw.js");
@@ -355,7 +361,7 @@ function md(text, doc) {
   // its line breaks); doc.base: the file's dir in ~/nadya, so relative links open in the files tab and images load
   const base = doc?.base;
   const link = (m, t, u) => /^https?:/.test(u) ? linkHtml(u, t) : /^\/nadya(\/|$)/.test(u) ? linkHtml(esc(u), t) : base != null && !/^(#|\w+:)/.test(u) ? `<a href="#files/${esc(resolve(base, u))}" data-go="files/${esc(resolve(base, u))}">${t}</a>` : doc && /^[\w.-]+\.md$/.test(u) ? `<a href="#project/${u.slice(0, -3)}" data-go="project/${u.slice(0, -3)}">${t}</a>` : t;
-  const img = (m, t, u) => /^https?:/.test(u) ? `<img src="${u}" alt="${t}">` : base != null ? `<img src="${esc(NADYA + encodeURI(resolve(base, u)))}" alt="${t}">` : m;
+  const img = (m, t, u) => /^https?:/.test(u) ? `<img src="${u}" alt="${t}">` : base != null ? `<img src="${esc(fileUrl(resolve(base, u)))}" alt="${t}">` : m;
   const inline = (s) => {
     const keep = [], hold = (h) => `\0${keep.push(h) - 1}\0`;  // code spans and links wait outside, so ** and _ inside them stay as typed
     return autolink(esc(s).replace(/`([^`]+)`/g, (m, c) => hold(`<code>${/^https?:\/\/\S+$/.test(c) ? linkHtml(c, c) : c}</code>`)).replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (...x) => hold(img(...x))).replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (...x) => hold(link(...x))), hold)
@@ -1248,17 +1254,18 @@ async function pjAssign(k, p) {
   catch (err) { sent.set("pj:" + k, err.message); }
   S.pj.change = null; drawView(true);
 }
-// the docs found in a project's dir on nadya and its commits, read when its page opens
+// the docs found in a project's dir and its commits, read when its page opens (marx's over ssh, by web/api)
+const pjDirKey = (w) => `${w.host === "nadya" ? "" : `${w.host}:`}${w.path}`;
 async function pjLoadDir(p) {
-  const w = p?.where; if (!w || w.host !== "nadya") return;
-  const k = w.path, d = S.pj.dirs[k];
+  const w = p?.where; if (!w || !["nadya", "marx"].includes(w.host)) return;
+  const k = pjDirKey(w), d = S.pj.dirs[k];
   if (d && Date.now() - d.at < 60e3) return;
   S.pj.dirs[k] = {at: Date.now(), docs: d?.docs, log: d?.log};
-  const q = encodeURIComponent(k);
-  const [docs, log] = await Promise.all([json(`api/docs?dir=${q}`).catch(() => []), json(`api/log?dir=${q}`).catch(() => [])]);
+  const q = `host=${w.host}&dir=${encodeURIComponent(w.path)}`;
+  const [docs, log] = await Promise.all([json(`api/docs?${q}`).catch(() => []), json(`api/log?${q}`).catch(() => [])]);
   S.pj.dirs[k] = {at: Date.now(), docs, log}; drawView(true);
 }
-// a file's link: ~/nadya's and every other dir's on nadya open in the files tab
+// a file's link: it opens in the files tab, a path in ~/nadya, else [marx:]~/...
 const pjFileLink = (path) => ({go: `files/${path.startsWith("~/nadya/") ? path.slice(8) : path}`});
 // the docs: its notes files, then every link in them: URLs, and paths into ~/nadya (research/x.md, ../dream/...)
 function pjDocs(p) {
@@ -1285,9 +1292,9 @@ function projectView(id) {
   if (!p) return `<article class="pj"><p class="meta">no project ${esc(id)}</p></article>`;
   const s = S.pj, inPart = (x) => !s.part || x.part === s.part;
   const open = p.open.filter(inPart), done = p.todos.filter((t) => t.done && inPart(t)), posts = p.posts.filter(inPart);
-  const dir = p.where && S.pj.dirs[p.where.path], log = dir?.log ?? [], docs = pjDocs(p);
+  const dir = p.where && S.pj.dirs[pjDirKey(p.where)], log = dir?.log ?? [], docs = pjDocs(p);
   // the docs, trackers and mocks in its dir (user, Oct 18th: "I don't care about a list of all files"), less the notes' own links
-  const seen = new Set(docs.map((d) => d.go)), found = (dir?.docs ?? []).map((f) => ({...f, ...pjFileLink(`${p.where.path}/${f.file}`)})).filter((f) => !seen.has(f.go));
+  const seen = new Set(docs.map((d) => d.go)), found = (dir?.docs ?? []).map((f) => ({...f, ...pjFileLink(`${pjDirKey(p.where)}/${f.file}`)})).filter((f) => !seen.has(f.go));
   // history is the posts and the commits in one (user, Oct 18th: "history/posts are supposed to be the same thing")
   const evs = [...posts.map((x) => ({k: "post", t: x.time, x})), ...(s.part ? [] : log.map((c) => ({k: "commit", t: new Date(c.at).toLocaleString("sv").slice(0, 16), x: c})))].sort((a, b) => b.t.localeCompare(a.t));
   const evText = (e) => e.k === "post" ? esc(e.x.text) : `<code>${esc(e.x.h)}</code> ${esc(e.x.s)}`;
@@ -1296,7 +1303,6 @@ function projectView(id) {
   if (s.tab === "overview") {
     const hero = posts.find((x) => x.img);
     body = `${hero ? `<figure class="phero"><img src="${esc(hero.img)}" alt=""><figcaption>${esc(hero.text)}<small>${pjAge(hero.time)} ago · ${esc(hero.agent)}</small></figcaption></figure>` : ""}
-      <div class="psh"><h2>Next</h2>${open.length > 3 ? `<button data-pjt="todo">all ${open.length} →</button>` : ""}</div><ul class="pplain">${open.slice(0, 3).map(pjTodoRow).join("") || `<li class="none">nothing open</li>`}</ul>
       <div class="psh"><h2>Recently</h2><button data-pjt="history">history →</button></div><ul class="pplain">${evs.filter((e) => e.x !== hero).slice(0, 5).map((e) => `<li><span class="one">${evText(e)}</span><time>${pjAge(e.t)}</time></li>`).join("") || `<li class="none">nothing yet</li>`}</ul>
       ${docs.length + found.length ? `<div class="psh"><h2>Docs</h2>${found.length ? `<button data-pjt="docs">all ${docs.length + found.length} →</button>` : ""}</div><div class="pdocs">${[...docs, ...found.slice(0, 4).map((f) => ({...f, title: f.file}))].map((d) => pjA(d, esc(d.title))).join("")}</div>` : ""}`;
   }
@@ -1308,10 +1314,10 @@ function projectView(id) {
       const d = pjDay(e.t); if (d !== last) { tl += `<div class="pday">${new Date(`${d}T12:00`).toLocaleDateString("en-US", {weekday: "short", month: "short", day: "numeric"})}</div>`; last = d; }
       tl += e.k === "post" ? `<div class="pev"><time>${e.t.slice(11)}</time><div>${esc(e.x.text)}${e.x.img ? `<img src="${esc(e.x.img)}" alt="" loading="lazy">` : ""}</div></div>` : `<div class="pev quiet"><time>${e.t.slice(11)}</time><div>${evText(e)}</div></div>`;
     }
-    body = `${posts.length && log.length && !s.part ? `<div class="pkinds">${[["all", "everything"], ["post", "posts"], ["commit", "commits"]].map(([k, l]) => `<button data-pjk="${k}" aria-pressed="${s.kind === k}">${l}</button>`).join("")}</div>` : ""}${tl || `<p class="meta">nothing yet</p>`}${p.where?.host === "marx" ? `<p class="meta">commits of marx's dirs are not read yet</p>` : ""}`;
+    body = `${posts.length && log.length && !s.part ? `<div class="pkinds">${[["all", "everything"], ["post", "posts"], ["commit", "commits"]].map(([k, l]) => `<button data-pjk="${k}" aria-pressed="${s.kind === k}">${l}</button>`).join("")}</div>` : ""}${tl || `<p class="meta">nothing yet</p>`}`;
   }
   if (s.tab === "docs") body = `<ul class="pplain pgap">${docs.map((d) => `<li><span class="one">${pjA(d, esc(d.title))}</span><small>${d.kind ?? (d.go ? "nadya" : "link")}</small></li>`).join("")}</ul>
-    ${p.where?.host === "nadya" ? `<div class="psh"><h2>In <code>${esc(p.where.path)}</code></h2></div><ul class="pplain">${found.map((f) => { const k = f.file.lastIndexOf("/"); return `<li><span class="one pfp">${pjA(f, `<span class="dir">${esc(f.file.slice(0, k + 1))}</span>${esc(f.file.slice(k + 1))}`)}</span><time>${pjAge(new Date(f.at).toLocaleString("sv"))}</time></li>`; }).join("") || `<li class="none">${dir?.docs ? "no docs" : "loading…"}</li>`}</ul>`
+    ${["nadya", "marx"].includes(p.where?.host) ? `<div class="psh"><h2>In <code>${esc(pjDirKey(p.where))}</code></h2></div><ul class="pplain">${found.map((f) => { const k = f.file.lastIndexOf("/"); return `<li><span class="one pfp">${pjA(f, `<span class="dir">${esc(f.file.slice(0, k + 1))}</span>${esc(f.file.slice(k + 1))}`)}</span><time>${pjAge(new Date(f.at).toLocaleString("sv"))}</time></li>`; }).join("") || `<li class="none">${dir?.docs ? "no docs" : "loading…"}</li>`}</ul>`
     : p.where ? `<p class="meta">the docs in ${esc(p.where.host)}:${esc(p.where.path)} are not read yet</p>` : ""}`;
   const state = {idea: "idea", todo: "not working yet", done: "done", nadya: ""}[p.state];
   const page = docs.find((d) => d.href && /gum\.ts\.net\//.test(d.href) && !/\.(md|png|jpe?g)$/.test(d.href));
@@ -1390,7 +1396,7 @@ function jumpTo(view) {
 function filesView(path) {
   const parts = path.split("/").filter(Boolean), dir = path === "" || path.endsWith("/");
   const go = (p, t) => `<a href="#files/${esc(p)}" data-go="files/${esc(p)}">${esc(t)}</a>`;
-  const crumbs = path.startsWith("~/") ? esc(parts.slice(0, -1).join("/")) : [go("", "nadya"), ...parts.slice(0, -1).map((x, k) => go(`${parts.slice(0, k + 1).join("/")}/`, x))].join(" / ");
+  const crumbs = /^(marx:)?~\//.test(path) ? esc(parts.slice(0, -1).join("/")) : [go("", "nadya"), ...parts.slice(0, -1).map((x, k) => go(`${parts.slice(0, k + 1).join("/")}/`, x))].join(" / ");
   const raw = fileUrl(path), f = S.fs[path];
   const head = `<p class="meta crumbs">${crumbs}${dir ? "" : ` · <a href="${esc(raw)}" target="_blank" rel="noopener" data-out>open ↗</a>`}</p>`;
   const search = `<form class="fsearch" role="search"><input type="search" class="fsq" name="q" value="${esc(S.grep.q)}" placeholder="search nadya" aria-label="search nadya" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search"><button type="button" class="fsx" aria-label="clear search">×</button></form>`;
