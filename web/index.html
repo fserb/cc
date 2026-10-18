@@ -730,12 +730,10 @@ function updates() {
       r: x.delivered ? hhmm(Date.parse(x.last) / 1000) : eta ? hhmm(eta / 1000) : "", sub: x.delivered ? "Delivered" : x.status, done: x.delivered,
       bar: x.delivered ? 1 : eta > first ? Math.min(0.97, Math.max(0.03, (now - first) / (eta - first))) : 0.5});
   }
-  // the user's reminders for today, not done or sent; the projects page has their done / snooze
+  // the user's reminders once they are due, not before (user, Oct 18th), until done, snoozed or sent; each opens its own page
   const today = new Date().toLocaleDateString("en-CA");
-  for (const t of S.reminders.filter((t) => t.owner !== "nadya" && t.date === today && !sent.has("todo:" + t.full))) {
-    const left = t.due - now;
-    up.push({id: `rem.${t.full.slice(0, 40)}`, open: "projects", title: t.text, r: t.time ?? "", sub: left <= 0 ? "due now" : `in ${left < 3600e3 ? "" : `${Math.floor(left / 3600e3)}h `}${Math.floor(left % 3600e3 / 60e3)}m`, hot: left <= 0});
-  }
+  for (const t of S.reminders.filter((t) => t.owner !== "nadya" && t.due && t.due <= now && !sent.has("todo:" + t.full)))
+    up.push({id: remKey(t), title: t.text, r: t.date === today ? t.time ?? "" : t.date.slice(5), sub: now - t.due < 60e3 ? "due now" : `due ${ago(t.due / 1000)} ago`, hot: true, d: "blue"});
   const nm = newMocks();
   if (nm.length) up.push({id: "mocks", title: "new mocks", tags: `<span class="tag">${esc([...new Set(nm.map((m) => m.dir))].join(", "))}</span>`, r: ago(nm[0].at / 1000),
     sub: `${nm.length} not opened yet`, list: nm.slice(0, 3).map((m) => [m.name, m.dir]), more: nm.length > 3 ? `${nm.length - 3} more` : ""});
@@ -855,7 +853,7 @@ function draw() {
   const even = u ? Math.min(100, Math.max(0, (Math.min(Date.now(), u.resetsAt) - (u.resetsAt - 7 * 86400e3)) / (7 * 86400e3) * 100)) : 0;
   const tip = u ? `quota ${u.used}% used${p ? `, ${paces(p)} the pace that lasts to the reset` : ""}${p?.out ? `, runs out ${day(p.out)}` : ""}; reset ${day(new Date(u.resetsAt))}` : "no usage data";
   $("#sum").innerHTML = `<button id="qbtn" class="${p?.out || qout(u) ? "out" : ""}" style="--qc:${qcolor(u, p)}" title="${esc(tip)}" aria-label="${esc(tip)}">${p?.out ? `<em class="when">${day(p.out)}</em>` : ""}<span class="bar"><i style="width:${u?.used ?? 0}%"></i>${u ? `<s style="left:${even.toFixed(1)}%"></s>` : ""}</span><b>${u ? u.used + "%" : "?"}</b>${spark()}${p ? `<em class="pc">${p.x.toFixed(1)}x<span class="tr">${trend(p)}</span></em>` : ""}</button>`;
-  if (["nadya", "projects", "quota"].includes(cur) || isPid(cur) || isDoc(cur)) drawView(true);
+  if (["nadya", "projects", "quota"].includes(cur) || cur?.startsWith("rem-") || isPid(cur) || isDoc(cur)) drawView(true);
 }
 
 // ---------- center
@@ -917,6 +915,7 @@ function viewTitle(i) {
   if (!cur || cur === "nadya") return "nadya";
   if (isPid(cur)) return i?.r?.name ?? cur;
   if (isDoc(cur)) return cur.slice(8);
+  if (cur.startsWith("rem-")) return "reminder";
   if (isFiles(cur)) return cur.slice(6).split("/").filter(Boolean).at(-1) ?? "files";
   return cur;
 }
@@ -941,6 +940,7 @@ function drawView(soft) {
   else if (cur === "blog") html = `<iframe src="${BLOG}" title="blog" onload="this.contentDocument?.addEventListener('click', (e) => window.filesLink(e))"></iframe>`;
   else if (cur === "packages") html = `<iframe src="${PACKAGES}" title="packages"></iframe>`;
   else if (cur === "mocks") html = mocksView();
+  else if (cur?.startsWith("rem-")) html = reminderView(cur);
   else if (cur === "projects") html = projectsView();
   else if (isDoc(cur)) html = projectView(cur.slice(8));
   else if (isFiles(cur)) html = filesView(cur.slice(6));
@@ -1334,8 +1334,16 @@ document.addEventListener("click", (e) => {
   if (S.mockOpen) seeMock(S.mockOpen);
   draw(); drawView();
 });
-function dueBox() {
-  return dueTodos(true).map((t) => `<div class="need"><b>${esc(t.text)}</b><p>due ${esc(t.date)} ${esc(t.time ?? "")}</p>${sent.has("todo:" + t.full) ? `<p class="done">✓ ${esc(sent.get("todo:" + t.full))}</p>` : `<div class="opts" data-todo="${esc(t.full)}" data-file="${t.file}" data-due="${esc(`${t.date} ${t.time ?? ""}`.trim())}"><button>done</button><button>snooze 1 h</button><button>send to nadya</button></div>`}</div>`).join("");
+// a reminder's page, from its row in updates: the whole line and its buttons
+const remKey = (t) => `rem-${[...t.full].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0, 2166136261).toString(36)}`;
+function reminderView(key) {
+  const t = [...S.reminders, ...S.todo].find((x) => remKey(x) === key);
+  if (!t) return `<article><p class="meta">not in reminders.md any more (done or removed)</p></article>`;
+  return `<article class="pj">${needTodo(t)}<p class="meta">${esc(t.full)}</p></article>`;
+}
+function dueBox() { return dueTodos(true).map(needTodo).join(""); }
+function needTodo(t) {
+  return [t].map((t) => `<div class="need"><b>${esc(t.text)}</b><p>due ${esc(t.date)} ${esc(t.time ?? "")}</p>${sent.has("todo:" + t.full) ? `<p class="done">✓ ${esc(sent.get("todo:" + t.full))}</p>` : `<div class="opts" data-todo="${esc(t.full)}" data-file="${t.file}" data-due="${esc(`${t.date} ${t.time ?? ""}`.trim())}"><button>done</button><button>snooze 1 h</button><button>send to nadya</button></div>`}</div>`).join("");
 }
 function projectsView() {
   if (!S.projects.length || !S.plan) return `<article class="pj"><p class="meta">loading…</p></article>`;
