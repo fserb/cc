@@ -121,7 +121,7 @@
   /* the time only on hover (a tap on a phone), at the bubble's bottom right; a spacer at the end of its last line keeps the text clear of it */
   .msgs > .m:not(.by) > small { position: absolute; right: 0.7rem; bottom: 0.35rem; margin: 0; font-size: 0.72rem; line-height: 1.2; opacity: 0; transition: opacity 120ms ease; font-variant-numeric: tabular-nums; color: var(--muted); }
   .msgs > .m.me:not(.by) > small { color: var(--on-accent); } @media (hover: hover) { .msgs > .m:not(.by):hover > small { opacity: 0.8; } } .msgs > .m.t > small { opacity: 0.8; }
-  .msgs > .m:not(.by)::after { content: ""; display: inline-block; width: 2.8rem; }
+  .msgs > .m:not(.by)::after, .pb .m:not(:has(> small))::after { content: ""; display: inline-block; width: 2.8rem; }
   .msgs > .m:not(.by):has(> :is(p, ul, ol, pre, div, h1, h2, h3, h4, details, blockquote):nth-last-child(2))::after { display: none; }
   .msgs > .m:not(.by) > p:nth-last-child(2)::after, .msgs > .m:not(.by) > :is(ul, ol):nth-last-child(2) > li:last-child::after { content: ""; display: inline-block; width: 2.8rem; }
   .msgs > .m:not(.by):has(> :is(pre, div, h1, h2, h3, h4, details, blockquote):nth-last-child(2)) { padding-bottom: 1.4rem; }
@@ -973,8 +973,8 @@ function chat(r) {
   // sent from here, not in the log yet: kept below everything until the log shows it
   for (const p of pending.filter((x) => x.pid === r.pid)) {
     const stale = !p.err && Date.now() - p.at > 120e3;
-    const note = p.err ? `not sent: ${esc(p.err)}` : stale ? "not seen yet" : esc(p.note ?? "sending…");
-    out.push(`<div class="pb ${p.err ? "fail" : stale ? "stale" : "pend"}" data-pend="${p.id}"><span class="bar">${PEND_BAR}</span><div class="m me">${thumbs((p.imgs ?? []).map((x) => x.url))}${esc(clip(p.text))}<small>${note}</small></div></div>`);
+    const note = p.err ? `not sent: ${esc(p.err)}` : stale ? "not seen yet" : "";  // no "sending…": the faded bubble says it, and the line made it shrink when the log took it (user)
+    out.push(`<div class="pb ${p.err ? "fail" : stale ? "stale" : "pend"}" data-pend="${p.id}"><span class="bar">${PEND_BAR}</span><div class="m me">${thumbs((p.imgs ?? []).map((x) => x.url))}${esc(clip(p.text))}${note ? `<small>${note}</small>` : ""}</div></div>`);
   }
   // the state turns idle before the log has the reply: keep the dots up to 5 s until the reply shows, so it grows out of them
   const said = msgs.filter((m) => m.body && !m.me).length;
@@ -1546,7 +1546,7 @@ async function sendNow(p) {
       if (p.imgs?.length && attsOf().every((x) => p.imgs.includes(x))) { atts[draftKey] = []; drawAtts(); fit(); }
       await post(`${CCX}/s/${p.pid}/type`, await typed(p));
     }
-    p.note = "sending now…"; drawView(true);
+    drawView(true);
     await post(`${CCX}/s/${p.pid}/now`, {});
   } catch (err) { p.err = err.message; drawView(true); }
 }
