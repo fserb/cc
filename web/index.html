@@ -604,13 +604,24 @@ function places(left) {
   if (!lr.height) return null;  // the list is hidden (phone, a session open)
   for (const e of left.querySelectorAll(":scope > .it:not(.gone), :scope > .sec")) {
     const r = e.getBoundingClientRect();
-    m.set(e.dataset.id ?? `sec:${e.textContent}`, {e, x: r.left - lr.left, y: r.top - lr.top});
+    m.set(e.dataset.id ?? `sec:${e.textContent}`, {e, x: r.left - lr.left, y: r.top - lr.top, h: r.height});
   }
   return m;
+}
+// the rows as they were before the last redraw that moved one, and when: a click just after it is meant for
+// the row the user saw there (user, Oct 18th: a click opened another session when a row moved to the top under it)
+let moved = null;
+function aimed(e, row) {
+  if (!moved || e.timeStamp - moved.t > 600) return row.dataset.id;
+  const y = e.clientY - $("#left").getBoundingClientRect().top;
+  // a section title or a row that went: nothing (a gone row has lost its data-id)
+  for (const [k, o] of moved.was) if (y >= o.y && y < o.y + o.h) return k.startsWith("sec:") || !o.e.dataset.id ? null : k;
+  return row.dataset.id;
 }
 function slide(left, was) {
   const now = places(left);
   if (!now) return;
+  if (now.size !== was.size || [...now].some(([k, n]) => was.get(k)?.y !== n.y)) moved = {t: performance.now(), was};
   for (const [k, n] of now) {
     const o = was.get(k);
     if (o) { if (o.x !== n.x || o.y !== n.y) n.e.animate([{transform: `translate(${o.x - n.x}px, ${o.y - n.y}px)`}, {transform: "none"}], SLIDE); continue; }
@@ -1438,7 +1449,7 @@ document.addEventListener("click", async (e) => {
   // on the phone, the title of an open view goes back like "‹"
   if (e.target.closest("#title") && !(narrow() && document.body.classList.contains("view"))) { cur = "nadya"; push(); open(); return; }
   if (e.target.closest("#back, #title")) { if (history.state?.cc) history.back(); else document.body.classList.remove("view"); return; }
-  const row = e.target.closest(".it"); if (row) { cur = row.dataset.id; push(); if (cur === "blog") localStorage.cc_blog_seen = Math.max(Date.now(), ...S.posts.map((x) => Date.parse(x.time) || 0)); open(); if ((cur === "nadya" || cur.includes(".")) && matchMedia("(hover: hover) and (pointer: fine)").matches) $("#say").q.focus(); return; }
+  const row = e.target.closest(".it"); if (row) { const id = aimed(e, row); if (!id) return; cur = id; push(); if (cur === "blog") localStorage.cc_blog_seen = Math.max(Date.now(), ...S.posts.map((x) => Date.parse(x.time) || 0)); open(); if ((cur === "nadya" || cur.includes(".")) && matchMedia("(hover: hover) and (pointer: fine)").matches) $("#say").q.focus(); return; }
   if (filesLink(e)) return;
   const go = e.target.closest("[data-go]"); if (go) { e.preventDefault(); S.jump = go.dataset.line ? {path: go.dataset.go.slice(6), line: +go.dataset.line, q: S.grep.res.q} : null; cur = go.dataset.go; push(isDoc(cur) || isFiles(cur)); open(); return; }
   const tb = e.target.closest("[data-tabs] button");
