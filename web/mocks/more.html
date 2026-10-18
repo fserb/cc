@@ -308,7 +308,7 @@ const quota = `<span class="q"><i></i><b>41%</b>1.1x</span>`;
 const OPTS = [
   {k: "K", name: "icons", note: "desktop: the header in three, the icons over the list (closed on its right end), the title over the page, the quota; phone: on top of the list, spread across. Each opens a pop-up",
     hdr: (st) => `<header class="three"><span class="hl">${icons(st, KINDS.filter(([v]) => v !== "closed"))}<span class="sp"></span>${icons(st, KINDS.filter(([v]) => v === "closed"))}</span><b>${esc(title(st))}</b>${quota}</header>`,
-    left: (st) => st.phone ? `<div class="irow spread">${icons(st)}</div>` + list(st) : list(st),
+    left: (st) => st.phone ? `<div class="irow spread">${icons(st, [...KINDS.filter(([v]) => v !== "closed"), ...KINDS.filter(([v]) => v === "closed")])}</div>` + list(st) : list(st),
     pop: (st) => ipop(st, st.phone ? 84 : 44)},
 ];
 
