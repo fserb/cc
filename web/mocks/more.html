@@ -187,6 +187,7 @@
   .pop.ipop h4 { margin: 0.6rem 1rem 0.3rem; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 400; display: flex; }
   .pop.ipop h4 a { margin-left: auto; text-transform: none; letter-spacing: 0; color: var(--accent); cursor: pointer; }
   .pop.ipop .pad { padding: 0 1rem; }
+  .pop.ipop .rows li[data-act]:hover { background: var(--hover); margin: 0 -1rem; padding-left: 1rem; padding-right: 1rem; }
   .pop.ipop .rows li:last-child { border-bottom: 0; }
 </style>
 </head>
@@ -265,7 +266,7 @@ function list(st) {
 }
 function closedList(st, n, tight) {
   const cs = CLOSED.filter((c) => !st.back.some((b) => b.id === c.id)).slice(0, n);
-  return `<ul class="rows ${tight ? "tight" : ""}">${cs.map((c) => `<li><span class="nm"><b>${c.id}</b><code>${c.at}</code></span><small>${esc(c.goal)}</small><span class="r"><time>${c.t}</time><button class="mini" data-act="bring:${c.id}">bring back</button></span></li>`).join("")}</ul>`;
+  return `<ul class="rows ${tight ? "tight" : ""}">${cs.map((c) => `<li data-act="bring:${c.id}" title="bring back" style="cursor:pointer"><span class="nm"><b>${c.id}</b><code>${c.at}</code></span><small>${esc(c.goal)}</small><span class="r"><time>${c.t}</time></span></li>`).join("")}</ul>`;
 }
 function taskList(st, n, tight) {
   return `<ul class="rows ${tight ? "tight" : ""}">${TASKS.slice(0, n).map((t) => {
