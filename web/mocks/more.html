@@ -288,11 +288,6 @@ const quota = `<span class="q"><i></i><b>41%</b>1.1x</span>`;
 const OPTS = [
   {k: "A", name: "dock", note: "four buttons under the list, each opens its page",
     left: (st) => list(st) + `<div class="dock">${[["files", "files"], ["closed", "closed", CLOSED.length - st.back.length], ["new", "new"], ["tasks", "tasks"]].map(([v, l, n]) => `<button data-act="open:${v}" aria-current="${st.cur === v}">${I[v]}${n ? `<em>${n}</em>` : ""}${l}</button>`).join("")}</div>`},
-  {k: "B", name: "a fourth section", note: "folded under the sessions; open, its rows are in the list like the others",
-    left: (st) => list(st) + `<div class="sec tog" data-act="fold">${st.fold ? "▾" : "▸"} more<span class="n">${st.fold ? "" : `${CLOSED.length - st.back.length} closed`}</span></div>` +
-      (st.fold ? [{id: "new", ic: "new", title: "new session"}, {id: "tasks", ic: "tasks", title: "tasks", t: `${TASKS.length}`}, {id: "closed", ic: "closed", title: "closed sessions", t: `${CLOSED.length - st.back.length}`}, {id: "files", ic: "files", title: "files"}].map((i) => row(i, st)).join("") : "")},
-  {k: "C", name: "one page for all four", note: "one button at the bottom opens a page with new, tasks, closed and files together",
-    left: (st) => list(st) + `<div class="foot"><button data-act="open:more" aria-pressed="${st.cur === "more"}">＋ new · tasks · closed · files</button></div>`},
   {k: "D", name: "search box", note: "one box on top of the list finds files, closed sessions, tasks and dirs to start in; empty, it shows the recent of each. ⌘K on desktop",
     left: (st) => `<div class="pal"><input class="search" data-pal placeholder="files, closed, tasks, new…" value="${esc(st.q ?? "")}">${st.palOpen ? `<div class="palres">${palette(st)}</div>` : ""}</div>` + list(st)},
   {k: "E", name: "header menu", note: "☰ beside the title; the menu holds the four with the first few of each",
@@ -305,9 +300,6 @@ const OPTS = [
     head: (st) => st.phone ? `<span class="gtabs">${["new", "tasks", "closed", "files"].map((v) => `<button class="hb" data-act="side:${v}" aria-pressed="${st.side === v}">${I[v]}</button>`).join("")}</span>` : "",
     rail: (st) => st.phone ? "" : `<div class="rail">${["new", "tasks", "closed", "files"].map((v) => `<button class="hb" data-act="side:${v}" aria-current="${st.side === v}" title="${v}">${I[v]}</button>`).join("")}</div>`,
     pop: (st) => st.side ? `<div class="side"><div class="hd"><b>${({new: "new session", tasks: "tasks", closed: "closed sessions", files: "files"})[st.side]}</b><button class="hb" data-act="side:">${I.x}</button></div><div class="pad">${({new: () => `<div style="height:.8rem"></div>` + newForm(st), tasks: () => taskList(st, 99, true), closed: () => closedList(st, 99, true), files: () => `<input class="search" placeholder="search ~/nadya" style="margin:.8rem 0 .3rem">` + filesList(99, true)})[st.side]()}</div></div>` : ""},
-  {k: "H", name: "second page of the list", note: "now | more at the bottom flips the list itself; more holds the four, the page beside it stays as it was",
-    left: (st) => (st.page ? `<div class="more-page"><h3>new session</h3>${newForm(st, true)}<h3>tasks</h3>${taskChips(st).replace('class="tchips"', 'class="tchips" style="padding:0"')}<h3>closed</h3>${closedList(st, 4, true)}<h3>files</h3><input class="search" placeholder="search ~/nadya" style="margin-bottom:.3rem">${filesList(6, true)}</div>` : list(st)) +
-      `<div class="seg"><div><button data-act="page:0" aria-pressed="${!st.page}">now</button><button data-act="page:1" aria-pressed="${!!st.page}">more</button></div></div>`},
 ];
 
 function menu(st) {
