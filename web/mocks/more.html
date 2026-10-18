@@ -175,6 +175,7 @@
   .irow .hb[aria-pressed=true], header .hb[aria-pressed=true] { background: var(--cur); color: var(--accent); }
   .hb em { position: absolute; margin: -14px 0 0 18px; font-style: normal; font-size: 0.6rem; background: var(--gray); color: var(--text); border-radius: 999px; padding: 0 0.28rem; line-height: 1.4; }
   .hb { position: relative; }
+  .irow.spread { display: grid; grid-template-columns: repeat(4, 1fr); padding: 0.3rem 0.5rem; } .irow.spread .hb { width: 100%; height: 36px; }
   .pop.ipop { width: 360px; max-height: 500px; padding: 0.3rem 0 0.7rem; }
   .phone .pop.ipop { left: 0.4rem !important; right: 0.4rem; width: auto; max-height: 600px; }
   .pop.ipop h4 { margin: 0.6rem 1rem 0.3rem; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 400; display: flex; }
@@ -296,26 +297,10 @@ const quota = `<span class="q"><i></i><b>41%</b>1.1x</span>`;
 
 // ---------- the options
 const OPTS = [
-  {k: "A", name: "dock", note: "four buttons under the list, each opens its page",
-    left: (st) => list(st) + `<div class="dock">${[["files", "files"], ["closed", "closed", CLOSED.length - st.back.length], ["new", "new"], ["tasks", "tasks"]].map(([v, l, n]) => `<button data-act="open:${v}" aria-current="${st.cur === v}">${I[v]}${n ? `<em>${n}</em>` : ""}${l}</button>`).join("")}</div>`},
-  {k: "D", name: "search box", note: "one box on top of the list finds files, closed sessions, tasks and dirs to start in; empty, it shows the recent of each. ⌘K on desktop",
-    left: (st) => `<div class="pal"><input class="search" data-pal placeholder="files, closed, tasks, new…" value="${esc(st.q ?? "")}">${st.palOpen ? `<div class="palres">${palette(st)}</div>` : ""}</div>` + list(st)},
-  {k: "E", name: "header menu", note: "☰ beside the title; the menu holds the four with the first few of each",
-    head: (st) => `<button class="hb" data-act="menu" aria-pressed="${!!st.menu}">${I.menu}</button>`,
-    pop: (st) => st.menu ? `<div class="shade ${st.phone ? "dim" : ""}" data-act="menu"></div><div class="pop menu">${menu(st)}</div>` : ""},
-  {k: "F", name: "pop-up from +", note: "the + at the bottom raises a panel: a dir to start in, the tasks as chips, the last closed, files. On the phone a bottom sheet",
-    left: (st) => list(st) + `<div class="foot"><button data-act="sheet" aria-pressed="${!!st.sheet}">＋</button></div>`,
-    pop: (st) => st.sheet ? `<div class="shade ${st.phone ? "dim" : ""}" data-act="sheet"></div><div class="sheet">${sheet(st)}</div>` : ""},
-  {k: "G", name: "side panel", note: "icons on the right edge; a panel slides over the right of the page, so the chat stays in view. On the phone the icons sit in the header",
-    head: (st) => st.phone ? `<span class="gtabs">${["new", "tasks", "closed", "files"].map((v) => `<button class="hb" data-act="side:${v}" aria-pressed="${st.side === v}">${I[v]}</button>`).join("")}</span>` : "",
-    rail: (st) => st.phone ? "" : `<div class="rail">${["new", "tasks", "closed", "files"].map((v) => `<button class="hb" data-act="side:${v}" aria-current="${st.side === v}" title="${v}">${I[v]}</button>`).join("")}</div>`,
-    pop: (st) => st.side ? `<div class="side"><div class="hd"><b>${({new: "new session", tasks: "tasks", closed: "closed sessions", files: "files"})[st.side]}</b><button class="hb" data-act="side:">${I.x}</button></div><div class="pad">${({new: () => `<div style="height:.8rem"></div>` + newForm(st), tasks: () => taskList(st, 99, true), closed: () => closedList(st, 99, true), files: () => `<input class="search" placeholder="search ~/nadya" style="margin:.8rem 0 .3rem">` + filesList(99, true)})[st.side]()}</div></div>` : ""},
-  {k: "I", name: "icons on top of the list", note: "no text; each icon opens a pop-up with that one thing, the page beside it stays",
-    left: (st) => `<div class="irow">${icons(st)}</div>` + list(st),
-    pop: (st) => ipop(st, 84)},
-  {k: "J", name: "icons in the header", note: "the same pop-ups, the icons left of the title, over the list",
-    head: (st) => `<span class="gtabs">${icons(st)}</span>`,
-    pop: (st) => ipop(st, 44)},
+  {k: "K", name: "icons", note: "desktop: in the header, left of the title; phone: on top of the list, spread across. Each opens a pop-up",
+    head: (st) => st.phone ? "" : `<span class="gtabs">${icons(st)}</span>`,
+    left: (st) => st.phone ? `<div class="irow spread">${icons(st)}</div>` + list(st) : list(st),
+    pop: (st) => ipop(st, st.phone ? 84 : 44)},
 ];
 
 const KINDS = [["new", "new session"], ["tasks", "tasks"], ["closed", "closed sessions"], ["files", "files"]];
@@ -335,35 +320,6 @@ function ipop(st, top) {
   return `<div class="shade ${st.phone ? "dim" : ""}" data-act="ip:"></div><div class="pop ipop" style="top:${top - 46 + 4}px;left:${12 + at * 32}px">${body}</div>`;
 }
 
-function menu(st) {
-  return `<h4>new session</h4><div class="mi" data-act="open:new"><span class="ico">${I.new}</span><span>start in…</span><small>${DIRS[0]}, ${DIRS[1]}</small></div>` +
-    `<h4>tasks<a data-act="open:tasks">all ${TASKS.length}</a></h4>${TASKS.slice(0, 4).map((t) => `<div class="mi" data-act="run:${t.id}"><span class="ico">${I.tasks}</span><span>${t.id}</span><small>${st.running.includes(t.id) ? "running" : t.last ? `last ${t.last}` : ""}</small></div>`).join("")}` +
-    `<h4>closed<a data-act="open:closed">all ${CLOSED.length - st.back.length}</a></h4>${CLOSED.filter((c) => !st.back.some((b) => b.id === c.id)).slice(0, 3).map((c) => `<div class="mi" data-act="bring:${c.id}"><span class="ico">${I.closed}</span><span>${c.id} <small>${esc(c.goal)}</small></span><small>${c.t}</small></div>`).join("")}` +
-    `<h4>files</h4><div class="mi" data-act="open:files"><span class="ico">${I.files}</span><span>~/nadya</span><small>search</small></div>${RECENT.slice(0, 2).map((f) => `<div class="mi" data-act="open:files"><span class="ico"></span><span>${f}</span></div>`).join("")}`;
-}
-function sheet(st) {
-  return `<div class="grab"></div><h4>new session</h4><form class="newline" data-form="new"><input name="dir" placeholder="host:dir" value="${esc(st.dir ?? "")}"><button>start</button></form>${st.made ? `<p class="ok" style="margin:.2rem 1rem">started ${esc(st.made)}</p>` : ""}` +
-    `<h4>tasks<a data-act="open:tasks">all</a></h4>${taskChips(st)}` +
-    `<h4>closed<a data-act="open:closed">all ${CLOSED.length - st.back.length}</a></h4><div style="padding:0 1rem">${closedList(st, 3, true)}</div>` +
-    `<h4>files</h4><div class="mi" data-act="open:files"><span class="ico">${I.files}</span><span>~/nadya</span><small>search, recent</small></div>`;
-}
-function palette(st) {
-  const q = (st.q ?? "").toLowerCase(), has = (s) => s.toLowerCase().includes(q);
-  const groups = [];
-  const take = (n) => q ? 6 : n;
-  const fs = [...RECENT, ...FILES.map((f) => f.n)].filter(has).slice(0, take(3));
-  const cs = CLOSED.filter((c) => !st.back.some((b) => b.id === c.id)).filter((c) => has(c.id) || has(c.goal) || has(c.at)).slice(0, take(3));
-  const ts = TASKS.filter((t) => has(t.id) || has(t.what)).slice(0, take(4));
-  const ds = DIRS.filter(has).slice(0, take(2));
-  let n = 0;
-  const pr = (act, ico, a, b) => `<div class="pr ${n++ === 0 ? "sel" : ""}" data-act="${act}"><i>${ico}</i><span>${a}</span><small>${b}</small></div>`;
-  if (ts.length) groups.push(`<h4>run</h4>` + ts.map((t) => pr(`run:${t.id}`, "▸", t.id, st.running.includes(t.id) ? "running" : esc(t.what))).join(""));
-  if (cs.length) groups.push(`<h4>bring back</h4>` + cs.map((c) => pr(`bring:${c.id}`, "↺", `${c.id} <small>${esc(c.goal)}</small>`, c.t)).join(""));
-  groups.push(`<h4>new session</h4>` + (q && !ds.includes(q) ? pr(`spawn:${q}`, "+", `start in <b>${esc(q)}</b>`, "↵") : "") + ds.map((d) => pr(`spawn:${d}`, "+", d, "")).join(""));
-  if (fs.length) groups.push(`<h4>files</h4>` + fs.map((f) => pr("open:files", "·", f, "")).join(""));
-  return groups.join("");
-}
-
 // ---------- frames
 const frames = [];
 function frame(o, phone) {
@@ -378,13 +334,6 @@ function frame(o, phone) {
     const dir = e.target.dir?.value.trim();
     if (dir) { spawn(st, dir); if (st.ip) { st.ip = ""; st.cur = st.spawned.at(-1).id; } }
     draw(el, st);
-  });
-  el.addEventListener("focusin", (e) => { if (e.target.matches("[data-pal]") && !st.palOpen) { st.palOpen = true; draw(el, st, true); } });
-  el.addEventListener("input", (e) => { if (!e.target.matches("[data-pal]")) return; st.q = e.target.value; el.querySelector(".palres").innerHTML = palette(st); });
-  el.addEventListener("keydown", (e) => {
-    if (!e.target.matches("[data-pal]")) return;
-    if (e.key === "Escape") { st.palOpen = false; st.q = ""; draw(el, st); }
-    if (e.key === "Enter") el.querySelector(".palres .pr.sel")?.click();
   });
   return el;
 }
@@ -427,18 +376,12 @@ function draw(el, st, keepPal) {
 
 const nav = document.getElementById("nav"), main = document.getElementById("opts");
 for (const o of OPTS) {
-  nav.insertAdjacentHTML("beforeend", `<a href="#${o.k}">${o.k} ${o.name}</a>`);
   const s = document.createElement("section");
   s.className = "opt"; s.id = o.k;
   s.innerHTML = `<h2>${o.k}. ${o.name}<small>${o.note}</small></h2><div class="pair"></div>`;
   s.querySelector(".pair").append(frame(o, false), frame(o, true));
   main.append(s);
 }
-document.addEventListener("keydown", (e) => {
-  if (!(e.key === "k" && (e.metaKey || e.ctrlKey))) return;
-  e.preventDefault();
-  document.querySelector(".desk.d [data-pal]")?.focus();
-});
 </script>
 </body>
 </html>
