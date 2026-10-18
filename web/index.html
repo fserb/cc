@@ -206,7 +206,7 @@
   .fsearch { position: relative; } .fsearch input { padding-right: 2.4rem; } .fsearch input::-webkit-search-cancel-button { display: none; }
   .fsx { position: absolute; top: 0; right: 0; bottom: 0.8rem; width: 2.6rem; min-height: 2.5rem; border: 0; background: none; color: var(--muted); font: inherit; font-size: 1.2rem; line-height: 1; cursor: pointer; } .fsx:hover { color: inherit; }
   .fsq:placeholder-shown + .fsx { display: none; }
-  .hits h3 { font-size: 0.95em; margin: 1rem 0 0.2rem; cursor: pointer; overflow-wrap: anywhere; } .hits h3:hover { color: var(--accent); }
+  .hits h3 { font-size: 0.95em; margin: 1rem 0 0.2rem; cursor: pointer; overflow-wrap: anywhere; } .hits h3:hover { color: var(--accent); } .hits h3 small { color: var(--muted); font-weight: normal; }
   .fl li .ln { font-style: normal; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2.5em; text-align: right; flex: none; } .hits .fl li span { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
   .hits mark { background: color-mix(in srgb, var(--yel) 45%, transparent); color: inherit; border-radius: 2px; } ::highlight(hit) { background: color-mix(in srgb, var(--yel) 60%, transparent); }
   .crumbs a { color: var(--accent); text-decoration: none; } .crumbs a:hover { text-decoration: underline; } .doc pre.plain { margin: 0; } .doc pre.fm { background: var(--track); color: var(--muted); margin: 0 0 1.2rem; }
@@ -261,7 +261,7 @@
 //   ../blog/              the blog (its #posts are inserted here)
 //   files/                todo.md, reminders.md, ideas/, projects/, research/: links to ~/nadya (caddy lists the dirs)
 //   ../nadya/             all of ~/nadya, for the files tab: a dir asked with Accept: application/json is caddy's listing as JSON
-//   api/grep?q=           the files tab's search: a live grep over ~/nadya (api/lemon.js, a box of its own)
+//   api/grep?q=           the files tab's search: a live grep over ~/nadya, every matching file and its count (api/lemon.js, a box of its own)
 const CCX = "../ccapi/api";
 const NADYA = "../nadya/";
 const BLOG = "../blog/";
@@ -1091,9 +1091,11 @@ function grepView() {
   if (q.length < 2) return "";
   if (!r) return `<p class="meta">searching…</p>`;  // while a new query runs, the last answer stays
   if (r.error) return `<p class="meta err">${esc(r.error)}</p>`;
-  if (!r.hits.length) return `<p class="meta">no match</p>`;
-  const by = Map.groupBy(r.hits, (h) => h.file);
-  return `<p class="meta">${r.hits.length}${r.more ? "+" : ""} lines in ${by.size} files</p>${[...by].map(([file, hs]) => `<section class="hits"><h3 class="go" data-go="files/${esc(file)}">${esc(file)}</h3><ul class="rows fl">${hs.map((h) => `<li class="go" data-go="files/${esc(file)}" data-line="${h.line}"><i class="ln">${h.line}</i><span>${hl(around(h.text.trim(), r.q), r.q)}</span></li>`).join("")}</ul></section>`).join("")}`;
+  if (!r.files.length) return `<p class="meta">no match</p>`;
+  // files whose name holds q first, then the most matching lines; lines drawn until 300, the files after that by name only
+  const by = Map.groupBy(r.hits, (h) => h.file), fs = r.files.toSorted((a, b) => b.name - a.name || b.n - a.n || a.file.localeCompare(b.file));
+  let left = 300;
+  return `<p class="meta">${fs.reduce((t, f) => t + f.n, 0)} lines in ${fs.length} files</p>${fs.map(({file, n}) => { const hs = (by.get(file) ?? []).slice(0, Math.max(0, left)); left -= hs.length; return `<section class="hits"><h3 class="go" data-go="files/${esc(file)}">${esc(file)}${n ? ` <small>${n}</small>` : ""}</h3><ul class="rows fl">${hs.map((h) => `<li class="go" data-go="files/${esc(file)}" data-line="${h.line}"><i class="ln">${h.line}</i><span>${hl(around(h.text.trim(), r.q), r.q)}</span></li>`).join("")}</ul></section>`; }).join("")}`;
 }
 // after a hit's file is drawn: scroll to the match on its line and mark it. The rendered text is not the raw one (markdown),
 // so it takes the query's k-th occurrence in the view, k being how many come before that line in the raw text
