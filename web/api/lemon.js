@@ -1,7 +1,8 @@
 // cc's web-only support functions (cchost keeps the session work). Served at /cc/api/.
 //   GET grep?q=<text>   live grep over ~/nadya, as the files tab shows it: no dotfiles, no tmp/; {q, files: [{file, n, name}], hits}
 //   GET recent          the 10 files of ~/nadya changed last, the same ones left out: [{file, at (ms)}]
-//   GET files?dir=~/ai/x  a project dir on this host: its 40 files changed last, names only; log?dir= its last 60 commits
+//   GET docs?dir=~/ai/x   a project dir on this host: its docs (*.md, and what is under docs/, mocks/, research/), names only
+//   GET doc?path=         one of those, as text; log?dir= the dir's last 60 commits
 import Lemon from "lemon";
 
 const PER = 10;  // matching lines kept per file
@@ -59,16 +60,27 @@ async function recent() {
 }
 
 // a project's dir on this host (projects page): ~/ai/<x>, ~/web/<x>, ~/srv/<x> or ~/nadya[/<x>], checked by shape since it
-// goes into the shell string `host` runs. Names only: ~/ai holds keys (credentials.json, apis), so no file is read
+// goes into the shell string `host` runs. ~/ai holds keys (credentials.json, apis), so only its docs are read (doc below)
 const DIR = /^~\/(ai|web|srv|nadya)(\/[\w.-]+)*$/;
 async function sh(cmd) {
   const {stdout} = await new Deno.Command("host", {args: [cmd], stdout: "piped", stderr: "piped"}).output();
   return new TextDecoder().decode(stdout).split("\n").filter(Boolean);
 }
-// the 40 files changed last, no dotfiles, .git or node_modules: [{file, at (ms), size}]
-async function files(dir) {
-  const ls = await sh(`cd ${dir} && find . \\( -name '.?*' -o -name node_modules \\) -prune -o -type f -printf '%T@ %s %P\\n' | sort -rn | head -n 40`);
-  return ls.map((l) => { const [at, size, ...f] = l.split(" "); return {file: f.join(" "), at: Math.round(+at * 1000), size: +size}; });
+// what a project writes about itself: *.md anywhere, and every file under docs/, mocks/ or research/, 3 levels down,
+// no dotfiles, node_modules or tmp/; newest first, 80: [{file, at (ms), size}]
+const DOC = /(^|\/)((docs|mocks|research)\/.*\.(md|html?|txt)|[^/]+\.md)$/;
+async function docs(dir) {
+  const ls = await sh(`cd ${dir} && find . -maxdepth 4 \\( -name '.?*' -o -name node_modules -o -name tmp \\) -prune -o -type f \\( -name '*.md' -o -path '*/docs/*' -o -path '*/mocks/*' -o -path '*/research/*' \\) -printf '%T@ %s %P\\n' | sort -rn`);
+  return ls.map((l) => { const [at, size, ...f] = l.split(" "); return {file: f.join(" "), at: Math.round(+at * 1000), size: +size}; })
+    .filter((f) => DOC.test(f.file)).slice(0, 80);
+}
+// one doc's text: a path made only of [\w./-] (it goes into the shell string too) under a DIR, that DOC matches; under 2 MB
+async function doc(path) {
+  const rel = path.replace(/^~\/(ai|web|srv|nadya)\//, "");
+  if (!/^~\/[\w.\/-]+$/.test(path) || /(^|\/)\./.test(rel) || rel === path || !DOC.test(rel)) return new Response("not a doc", {status: 400});
+  // base64, since `host` drops blank lines
+  const b64 = (await sh(`[ $(stat -c %s ${path}) -lt 2000000 ] && base64 ${path}`)).join("");
+  return new Response(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)), {headers: {"content-type": `${/\.html?$/.test(path) ? "text/html" : "text/plain"}; charset=utf-8`}});
 }
 // its last 60 commits, if it is a git repo: [{h, at (ms), s}]
 async function log(dir) {
@@ -78,10 +90,11 @@ async function log(dir) {
 
 async function get(req) {
   if (req.subpath === "/recent") return await recent();
-  if (req.subpath === "/files" || req.subpath === "/log") {
+  if (req.subpath === "/doc") return await doc(req.url.searchParams.get("path") ?? "");
+  if (req.subpath === "/docs" || req.subpath === "/log") {
     const dir = req.url.searchParams.get("dir") ?? "";
     if (!DIR.test(dir) || dir.includes("..")) return new Response("bad dir", {status: 400});
-    return req.subpath === "/files" ? await files(dir) : await log(dir);
+    return req.subpath === "/docs" ? await docs(dir) : await log(dir);
   }
 
   if (req.subpath !== "/grep") return Response.HTTP_NOT_FOUND;

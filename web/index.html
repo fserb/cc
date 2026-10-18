@@ -314,6 +314,8 @@
 //   api/grep?q=           the files tab's search: a live grep over ~/nadya, every matching file and its count (api/lemon.js, a box of its own)
 const CCX = "../ccapi/api";
 const NADYA = "../nadya/";
+// a file of the files tab: a path in ~/nadya, or ~/<dir>/... for a project's doc elsewhere on nadya (api/doc; ~/web as served)
+const fileUrl = (path) => path.startsWith("~/web/") ? `../${encodeURI(path.slice(6))}` : path.startsWith("~/") ? `api/doc?path=${encodeURIComponent(path)}` : NADYA + encodeURI(path).replace(/#/g, "%23");
 const BLOG = "../blog/";
 const PACKAGES = "../tracker/";  // ~/ai/tracker/web: the package tracker, its page and packages.json
 navigator.serviceWorker?.register("sw.js");
@@ -496,7 +498,7 @@ async function loadDocs(dir) {
 S.fs = {};
 const IMG = /\.(png|jpe?g|gif|webp|svg|avif|ico)$/i;
 async function loadPath(path) {
-  const url = NADYA + encodeURI(path).replace(/#/g, "%23");
+  const url = fileUrl(path);
   let got;
   try {
     if (path === "" || path.endsWith("/")) {
@@ -1246,22 +1248,18 @@ async function pjAssign(k, p) {
   catch (err) { sent.set("pj:" + k, err.message); }
   S.pj.change = null; drawView(true);
 }
-// the files of a project's dir on nadya and its commits, read when its page opens
+// the docs found in a project's dir on nadya and its commits, read when its page opens
 async function pjLoadDir(p) {
   const w = p?.where; if (!w || w.host !== "nadya") return;
   const k = w.path, d = S.pj.dirs[k];
   if (d && Date.now() - d.at < 60e3) return;
-  S.pj.dirs[k] = {at: Date.now(), files: d?.files, log: d?.log};
+  S.pj.dirs[k] = {at: Date.now(), docs: d?.docs, log: d?.log};
   const q = encodeURIComponent(k);
-  const [files, log] = await Promise.all([json(`api/files?dir=${q}`).catch(() => []), json(`api/log?dir=${q}`).catch(() => [])]);
-  S.pj.dirs[k] = {at: Date.now(), files, log}; drawView(true);
+  const [docs, log] = await Promise.all([json(`api/docs?dir=${q}`).catch(() => []), json(`api/log?dir=${q}`).catch(() => [])]);
+  S.pj.dirs[k] = {at: Date.now(), docs, log}; drawView(true);
 }
-// a file's link: ~/nadya opens in the files tab, ~/web is served; ~/ai is listed only (it holds keys)
-function pjFileLink(path) {
-  if (path.startsWith("~/nadya/")) return {go: `files/${path.slice(8)}`};
-  if (path.startsWith("~/web/")) return {href: `../${path.slice(6)}`};
-  return {};
-}
+// a file's link: ~/nadya's and every other dir's on nadya open in the files tab
+const pjFileLink = (path) => ({go: `files/${path.startsWith("~/nadya/") ? path.slice(8) : path}`});
 // the docs: its notes files, then every link in them: URLs, and paths into ~/nadya (research/x.md, ../dream/...)
 function pjDocs(p) {
   const out = p.notes.map((n) => ({title: `${p.kind === "idea" ? "ideas" : "projects"}/${n.file}`, go: `files/${p.kind === "idea" ? "ideas" : "projects"}/${n.file}`, kind: "notes"}));
@@ -1287,21 +1285,20 @@ function projectView(id) {
   if (!p) return `<article class="pj"><p class="meta">no project ${esc(id)}</p></article>`;
   const s = S.pj, inPart = (x) => !s.part || x.part === s.part;
   const open = p.open.filter(inPart), done = p.todos.filter((t) => t.done && inPart(t)), posts = p.posts.filter(inPart);
-  const dir = p.where && S.pj.dirs[p.where.path], files = dir?.files ?? [], log = dir?.log ?? [], docs = pjDocs(p);
-  // history: posts, commits, files changed in the last 14 days, done todos (their date when written, else none)
-  const evs = [...posts.map((x) => ({k: "post", t: x.time, x})), ...(s.part ? [] : log.map((c) => ({k: "commit", t: new Date(c.at).toLocaleString("sv").slice(0, 16), x: c}))),
-    ...(s.part ? [] : files.filter((f) => Date.now() - f.at < 14 * 864e5).slice(0, 15).map((f) => ({k: "file", t: new Date(f.at).toLocaleString("sv").slice(0, 16), x: f})))].sort((a, b) => b.t.localeCompare(a.t))
-    // a git repo's commits say what changed: its files show only under "files" (tracker's cron rewrites its data every few minutes)
-    .filter((e, _, all) => e.k !== "file" || !log.length || s.kind === "file");
-  const evText = (e) => e.k === "post" ? esc(e.x.text) : e.k === "commit" ? `<code>${esc(e.x.h)}</code> ${esc(e.x.s)}` : `changed <code>${esc(e.x.file)}</code>`;
-  const T = [["overview", ""], ["todo", open.length], ["history", ""], ["posts", posts.length], ["files", p.where?.host === "nadya" ? files.length : ""], ["docs", docs.length]];
+  const dir = p.where && S.pj.dirs[p.where.path], log = dir?.log ?? [], docs = pjDocs(p);
+  // the docs, trackers and mocks in its dir (user, Oct 18th: "I don't care about a list of all files"), less the notes' own links
+  const seen = new Set(docs.map((d) => d.go)), found = (dir?.docs ?? []).map((f) => ({...f, ...pjFileLink(`${p.where.path}/${f.file}`)})).filter((f) => !seen.has(f.go));
+  // history is the posts and the commits in one (user, Oct 18th: "history/posts are supposed to be the same thing")
+  const evs = [...posts.map((x) => ({k: "post", t: x.time, x})), ...(s.part ? [] : log.map((c) => ({k: "commit", t: new Date(c.at).toLocaleString("sv").slice(0, 16), x: c})))].sort((a, b) => b.t.localeCompare(a.t));
+  const evText = (e) => e.k === "post" ? esc(e.x.text) : `<code>${esc(e.x.h)}</code> ${esc(e.x.s)}`;
+  const T = [["overview", ""], ["todo", open.length], ["history", posts.length + (s.part ? 0 : log.length)], ["docs", docs.length + found.length]];
   let body = "";
   if (s.tab === "overview") {
     const hero = posts.find((x) => x.img);
     body = `${hero ? `<figure class="phero"><img src="${esc(hero.img)}" alt=""><figcaption>${esc(hero.text)}<small>${pjAge(hero.time)} ago · ${esc(hero.agent)}</small></figcaption></figure>` : ""}
       <div class="psh"><h2>Next</h2>${open.length > 3 ? `<button data-pjt="todo">all ${open.length} →</button>` : ""}</div><ul class="pplain">${open.slice(0, 3).map(pjTodoRow).join("") || `<li class="none">nothing open</li>`}</ul>
       <div class="psh"><h2>Recently</h2><button data-pjt="history">history →</button></div><ul class="pplain">${evs.filter((e) => e.x !== hero).slice(0, 5).map((e) => `<li><span class="one">${evText(e)}</span><time>${pjAge(e.t)}</time></li>`).join("") || `<li class="none">nothing yet</li>`}</ul>
-      ${docs.length ? `<div class="psh"><h2>Docs</h2></div><div class="pdocs">${docs.map((d) => pjA(d, esc(d.title))).join("")}</div>` : ""}`;
+      ${docs.length + found.length ? `<div class="psh"><h2>Docs</h2>${found.length ? `<button data-pjt="docs">all ${docs.length + found.length} →</button>` : ""}</div><div class="pdocs">${[...docs, ...found.slice(0, 4).map((f) => ({...f, title: f.file}))].map((d) => pjA(d, esc(d.title))).join("")}</div>` : ""}`;
   }
   if (s.tab === "todo") body = `<ul class="pplain pgap">${open.map(pjTodoRow).join("")}${S.pj.add === p.id ? `<li><input type="checkbox" disabled><form class="padd tx"><input name="t" placeholder="a todo for ${esc(p.id)}, sent to nadya" autocomplete="off"></form></li>` : `<li class="none"><input type="checkbox" disabled><button class="plink" data-pjadd="${esc(p.id)}">add a todo</button></li>`}</ul>${done.length ? `<div class="psh"><h2>Done</h2></div><ul class="pplain">${done.map(pjTodoRow).join("")}</ul>` : ""}`;
   if (s.tab === "history") {
@@ -1311,11 +1308,11 @@ function projectView(id) {
       const d = pjDay(e.t); if (d !== last) { tl += `<div class="pday">${new Date(`${d}T12:00`).toLocaleDateString("en-US", {weekday: "short", month: "short", day: "numeric"})}</div>`; last = d; }
       tl += e.k === "post" ? `<div class="pev"><time>${e.t.slice(11)}</time><div>${esc(e.x.text)}${e.x.img ? `<img src="${esc(e.x.img)}" alt="" loading="lazy">` : ""}</div></div>` : `<div class="pev quiet"><time>${e.t.slice(11)}</time><div>${evText(e)}</div></div>`;
     }
-    body = `<div class="pkinds">${[["all", "everything"], ["post", "posts"], ["commit", "commits"], ["file", "files"]].map(([k, l]) => `<button data-pjk="${k}" aria-pressed="${s.kind === k}">${l}</button>`).join("")}</div>${tl || `<p class="meta">nothing yet</p>`}${p.where?.host === "marx" ? `<p class="meta">commits and files of marx's dirs are not read yet</p>` : ""}`;
+    body = `${posts.length && log.length && !s.part ? `<div class="pkinds">${[["all", "everything"], ["post", "posts"], ["commit", "commits"]].map(([k, l]) => `<button data-pjk="${k}" aria-pressed="${s.kind === k}">${l}</button>`).join("")}</div>` : ""}${tl || `<p class="meta">nothing yet</p>`}${p.where?.host === "marx" ? `<p class="meta">commits of marx's dirs are not read yet</p>` : ""}`;
   }
-  if (s.tab === "posts") body = `<div class="pbig">${posts.map((x) => `<figure>${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy">` : `<div class="ph"></div>`}<figcaption>${esc(x.text)}<small>${pjAge(x.time)} ago</small></figcaption></figure>`).join("") || `<p class="meta">no posts</p>`}</div>`;
-  if (s.tab === "files") body = p.where?.host !== "nadya" ? `<p class="meta pgap">${p.where ? `${esc(p.where.host)}:${esc(p.where.path)}: files on marx are not read yet` : "no dir"}</p>` : `<ul class="pplain pgap">${files.map((f) => { const path = `${p.where.path}/${f.file}`, k = f.file.lastIndexOf("/"); return `<li><span class="one pfp">${pjA(pjFileLink(path), `<span class="dir">${esc(f.file.slice(0, k + 1))}</span>${esc(f.file.slice(k + 1))}`)}</span><time>${pjAge(new Date(f.at).toLocaleString("sv"))}</time></li>`; }).join("") || `<li class="none">${dir ? "no files" : "loading…"}</li>`}</ul>`;
-  if (s.tab === "docs") body = `<ul class="pplain pgap">${docs.map((d) => `<li><span class="one">${pjA(d, esc(d.title))}</span><small>${d.kind ?? (d.go ? "nadya" : "link")}</small></li>`).join("")}</ul>`;
+  if (s.tab === "docs") body = `<ul class="pplain pgap">${docs.map((d) => `<li><span class="one">${pjA(d, esc(d.title))}</span><small>${d.kind ?? (d.go ? "nadya" : "link")}</small></li>`).join("")}</ul>
+    ${p.where?.host === "nadya" ? `<div class="psh"><h2>In <code>${esc(p.where.path)}</code></h2></div><ul class="pplain">${found.map((f) => { const k = f.file.lastIndexOf("/"); return `<li><span class="one pfp">${pjA(f, `<span class="dir">${esc(f.file.slice(0, k + 1))}</span>${esc(f.file.slice(k + 1))}`)}</span><time>${pjAge(new Date(f.at).toLocaleString("sv"))}</time></li>`; }).join("") || `<li class="none">${dir?.docs ? "no docs" : "loading…"}</li>`}</ul>`
+    : p.where ? `<p class="meta">the docs in ${esc(p.where.host)}:${esc(p.where.path)} are not read yet</p>` : ""}`;
   const state = {idea: "idea", todo: "not working yet", done: "done", nadya: ""}[p.state];
   const page = docs.find((d) => d.href && /gum\.ts\.net\//.test(d.href) && !/\.(md|png|jpe?g)$/.test(d.href));
   return `<article class="pj pjp">
@@ -1393,8 +1390,8 @@ function jumpTo(view) {
 function filesView(path) {
   const parts = path.split("/").filter(Boolean), dir = path === "" || path.endsWith("/");
   const go = (p, t) => `<a href="#files/${esc(p)}" data-go="files/${esc(p)}">${esc(t)}</a>`;
-  const crumbs = [go("", "nadya"), ...parts.slice(0, -1).map((x, k) => go(`${parts.slice(0, k + 1).join("/")}/`, x))].join(" / ");
-  const raw = NADYA + encodeURI(path).replace(/#/g, "%23"), f = S.fs[path];
+  const crumbs = path.startsWith("~/") ? esc(parts.slice(0, -1).join("/")) : [go("", "nadya"), ...parts.slice(0, -1).map((x, k) => go(`${parts.slice(0, k + 1).join("/")}/`, x))].join(" / ");
+  const raw = fileUrl(path), f = S.fs[path];
   const head = `<p class="meta crumbs">${crumbs}${dir ? "" : ` · <a href="${esc(raw)}" target="_blank" rel="noopener" data-out>open ↗</a>`}</p>`;
   const search = `<form class="fsearch" role="search"><input type="search" class="fsq" name="q" value="${esc(S.grep.q)}" placeholder="search nadya" aria-label="search nadya" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search"><button type="button" class="fsx" aria-label="clear search">×</button></form>`;
   if (dir && S.grep.q.trim().length >= 2) return `<article class="doc">${head}${search}${grepView()}</article>`;
