@@ -417,7 +417,9 @@ async function loadList(file) {
   const text = await fetch(`files/${file}`, {cache: "no-cache"}).then((r) => r.ok ? r.text() : "").catch(() => "");
   return [...text.matchAll(/^- \[(.)\] (?:(\d{4}-\d\d-\d\d)(?: (\d\d:\d\d))? )?(.*)$/gm)].map(([, mark, date, time, rest]) => {
     const due = date ? new Date(`${date}T${time ?? "09:00"}`) : null;
-    return {file, mark, date, time, due, text: rest.split(/\. |\(user/)[0].trim(), full: rest};
+    // reminders.md names an owner, `user:` or `nadya:`; nadya's are its own to do, not waiting on the user
+    const [, owner, body] = rest.match(/^(?:(user|nadya): )?(.*)$/);
+    return {file, mark, date, time, due, owner, text: body.split(/\. |\(user/)[0].trim(), full: rest};
   }).filter((t) => t.mark !== "x");
 }
 // reminders.md on start and every 30s, for the plan row's dot and next due one (user, 2026-10-16)
@@ -526,7 +528,7 @@ async function older(want) {
 function hasDialog(r) { return r.state === "wait" && (r.asking || (stream?.pid === r.pid && S.screens[r.pid]?.dialog)); }
 // waits on you: a dialog, or a turn that ended on a question in plain text (cchost's `question`), which takes typing as usual
 function waitsOnYou(r) { return hasDialog(r) || (r.state === "wait" && !!r.question); }
-function dueTodos(withSent) { const soon = Date.now() + 3600e3; return [...S.reminders, ...S.todo].filter((t) => t.due && t.due.getTime() <= soon && (withSent || !sent.has("todo:" + t.full))); }
+function dueTodos(withSent) { const soon = Date.now() + 3600e3; return [...S.reminders, ...S.todo].filter((t) => t.owner !== "nadya" && t.due && t.due.getTime() <= soon && (withSent || !sent.has("todo:" + t.full))); }
 // the pace is cchost's (api/usage): x over the last 5 min, xl over the last 15 min (user, Oct 17th: the graph shows the longer trend), both
 // from every host's weighted tokens at the tokens per % the log measured (paceTokens, user, Oct 14th); from an older
 // cchost the log's 1h and 3h. out is the shown x's (the 5 min one's with tokens; it was the log's 1h, user Oct 17th: "are we looking at different time scales here?")
@@ -1029,7 +1031,7 @@ function sessionView(r) {
   return `<article>${metaLine(r)}${chat(r)}${dialogBox(r)}</article>`;
 }
 function todoRows(ts) {
-  return ts.map((t) => `<li class="${t.mark === "!" ? "x" : ""}"><span>${esc(t.text)}</span>${t.date ? `<small>${t.date}${t.time ? " " + t.time : ""}${t.mark === "!" ? " · reminded" : ""}</small>` : ""}</li>`).join("") || "<li><span class=meta>nothing</span></li>";
+  return ts.map((t) => `<li class="${t.mark === "!" ? "x" : ""}"><span>${esc(t.text)}</span>${t.date ? `<small>${t.date}${t.time ? " " + t.time : ""}${t.owner === "nadya" ? " · nadya's" : ""}${t.mark === "!" ? " · reminded" : ""}</small>` : ""}</li>`).join("") || "<li><span class=meta>nothing</span></li>";
 }
 function todoView() {
   const due = dueTodos(true);
