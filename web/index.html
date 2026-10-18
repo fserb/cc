@@ -67,6 +67,11 @@
   .opts[data-pick] { flex-direction: column; flex-wrap: nowrap; } .opts[data-pick] > * { flex: none; }
   .opts button { font: inherit; text-align: left; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: 6px; padding: 0.35rem 0.9rem; cursor: pointer; }
   /* no option is filled until you point at one: Claude Code's cursor on option 1 read as a pick (user, 2026-10-12) */
+  .opts button.box, .opts button.radio { position: relative; padding-left: 2.1rem; }
+  .opts button.box::before, .opts button.radio::before { content: ""; position: absolute; left: 0.7rem; top: 0.58rem; box-sizing: border-box; width: 0.95rem; height: 0.95rem; border: 1.5px solid currentColor; display: grid; place-items: center; font-size: 0.72rem; line-height: 1; }
+  .opts button.box::before { border-radius: 3px; } .opts button.box[aria-pressed=true]::before { content: "✓"; font-weight: 700; }
+  .opts button.radio::before { border-radius: 50%; } .opts button.radio.on::before { background: radial-gradient(currentColor 42%, transparent 48%); }
+  .need .pick { opacity: 0.75; font-size: 0.85em; margin: 0.5rem 0 0; }
   .opts button[aria-pressed=true] { background: var(--accent); color: var(--on-accent); }
   @media (hover: hover) { .opts button:not(:disabled):hover { background: var(--accent); color: var(--on-accent); } }
   .opts button:disabled { opacity: 0.5; cursor: default; }
@@ -925,12 +930,17 @@ function dialogBox(r) {
   const labels = dg.options.map((o) => o.label);
   // a multi-select: its checked options are filled with a ✓, not the first one
   const multi = dg.options.some((o) => o.checked !== null);
+  const ask = dg.ask;
+  const paneQ = dg.options.some((o) => o.label === "Chat about this") || dg.tabs;
+  // the question tool's answers carry a mark (user, 2026-10-17): a box for a multi-select, a circle for one pick;
+  // a single pick's answers are those above `Chat about this`
+  const chatAt = dg.options.findIndex((o) => o.label === "Chat about this");
+  const mark = (o, k) => !(ask || paneQ) ? "" : multi ? (o.checked !== null ? " box" : "") : (chatAt < 0 || k < chatAt) ? " radio" : "";
   const ft = freeText?.pid === r.pid && JSON.stringify(freeText.labels) === JSON.stringify(labels) ? freeText : null;
   const opt = (o, k) => ft?.i === k
     ? `<form class="free" data-i="${k}"><input name="a" value="${esc(ft.value)}" placeholder="Type something." autocomplete="off" enterkeyhint="send"><button>send</button></form>`
-    : `<button data-i="${k}"${o.free ? " data-free" : ""}${o.checked !== null ? ` aria-pressed="${o.checked}"` : ""}>${o.checked || o.picked ? "✓ " : ""}${esc(o.free ? (typedIn(o) ?? "Type something…") : ask?.options[k]?.label ?? o.label)}${(ask?.options[k]?.description ?? o.detail) ? `<small>${esc(ask?.options[k]?.description ?? o.detail)}</small>` : ""}</button>`;
+    : `<button data-i="${k}" class="${mark(o, k)}${o.picked ? " on" : ""}"${o.free ? " data-free" : ""}${o.checked !== null ? ` aria-pressed="${o.checked}"` : ""}>${(o.checked || o.picked) && !mark(o, k) ? "✓ " : ""}${esc(o.free ? (typedIn(o) ?? "Type something…") : ask?.options[k]?.label ?? o.label)}${(ask?.options[k]?.description ?? o.detail) ? `<small>${esc(ask?.options[k]?.description ?? o.detail)}</small>` : ""}</button>`;
   // the question tool: cchost sends its text as written (ask, from askhook.sh), the pane says only which one is up
-  const ask = dg.ask;
   // several questions: their tabs, ☒ once answered; a pick moves to the next, a tap on a tab goes to it (its answer ✓, to change)
   const at = dg.tab ?? ask?.i;
   const tabs = dg.tabs ? `<p class="tabs" data-tabs="${esc(r.pid)}" data-labels="${esc(JSON.stringify(dg.tabs.map((t) => t.label)))}">${dg.tabs.map((t, k) => `<button data-k="${k}" aria-pressed="${at === k}">${t.done ? "☒" : t.label === "Submit" ? "✔" : "☐"} ${esc(t.label)}</button>`).join("")}</p>` : "";
@@ -940,11 +950,11 @@ function dialogBox(r) {
   // the question tool read off the pane: normal text, the terminal's wraps joined back (a line goes on the one above
   // unless it starts a list item or follows a blank one), and a note when its start is above the top of the screen
   const unwrap = (t) => t.includes("```") ? t : t.replace(/(?<=\S)\n(?!\n|\s*(?:[-*]|\d+\.)\s)/g, " ");
-  const paneQ = dg.options.some((o) => o.label === "Chat about this") || dg.tabs;
   const head = ask ? `${!dg.tabs && ask.header ? `<p class="qh">${esc(ask.header)}</p>` : ""}<div class="q">${md(ask.question)}</div>`
     : paneQ ? `${dg.cut ? `<p class="qh">its start is above the top of the session's screen</p>` : ""}<div class="q">${md(unwrap([dg.title, dg.body].filter(Boolean).join("\n\n")))}</div>`
     : `<b>${esc(dg.title ?? dg.question ?? "Dialog")}</b>${dg.body ? `<div class="body">${md(dg.body)}</div>` : ""}`;
-  return `<div class="need">${tabs}${head}<div class="opts${multi ? " multi" : ""}" data-pick="${esc(r.pid)}" data-labels="${esc(JSON.stringify(labels))}">${dg.options.map(opt).join("")}</div>${preview}</div>`;
+  const hint = ask || paneQ ? `<p class="pick">${multi ? `pick any, then ${dg.options.some((o) => o.label === "Submit") ? "Submit" : "Next"}` : "pick one"}</p>` : "";
+  return `<div class="need">${tabs}${head}${hint}<div class="opts${multi ? " multi" : ""}" data-pick="${esc(r.pid)}" data-labels="${esc(JSON.stringify(labels))}">${dg.options.map(opt).join("")}</div>${preview}</div>`;
 }
 function sessionView(r) {
   return `<article><h1>${esc(r.name)}</h1>${metaLine(r)}${chat(r)}${dialogBox(r)}</article>`;
