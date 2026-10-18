@@ -171,6 +171,16 @@
   .side .hd { display: flex; align-items: center; padding: 0.6rem 1rem; border-bottom: 1px solid var(--line); } .side .hd b { flex: 1; }
   .side .pad { padding: 0 1rem; }
   .gtabs { display: flex; gap: 0.2rem; }
+  .irow { display: flex; gap: 2px; padding: 0.4rem 0.7rem; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 6; }
+  .irow .hb[aria-pressed=true], header .hb[aria-pressed=true] { background: var(--cur); color: var(--accent); }
+  .hb em { position: absolute; margin: -14px 0 0 18px; font-style: normal; font-size: 0.6rem; background: var(--gray); color: var(--text); border-radius: 999px; padding: 0 0.28rem; line-height: 1.4; }
+  .hb { position: relative; }
+  .pop.ipop { width: 360px; max-height: 500px; padding: 0.3rem 0 0.7rem; }
+  .phone .pop.ipop { left: 0.4rem !important; right: 0.4rem; width: auto; max-height: 600px; }
+  .pop.ipop h4 { margin: 0.6rem 1rem 0.3rem; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 400; display: flex; }
+  .pop.ipop h4 a { margin-left: auto; text-transform: none; letter-spacing: 0; color: var(--accent); cursor: pointer; }
+  .pop.ipop .pad { padding: 0 1rem; }
+  .pop.ipop .rows li:last-child { border-bottom: 0; }
 </style>
 </head>
 <body>
@@ -300,7 +310,30 @@ const OPTS = [
     head: (st) => st.phone ? `<span class="gtabs">${["new", "tasks", "closed", "files"].map((v) => `<button class="hb" data-act="side:${v}" aria-pressed="${st.side === v}">${I[v]}</button>`).join("")}</span>` : "",
     rail: (st) => st.phone ? "" : `<div class="rail">${["new", "tasks", "closed", "files"].map((v) => `<button class="hb" data-act="side:${v}" aria-current="${st.side === v}" title="${v}">${I[v]}</button>`).join("")}</div>`,
     pop: (st) => st.side ? `<div class="side"><div class="hd"><b>${({new: "new session", tasks: "tasks", closed: "closed sessions", files: "files"})[st.side]}</b><button class="hb" data-act="side:">${I.x}</button></div><div class="pad">${({new: () => `<div style="height:.8rem"></div>` + newForm(st), tasks: () => taskList(st, 99, true), closed: () => closedList(st, 99, true), files: () => `<input class="search" placeholder="search ~/nadya" style="margin:.8rem 0 .3rem">` + filesList(99, true)})[st.side]()}</div></div>` : ""},
+  {k: "I", name: "icons on top of the list", note: "no text; each icon opens a pop-up with that one thing, the page beside it stays",
+    left: (st) => `<div class="irow">${icons(st)}</div>` + list(st),
+    pop: (st) => ipop(st, 84)},
+  {k: "J", name: "icons in the header", note: "the same pop-ups, the icons left of the title, over the list",
+    head: (st) => `<span class="gtabs">${icons(st)}</span>`,
+    pop: (st) => ipop(st, 44)},
 ];
+
+const KINDS = [["new", "new session"], ["tasks", "tasks"], ["closed", "closed sessions"], ["files", "files"]];
+function icons(st) {
+  const n = CLOSED.length - st.back.length;
+  return KINDS.map(([v, l]) => `<button class="hb" data-act="ip:${v}" aria-pressed="${st.ip === v}" title="${l}">${I[v]}${v === "closed" ? `<em>${n}</em>` : ""}</button>`).join("");
+}
+function ipop(st, top) {
+  if (!st.ip) return "";
+  const at = KINDS.findIndex(([v]) => v === st.ip), l = KINDS[at][1];
+  const body = {
+    new: () => `<h4>${l}</h4><div class="pad">${newForm(st)}</div>`,
+    tasks: () => `<h4>${l}</h4><div class="pad">${taskList(st, 99)}</div>`,
+    closed: () => `<h4>${l}</h4><div class="pad">${closedList(st, 99, true)}</div>`,
+    files: () => `<h4>${l}<a data-act="open:files">open the files page</a></h4><div class="pad"><input class="search" placeholder="search ~/nadya" style="margin-bottom:.3rem"></div><h4>recent</h4><div class="pad"><ul class="rows fl tight">${RECENT.map((f) => `<li data-act="open:files"><span class="ico">·</span><span class="nm">${f}</span><time></time></li>`).join("")}</ul></div><h4>~/nadya</h4><div class="pad">${filesList(7, true)}</div>`,
+  }[st.ip]();
+  return `<div class="shade ${st.phone ? "dim" : ""}" data-act="ip:"></div><div class="pop ipop" style="top:${top - 46 + 4}px;left:${12 + at * 32}px">${body}</div>`;
+}
 
 function menu(st) {
   return `<h4>new session</h4><div class="mi" data-act="open:new"><span class="ico">${I.new}</span><span>start in…</span><small>${DIRS[0]}, ${DIRS[1]}</small></div>` +
@@ -343,7 +376,7 @@ function frame(o, phone) {
   el.addEventListener("submit", (e) => {
     e.preventDefault();
     const dir = e.target.dir?.value.trim();
-    if (dir) spawn(st, dir);
+    if (dir) { spawn(st, dir); if (st.ip) { st.ip = ""; st.cur = st.spawned.at(-1).id; } }
     draw(el, st);
   });
   el.addEventListener("focusin", (e) => { if (e.target.matches("[data-pal]") && !st.palOpen) { st.palOpen = true; draw(el, st, true); } });
@@ -368,18 +401,19 @@ function act(e, el, st) {
     return;
   }
   const [k, v] = [a.slice(0, a.indexOf(":") < 0 ? a.length : a.indexOf(":")), a.includes(":") ? a.slice(a.indexOf(":") + 1) : ""];
-  const close = () => { st.menu = false; st.sheet = false; st.palOpen = false; st.q = ""; };
+  const close = () => { st.ip = ""; st.menu = false; st.sheet = false; st.palOpen = false; st.q = ""; };
   if (k === "open") { close(); st.cur = v; if (["new", "tasks", "closed", "files"].includes(v)) st.page = st.page; }
   if (k === "back") st.cur = null;
   if (k === "menu") st.menu = !st.menu;
   if (k === "sheet") st.sheet = !st.sheet;
   if (k === "fold") st.fold = !st.fold;
   if (k === "page") st.page = v === "1";
+  if (k === "ip") st.ip = st.ip === v ? "" : v;
   if (k === "side") st.side = st.side === v ? "" : v;
   if (k === "dir") { st.dir = v; }
   if (k === "spawn") { close(); spawn(st, v); st.cur = st.spawned.at(-1).id; }
-  if (k === "run" && !st.running.includes(v)) { st.running.unshift(v); if (st.palOpen || st.menu) { close(); st.cur = `run-${v}`; } }
-  if (k === "bring") { const c = CLOSED.find((c) => c.id === v); if (!st.back.includes(c)) st.back.push(c); if (st.palOpen || st.menu) { close(); st.cur = v; } }
+  if (k === "run" && !st.running.includes(v)) { st.running.unshift(v); if (st.palOpen || st.menu || st.ip) { close(); st.cur = `run-${v}`; } }
+  if (k === "bring") { const c = CLOSED.find((c) => c.id === v); if (!st.back.includes(c)) st.back.push(c); if (st.palOpen || st.menu || st.ip) { close(); st.cur = v; } }
   draw(el, st);
 }
 function draw(el, st, keepPal) {
