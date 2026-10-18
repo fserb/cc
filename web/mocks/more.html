@@ -266,7 +266,7 @@ function list(st) {
 }
 function closedList(st, n, tight) {
   const cs = CLOSED.filter((c) => !st.back.some((b) => b.id === c.id)).slice(0, n);
-  return `<ul class="rows ${tight ? "tight" : ""}">${cs.map((c) => `<li data-act="bring:${c.id}" title="bring back" style="cursor:pointer"><span class="nm"><b>${c.id}</b><code>${c.at}</code></span><small>${esc(c.goal)}</small><span class="r"><time>${c.t}</time></span></li>`).join("")}</ul>`;
+  return `<ul class="rows ${tight ? "tight" : ""}">${cs.map((c) => `<li data-act="bring:${c.id}" title="restore" style="cursor:pointer"><span class="nm"><b>${c.id}</b><code>${c.at}</code></span><small>${esc(c.goal)}</small><span class="r"><time>${c.t}</time></span></li>`).join("")}</ul>`;
 }
 function taskList(st, n, tight) {
   return `<ul class="rows ${tight ? "tight" : ""}">${TASKS.slice(0, n).map((t) => {
@@ -312,7 +312,7 @@ const OPTS = [
     pop: (st) => ipop(st, st.phone ? 84 : 44)},
 ];
 
-const KINDS = [["new", "new session"], ["tasks", "tasks"], ["closed", "closed sessions"], ["files", "files"]];
+const KINDS = [["new", "new session"], ["tasks", "tasks"], ["closed", "restore session"], ["files", "files"]];
 function icons(st, kinds = KINDS) {
   const n = CLOSED.length - st.back.length;
   return kinds.map(([v, l]) => `<button class="hb" data-act="ip:${v}" aria-pressed="${st.ip === v}" title="${l}">${I[v]}${v === "closed" ? `<em>${n}</em>` : ""}</button>`).join("");
