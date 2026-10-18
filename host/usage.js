@@ -78,9 +78,9 @@ export function usedAt(samples, t) {
 // counter is reset mid-week (seen 2026-10-13: 10% to 0% under the same resets_at): a drop
 // counts once two readings in a row sit below the max, and starts back at the first low
 // reading after the last high one, a lone high between lows being an instance with older
-// numbers. Each drop is kept in `samples.drops` as {at, by} and the samples run on as if it
-// had not happened, `by` higher, so what a span added is still a difference; usedNow()
-// takes them back off. A reading DIP points or less under the max is not a drop: the log is
+// numbers. Each drop is kept in `samples.drops` as {at, by}, `by` the max less that first low
+// reading, and the samples run on from the max, `by` higher, so what a span added is still a
+// difference; usedNow() takes them back off. A reading DIP points or less under the max is not a drop: the log is
 // whole percents and two instances can write one second apart in either order. `u` is left out when it is at or above the last drop's max: that is
 // an older reading, and anything real since is in the history.
 export function weekSamples(u, now) {
@@ -118,8 +118,11 @@ export function weekSamples(u, now) {
   raw.forEach((s, i) => {
     if (skip.has(i)) return;
     if (drops.has(i)) {
-      base += drops.get(i);
-      samples.drops.push({ at: s.at, by: drops.get(i) });
+      // from the first low reading on, so what it reads is not counted as added at once:
+      // 88% to 10% at the 5x to 20x change (2026-10-17) is 10% the old week carried over
+      const by = drops.get(i) - s.used;
+      base += by;
+      samples.drops.push({ at: s.at, by });
       top = 0;
     }
     top = Math.max(top, s.used);
@@ -186,6 +189,7 @@ export function pace(u, now = Date.now(), window = RECENT) {
       end: null,
       out: null,
       added: null,
+      span: null,
     };
   }
   const drop = samples.drops.at(-1)?.at ?? -Infinity;
@@ -194,7 +198,7 @@ export function pace(u, now = Date.now(), window = RECENT) {
   const end = used + perMs * (u.resetsAt - now);
   const out = end > 100 ? now + (100 - used) / perMs : null;
   const ratio = used < 100 ? perMs * (u.resetsAt - now) / (100 - used) : null;
-  return { used, even, rate: perMs * 24 * 3600_000, ratio, end, out, added };
+  return { used, even, rate: perMs * 24 * 3600_000, ratio, end, out, added, span };
 }
 
 // `Thu 4pm` for 16:53: the hour it falls in
@@ -206,16 +210,27 @@ function when(ms) {
 
 // `ccx usage`'s table under the line: the pace over each of the last 1h to 6h, what it
 // added, the ratio, and when it runs out at that rate (`-` when it lasts to the reset).
-// Lines of text, or [] with no rate to project
+// A window pace() stopped at a drop is the last row, with a line saying so, since the ones
+// after it would repeat it. Lines of text, or [] with no rate to project
 export function paceTable(u, now = Date.now()) {
-  const rows = [1, 2, 3, 4, 5, 6].map((h) => [h, pace(u, now, h * 3600_000)]);
+  const rows = [];
+  for (const h of [1, 2, 3, 4, 5, 6]) {
+    const p = pace(u, now, h * 3600_000);
+    if (rows.length && !(p.span > rows.at(-1)[1].span)) break;
+    rows.push([h, p]);
+  }
   if (rows[0][1]?.ratio == null) return [];
+  const [h, p] = rows.at(-1), drop = weekSamples(u, now).drops.at(-1)?.at;
+  const note = p.span < h * 3600_000 && drop && rows.length < 6
+    ? [`from the drop at ${when(drop)} on`]
+    : [];
   return [
     "last  added  pace  out",
     ...rows.map(([h, p]) =>
       `${`${h}h`.padStart(4)}  ${`+${p.added.toFixed(1)}%`.padStart(5)}  ` +
       `${`${p.ratio.toFixed(1)}x`.padStart(4)}  ${p.out ? when(p.out) : "-"}`
     ),
+    ...note,
   ];
 }
 

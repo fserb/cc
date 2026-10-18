@@ -248,3 +248,24 @@ Deno.test("pace: the window starts at a mid-week drop, at least 15 min back", ()
   assertEquals(p.added, 4);
   assertEquals(p.used, 14);
 });
+
+Deno.test("weekSamples: what the counter reads right after a drop is not added at once", () => {
+  const H = 3600_000, M = 60_000, resetsAt = 1_000 * 24 * H, drop = resetsAt - 40 * H;
+  const history = [{at: drop - 2 * H, used: 80, resetsAt}, {at: drop - M, used: 88, resetsAt},
+    {at: drop, used: 10, resetsAt}, {at: drop + 10 * M, used: 12, resetsAt}];
+  const u = {used: 15, resetsAt, history}, now = drop + H;
+  assertEquals(weekSamples(u, now).drops, [{at: drop, by: 78}]);
+  assertEquals(usedNow(weekSamples(u, now)), 15);
+  // 8 before the drop, 5 after it, and not the 10 it read at the drop
+  assertEquals(addedSince(u, drop - 2 * H, now), 13);
+});
+
+Deno.test("paceTable: the window a drop stops is the last row, with a line saying so", () => {
+  const H = 3600_000, M = 60_000, resetsAt = 1_000 * 24 * H, drop = resetsAt - 40 * H;
+  const history = [{at: drop - 3 * H, used: 80, resetsAt}, {at: drop - M, used: 88, resetsAt},
+    {at: drop, used: 10, resetsAt}, {at: drop + H, used: 12, resetsAt}];
+  const t = paceTable({used: 15, resetsAt, history}, drop + 2 * H + 30 * M);
+  assertEquals(t.length, 5);
+  assertEquals(t[3].startsWith("  3h  +5.0%"), true);
+  assertEquals(t[4].startsWith("from the drop at "), true);
+});
