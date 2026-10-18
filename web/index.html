@@ -29,7 +29,8 @@
   .tool svg { width: 18px; height: 18px; } .tool:hover { background: var(--hover); color: var(--text); } .tool[aria-pressed=true] { background: var(--cur); color: var(--accent); }
   .ptools { display: none; }
   #pop { position: fixed; z-index: 20; width: 360px; max-height: min(520px, calc(100dvh - 70px)); overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgb(0 0 0 / 0.13); padding: 0.3rem 0 0.8rem; }
-  #pop[hidden] { display: none; }
+  #pop[hidden], #shade[hidden] { display: none; }
+  #shade { position: fixed; z-index: 19; left: 0; right: 0; bottom: 0; background: rgb(0 0 0 / 0.25); }  /* phone: the page behind a pop-up, under the tool buttons; a tap on it only closes (user) */
   #pop h4 { margin: 0.6rem 1rem 0.3rem; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 400; }
   #pop .pl { list-style: none; margin: 0; padding: 0; }
   #pop .pl li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 0.8rem; align-items: baseline; padding: 0.35rem 1rem; cursor: pointer; }
@@ -225,7 +226,7 @@
   <nav id="left"></nav>
   <section id="center"><div id="view"></div><iframe id="tty" title="terminal" hidden></iframe><button id="newer" hidden>↓ new</button><form id="say"><div id="att" hidden></div><button type="button" id="focus" title="focus in kitty" aria-label="focus in kitty"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></button><button type="button" id="mode" aria-pressed="false" title="terminal view" aria-label="terminal view">&gt;_</button><textarea name="q" rows="1" autocomplete="off"></textarea><button>send</button></form></section>
 </section>
-<div id="pop" hidden></div>
+<div id="shade" hidden></div><div id="pop" hidden></div>
 <dialog id="pic"><img alt="image"></dialog>
 <script type="module">
 // A static page (no box): everything it shows comes from these, all same origin:
@@ -1138,11 +1139,14 @@ function popBody() {
 function drawPop() {
   const pop = $("#pop");
   for (const b of document.querySelectorAll("[data-tool]")) b.setAttribute("aria-pressed", popKind === b.dataset.tool);
+  $("#shade").hidden = !popKind || !narrow();
   if (!popKind) { pop.hidden = true; return; }
   if (popKind === "new" && !pop.hidden && $("#addf")) return;  // keeps what is typed
   pop.innerHTML = popBody(); pop.hidden = false;
+  if (!popAt.isConnected) popAt = $(`${narrow() ? ".ptools" : "#tools"} [data-tool="${popKind}"]`);  // the phone's row is redrawn with the list
   const r = popAt.getBoundingClientRect();
   pop.style.top = `${r.bottom + 6}px`;
+  $("#shade").style.top = `${popAt.parentElement.getBoundingClientRect().bottom}px`;
   pop.style.left = `${Math.max(8, Math.min(r.left - 8, innerWidth - pop.offsetWidth - 8))}px`;
 }
 function openPop(kind, btn) {
@@ -1492,6 +1496,7 @@ document.addEventListener("pointerup", (e) => {
 document.addEventListener("click", async (e) => {
   const tool = e.target.closest("[data-tool]");
   if (tool) { if (popKind === tool.dataset.tool) closePop(); else openPop(tool.dataset.tool, tool); return; }
+  if (e.target.closest("#shade")) { closePop(); return; }
   if (popKind && (!e.target.closest("#pop") || e.target.closest("#pop [data-go]"))) closePop();
   const rs = e.target.closest("#pop [data-restore]"); if (rs) { restore(S.closed[+rs.dataset.restore]); return; }
   const chip = e.target.closest("#addf [data-dir]"); if (chip) { const q = $("#addf").q; q.value = `${chip.dataset.dir}/`.replace(/\/\/$/, "/"); q.focus(); addHints(); return; }
