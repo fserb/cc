@@ -1232,9 +1232,15 @@ async function cmdClose(spec) {
   if (!selfPid()) Deno.exit(1);
   const at = new Date(Date.now() + RETRY_MIN * 60e3);
   const hhmm = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
-  const rule = `at ${hhmm} -> me "ccx close ${spec} was refused (${err.replace("not closed: ", "")}): ` +
-    `the user may be using it. Run \`ccx close ${spec}\` again; it checks again and, if refused, ` +
-    "sets the next retry itself. Do not use ccx delete on it.\"";
+  const why = err.replace("not closed: ", "");
+  // its own background shells, Monitors or idle agents: not the user, so delete is the caller's call
+  const after = why.startsWith("it has background work")
+    ? "its own shells, Monitors or agents still run and may end by themselves. If its work is done " +
+      `and committed and those are not needed, \`ccx delete ${spec}\` stops them with it; else run ` +
+      `\`ccx close ${spec}\` again, which sets the next retry itself.\"`
+    : `the user may be using it. Run \`ccx close ${spec}\` again; it checks again and, if refused, ` +
+      "sets the next retry itself. Do not use ccx delete on it.\"";
+  const rule = `at ${hhmm} -> me "ccx close ${spec} was refused (${why}): ${after}`;
   const r = await new Deno.Command("trig", {args: ["add", rule], stdout: "piped", stderr: "piped"})
     .output().catch((e) => ({success: false, stderr: new TextEncoder().encode(e.message)}));
   const dec = (b) => new TextDecoder().decode(b).trim();

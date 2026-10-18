@@ -62,6 +62,8 @@ import {readRange, sizeOf} from "./transcript.js";
 const NUMBERED = /^(\s*)(?:❯\s+)?(\d+)\.\s+(.*)$/;
 const CURSOR = /^\s*❯\s+\S/;
 const RULE = /^\s*─{3,}/;
+// the top of a dialog: a ─ rule, or the ▔ line over /exit's `Background work is running` (2.1.302)
+const TOP = /^\s*(?:─{3,}|▔{3,})/;
 const DASHED = /^\s*╌{3,}\s*$/;
 const FOOTER = /Esc to cancel/;
 const CHECK = /^\[([^\]])\]\s+/;
@@ -131,7 +133,7 @@ export function parseDialog(text) {
     if (box) box.free = true;
   }
   let top = from - 1;
-  while (top >= 0 && !RULE.test(lines[top])) top--;
+  while (top >= 0 && !TOP.test(lines[top])) top--;
   // no rule above: the dialog is taller than the screen, its top cut off, so all of what shows
   const cut = top < 0;
   const card = cardLines(lines.slice(top + 1, from));

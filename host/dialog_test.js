@@ -82,6 +82,15 @@ Deno.test("parseDialog: the review page and plan approval", () => {
   eq(plan.title.startsWith("Claude has written up a plan"), true, "title");
 });
 
+Deno.test("parseDialog: /exit with background work, its top a ▔ line (2.1.302)", () => {
+  const d = parseDialog(fixture("exit-background"));
+  eq(d.title, "Background work is running", "title, from under the ▔ line");
+  eq(d.body, "The following will stop when you exit:\n\nshell · sleep 600", "body: what stops");
+  eq(d.cut, undefined, "not cut");
+  eq(summary("exit-background").map((o) => o[1]),
+    ["Exit and stop tasks", "Move to background and exit", "Stay"], "options");
+});
+
 Deno.test("parseDialog: an idle input box is no dialog", () => {
   const idle = fixture("idle");
   eq(parseDialog(idle), null, "an echoed prompt over a numbered list");

@@ -323,3 +323,16 @@ Deno.test("Server: api/chat?all=1 merges every host's log of the same ~ path", a
   s.stop();
   await b.stop();
 });
+
+Deno.test("Server: close ifUntouched names why it refuses, background work apart", async () => {
+  const s = server([inst(6, "", "", "", {state: "hold"}), inst(7, "", "", "", {state: "hold", waitsOn: "cc-a"}),
+    inst(8, "", "", "", {state: "busy"}), inst(9, "", "", "", {asking: "dialog open"})]);
+  const why = async (pid) => {
+    const r = await post(s, `/api/s/${pid}/close`, '{"ifUntouched":true}');
+    return [r.status, (await r.json()).error];
+  };
+  eq(await why(6), [409, "not closed: it has background work running"], "its own shells: a hold on no peer");
+  eq(await why(7), [409, "not closed: it is hold"], "a hold on a peer");
+  eq(await why(8), [409, "not closed: it is busy"], "busy");
+  eq(await why(9), [409, "not closed: it shows a dialog (dialog open)"], "a dialog");
+});

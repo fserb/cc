@@ -1,0 +1,24 @@
+ ▝▝   ▝▝   /tmp/ccx-b-exit
+
+
+❯ Run sleep 600 as a background Bash command (run_in_background), then reply
+  "ok" and stop. Nothing else.
+
+  Ran 1 shell command
+
+● ok
+
+✻ Worked for 6s · done 12:25 AM · 1 shell still running
+
+❯ /exit
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+   Background work is running
+   The following will stop when you exit:
+
+   shell · sleep 600
+
+   ❯ 1. Exit and stop tasks
+     2. Move to background and exit
+     3. Stay
+
+   Enter to confirm · Esc to cancel

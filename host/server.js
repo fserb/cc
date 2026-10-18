@@ -958,7 +958,9 @@ export class Server {
     // it, read now, since a check made seconds before by the caller misses typing begun since
     if (verb === "close" && body.ifUntouched) {
       const input = inst.pane ? await paneInput(inst.pane) : "", draft = this.draft(pid);
-      const why = !["wait", "free"].includes(inst.state) ? `it is ${inst.state}`
+      // a hold on no peer is the record's `shell`: its own background shell, Monitor or idle agent
+      const why = inst.state === "hold" && !inst.waitsOn ? "it has background work running"
+        : !["wait", "free"].includes(inst.state) ? `it is ${inst.state}`
         : inst.asking ? `it shows a dialog (${inst.asking})` : input ? "text typed in its pane" : draft ? "text in cc's box for it" : "";
       if (why) return json({error: `not closed: ${why}`, untouched: false}, 409);
     }
