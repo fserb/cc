@@ -1,6 +1,7 @@
 // cc's web-only support functions (cchost keeps the session work). Served at /cc/api/.
 //   GET grep?q=<text>   live grep over ~/nadya, as the files tab shows it: no dotfiles, no tmp/; {q, files: [{file, n, name}], hits}
 //   GET recent          the 10 files of ~/nadya changed last, the same ones left out: [{file, at (ms)}]
+//   GET files?dir=~/ai/x  a project dir on this host: its 40 files changed last, names only; log?dir= its last 60 commits
 import Lemon from "lemon";
 
 const PER = 10;  // matching lines kept per file
@@ -57,8 +58,32 @@ async function recent() {
   });
 }
 
+// a project's dir on this host (projects page): ~/ai/<x>, ~/web/<x>, ~/srv/<x> or ~/nadya[/<x>], checked by shape since it
+// goes into the shell string `host` runs. Names only: ~/ai holds keys (credentials.json, apis), so no file is read
+const DIR = /^~\/(ai|web|srv|nadya)(\/[\w.-]+)*$/;
+async function sh(cmd) {
+  const {stdout} = await new Deno.Command("host", {args: [cmd], stdout: "piped", stderr: "piped"}).output();
+  return new TextDecoder().decode(stdout).split("\n").filter(Boolean);
+}
+// the 40 files changed last, no dotfiles, .git or node_modules: [{file, at (ms), size}]
+async function files(dir) {
+  const ls = await sh(`cd ${dir} && find . \\( -name '.?*' -o -name node_modules \\) -prune -o -type f -printf '%T@ %s %P\\n' | sort -rn | head -n 40`);
+  return ls.map((l) => { const [at, size, ...f] = l.split(" "); return {file: f.join(" "), at: Math.round(+at * 1000), size: +size}; });
+}
+// its last 60 commits, if it is a git repo: [{h, at (ms), s}]
+async function log(dir) {
+  const ls = await sh(`git -C ${dir} log -60 --format='%h%x09%ct%x09%s' 2>/dev/null`);
+  return ls.map((l) => { const [h, at, ...s] = l.split("\t"); return {h, at: +at * 1000, s: s.join("\t")}; });
+}
+
 async function get(req) {
   if (req.subpath === "/recent") return await recent();
+  if (req.subpath === "/files" || req.subpath === "/log") {
+    const dir = req.url.searchParams.get("dir") ?? "";
+    if (!DIR.test(dir) || dir.includes("..")) return new Response("bad dir", {status: 400});
+    return req.subpath === "/files" ? await files(dir) : await log(dir);
+  }
+
   if (req.subpath !== "/grep") return Response.HTTP_NOT_FOUND;
   const q = (req.url.searchParams.get("q") ?? "").replace(/[\r\n]+/g, " ").trim();
   if (q.length < 2) return {q, files: [], hits: []};
