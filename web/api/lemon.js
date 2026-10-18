@@ -92,8 +92,19 @@ async function log(host, dir) {
   return ls.map((l) => { const [h, at, ...s] = l.split("\t"); return {h, at: +at * 1000, s: s.join("\t")}; });
 }
 
+// the sidebar's "new mocks" (user, Oct 18th, web/mocks/sidebar-rich-h.html): every ~/web/<x>/mocks/*.html changed in the
+// last 2 days, newest first: [{url, dir, name, at (ms)}]. ~/web/<x> is served at /<x>/ on this host
+async function mocks() {
+  const ls = await sh(`find ~/web/*/mocks/ -maxdepth 1 -name '*.html' -mmin -2880 -printf '%T@ %p\\n' 2>/dev/null | sort -rn | head -n 40`);
+  return ls.map((l) => {
+    const [at, ...p] = l.split(" "), path = p.join(" ").replace(/^.*?\/web\//, "");
+    return {url: `/${path}`, dir: path.split("/")[0], name: path.split("/").at(-1).replace(/\.html$/, ""), at: Math.round(+at * 1000)};
+  });
+}
+
 async function get(req) {
   if (req.subpath === "/recent") return await recent();
+  if (req.subpath === "/mocks") return await mocks();
   const host = req.url.searchParams.get("host") === "marx" ? "marx" : "nadya";
   if (req.subpath === "/doc") return await doc(host, req.url.searchParams.get("path") ?? "");
   if (req.subpath === "/docs" || req.subpath === "/log") {

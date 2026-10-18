@@ -85,6 +85,20 @@
   .it .tag { font-size: 0.75rem; color: var(--muted); font-weight: 400; } .it .t1 .tag { flex: none; } .it .tx div:not(.t1) .tag { margin-left: 0.5rem; }  /* small grey text after a row's name (tags) */
   .it .t1 .at { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; direction: rtl; font: 0.72rem var(--mono); color: var(--muted); }  /* rtl cuts the start of a long path, so its last part stays */
   .it time { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+  /* updates (user, Oct 18th; web/mocks/sidebar-rich-h.html): the row of every entry, and below it a thin bar or a short list */
+  .it .t1 .at.r { direction: ltr; flex: none; font: 0.75rem var(--font); font-variant-numeric: tabular-nums; }
+  .it .bar { display: block; height: 2px; margin-top: 0.45rem; border-radius: 1px; background: var(--line); } .it .bar i { display: block; height: 100%; border-radius: 1px; background: var(--text); opacity: 0.55; }
+  .it.done .bar i { background: var(--green); opacity: 1; }
+  .it ul { list-style: none; margin: 0.3rem -0.35rem 0; padding: 0; font-size: 0.78rem; line-height: 1.45; color: var(--muted); }
+  .it li { display: flex; gap: 0.6rem; padding: 0 0.35rem; border-radius: 4px; } .it li span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .it li span + span { margin-left: auto; flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .it li.e span + span { color: var(--red); }
+  .it:has(.hide) { position: relative; }
+  .it:has(.hide) .t1 b { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .it .hide { all: unset; position: absolute; top: 0.4rem; right: 0.4rem; display: none; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--muted); font-size: 0.85rem; line-height: 1; background: var(--bg); cursor: pointer; }
+  .it .hide:hover { background: var(--press); color: var(--text); }
+  @media (hover: hover) and (pointer: fine) { .it:hover .hide { display: grid; } .it:has(.hide):hover .t1 .at { visibility: hidden; } }
+  /* a line that changed, or a row that came, is lit for a moment; the delay carries it across redraws */
+  .it .ch, .it.ch { animation: ch 1.6s ease-out; } @keyframes ch { from { background-color: var(--hot); color: var(--text); } }
   #center { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
   #center.nadya { --accent: #d81212; }  /* nadya's chat in the red of the star icon */
   #view { overflow: auto; overflow-anchor: none; grid-area: 1 / 1; }
@@ -293,6 +307,7 @@
     #pop { left: 0.5rem !important; right: 0.5rem; width: auto; }
     .it { padding: 10px 14px; gap: 2px 10px; line-height: 1.4; min-height: 44px; } .it .tx div, .it .d { font-size: 17px; } .it .tx small { font-size: 15px; line-height: 1.25; } .it time { font-size: 14px; }
     .sec { font-size: 13px; padding: 1rem 14px 0.35rem; }
+    .it ul { font-size: 14px; }
     article { padding: 1rem; } .fl .sz { display: none; } #say { padding: 0.6rem 0.8rem calc(0.7rem + env(safe-area-inset-bottom)); } #say textarea, .free input, .fsq { font-size: 16px; }
   }
 </style>
@@ -472,6 +487,25 @@ async function loadPackages() {
   S.packages = await fetch(`${PACKAGES}packages.json`, {cache: "no-cache"}).then((r) => r.json()).catch(() => S.packages);
   draw();
 }
+// the sidebar's new mocks: ~/web/<x>/mocks/*.html changed in the last 2 days (web/api mocks). One is new until it is
+// opened here; cc_mocks_seen keeps url -> the time seen, and the first visit counts what is there as seen, as the blog's does
+let mockSeen = JSON.parse(localStorage.cc_mocks_seen ?? "null");
+async function loadMocks() {
+  S.mocks = await fetch("api/mocks", {cache: "no-cache"}).then((r) => r.ok ? r.json() : S.mocks).catch(() => S.mocks);
+  if (!mockSeen && S.mocks) { mockSeen = Object.fromEntries(S.mocks.map((m) => [m.url, m.at])); localStorage.cc_mocks_seen = JSON.stringify(mockSeen); }
+  draw();
+  if (cur === "mocks" && !S.mockOpen) drawView(true);
+}
+const newMocks = () => (S.mocks ?? []).filter((m) => m.at > (mockSeen?.[m.url] ?? 0));
+function seeMock(url) {
+  const m = S.mocks?.find((x) => x.url === url);
+  if (!m || !mockSeen) return;
+  mockSeen[url] = m.at;
+  for (const k of Object.keys(mockSeen)) if (!S.mocks.some((x) => x.url === k)) delete mockSeen[k];
+  localStorage.cc_mocks_seen = JSON.stringify(mockSeen);
+}
+// an update hidden with its ×: id -> what it said then, so it comes back when that changes
+const upHidden = JSON.parse(localStorage.cc_up_hidden ?? "{}");
 async function loadList(file) {
   // both files: `- [m] [YYYY-MM-DD [HH:MM]] text`; reminders.md has the dated ones, todo.md the undated notes
   const text = await fetch(`files/${file}`, {cache: "no-cache"}).then((r) => r.ok ? r.text() : "").catch(() => "");
@@ -669,25 +703,53 @@ function items() {
   if (!localStorage.cc_blog_seen && S.posts.length) localStorage.cc_blog_seen = Date.now();
   const seen = +localStorage.cc_blog_seen || 0, top = S.posts[0];
   const fresh = S.posts.filter((x) => Date.parse(x.time) > seen).length;
-  it.push({id: "blog", d: fresh ? "green" : "", unread: fresh, title: "blog", sub: top?.title ?? "", t: top?.time ? `${fresh ? `${fresh} new · ` : ""}${ago(new Date(top.time.replace(" ", "T")) / 1000)}` : ""});
+  it.push({id: "blog", d: fresh ? "green" : "", unread: fresh, title: "blog", sub: top?.title ?? "", tags: fresh ? `<span class="tag">${fresh} new</span>` : "", r: top?.time ? ago(new Date(top.time.replace(" ", "T")) / 1000) : ""});
   const due = dueTodos();
   it.push({id: "projects", d: due.length ? "blue" : "", hot: due.length, title: "projects", sub: due[0] ? `${due[0].time ?? due[0].date} ${due[0].text}` : "", t: ""});
-  // shown only while something is active (user, 2026-10-14): a parcel at the desk or not yet delivered, with a
-  // tracking number or not (an order the tracker read from a shop's mail), an Uber Eats order until 1 h after it
-  // is delivered (its `last` is the delivery time)
-  const pk = S.packages, desk = pk?.desk.count ?? 0, parcels = pk?.packages.filter((x) => x.carrier !== "ubereats") ?? [];
-  const undelivered = parcels.filter((x) => !x.unknown && !x.delivered), ordered = undelivered.filter((x) => x.status === "ordered").length;
-  const onWay = undelivered.length - ordered;
-  const food = pk?.packages.filter((x) => x.carrier === "ubereats" && (!x.delivered || Date.now() - Date.parse(x.last) < 3600e3)) ?? [];
-  const eating = food.filter((x) => !x.delivered).length, ate = food.length - eating;
-  if (desk || undelivered.length || food.length || cur === "packages") it.push({id: "packages", d: desk ? "blue" : "", title: "packages", sub: "",
-    tags: pk ? `<span class="tag">${esc([desk && `${desk} at desk`, (onWay || ordered) && (ordered ? `${onWay}+${ordered}` : `${onWay}`), eating && "food coming", ate && "food here"].filter(Boolean).join(" · "))}</span>` : "",
-    t: pk ? ago(Date.parse(pk.updated) / 1000) : ""});
+  it.push(...updates());
   const ss = S.rows.filter((r) => !(r.name === "nadya" && r.pid.startsWith("nadya."))).map((r) => ({r, dialog: !!waitsOnYou(r)}));
   ss.sort((a, b) => b.dialog - a.dialog);
   for (const {r, dialog} of ss) it.push({id: r.pid, sec: "sessions", r, d: dialog ? "q" : DOT[r.state] ?? "gray", hot: false, unread: unseen(r.pid, r),
     title: r.name, ...sessionLine(r)});
   return it;
+}
+// updates (user, Oct 18th; web/mocks/sidebar-rich-h.html): what is going on for a while, between the fixed rows and the
+// sessions under its own title, soonest change first. Each is a row like the others (title, a small text after it and
+// on the right, the subline) and below it a thin bar or up to 3 lines; a click opens its page (open), never a part of it
+const CARRIER = {fedex: "FedEx", ups: "UPS", usps: "USPS", dhl: "DHL", amazon: "Amazon", intelcom: "Intelcom", purolator: "Purolator", canadapost: "Canada Post", asl: "ASL"};
+const carrier = (x) => CARRIER[x.carrier] ?? x.carrierName ?? x.carrier;
+const shortLabel = (x) => x.shop && !/amazon/i.test(x.shop) ? x.shop[0] + x.shop.slice(1).toLowerCase() : (x.label ?? "").replace(/[\[(,|].*$/, "").split(/\s+/).slice(0, 4).join(" ");
+const weekday = (iso) => new Date(iso).toLocaleDateString("en-CA", {weekday: "short"});
+function updates() {
+  const up = [], now = Date.now(), pk = S.packages;
+  // an Uber Eats order until 1 h after it is delivered (its `last` is the delivery time); the bar is the time gone
+  // from the order to its ETA (the window's end)
+  for (const x of pk?.packages.filter((x) => x.carrier === "ubereats" && (!x.delivered || now - Date.parse(x.last) < 3600e3)) ?? []) {
+    const first = Date.parse(x.first), eta = Date.parse(x.eta);
+    up.push({id: `food.${x.number.replace(/\W/g, "")}`, open: "packages", title: "Uber Eats", tags: `<span class="tag">${esc(x.label)}</span>`,
+      r: x.delivered ? hhmm(Date.parse(x.last) / 1000) : eta ? hhmm(eta / 1000) : "", sub: x.delivered ? "Delivered" : x.status, done: x.delivered,
+      bar: x.delivered ? 1 : eta > first ? Math.min(0.97, Math.max(0.03, (now - first) / (eta - first))) : 0.5});
+  }
+  // the user's reminders for today, not done or sent; the projects page has their done / snooze
+  const today = new Date().toLocaleDateString("en-CA");
+  for (const t of S.reminders.filter((t) => t.owner !== "nadya" && t.date === today && !sent.has("todo:" + t.full))) {
+    const left = t.due - now;
+    up.push({id: `rem.${t.full.slice(0, 40)}`, open: "projects", title: t.text, r: t.time ?? "", sub: left <= 0 ? "due now" : `in ${left < 3600e3 ? "" : `${Math.floor(left / 3600e3)}h `}${Math.floor(left % 3600e3 / 60e3)}m`, hot: left <= 0});
+  }
+  const nm = newMocks();
+  if (nm.length) up.push({id: "mocks", title: "new mocks", tags: `<span class="tag">${esc([...new Set(nm.map((m) => m.dir))].join(", "))}</span>`, r: ago(nm[0].at / 1000),
+    sub: `${nm.length} not opened yet`, list: nm.slice(0, 3).map((m) => [m.name, m.dir]), more: nm.length > 3 ? `${nm.length - 3} more` : ""});
+  // parcels not yet delivered, with a tracking number or not (an order the tracker read from a shop's mail), and the front desk
+  const desk = pk?.desk.count ?? 0, ps = (pk?.packages.filter((x) => x.carrier !== "ubereats" && !x.unknown && !x.delivered) ?? []).sort((a, b) => Date.parse(b.last) - Date.parse(a.last));
+  if (desk || ps.length || cur === "packages") {
+    const err = (x) => /^error/.test(x.status ?? ""), latest = ps.find((x) => !err(x));
+    up.push({id: "packages", title: "parcels", tags: ps.length ? `<span class="tag">${ps.length}</span>` : "", r: pk ? ago(Date.parse(ps[0]?.last ?? pk.updated) / 1000) : "",
+      sub: desk ? `${desk} at the front desk` : latest ? `${carrier(latest)}: ${latest.status}` : "",
+      list: ps.slice(0, 3).map((x) => [`${carrier(x)}, ${shortLabel(x)}`, err(x) ? "tracking error" : x.eta ? weekday(x.eta) : x.status ?? "", err(x)]), more: ps.length > 3 ? `${ps.length - 3} more` : ""});
+  }
+  for (const u of up) { u.sec = "updates"; u.ver = `${u.sub}|${u.r}`; }
+  for (const k of Object.keys(upHidden)) if (!up.some((u) => u.id === k)) delete upHidden[k];
+  return up.filter((u) => upHidden[u.id] !== u.ver);
 }
 // a session row (user, 2026-10-14; web/mocks/sessions.html, H): the second line is always its goal, else Claude's
 // summary; beside the name its agents and, from 300k, its context size, orange getting red by 600k; on the right
@@ -740,17 +802,52 @@ function slide(left, was) {
     g.animate([{transform: `translateX(${o.x}px)`, opacity: 1}, {transform: "translateX(100%)", opacity: 0}], SLIDE).onfinish = () => g.remove();
   }
 }
+// an update's line that changed, or an update that came, is lit for 1.6 s (user liked it in the mock). Nothing lights
+// until packages and mocks have loaded once, so opening the page lights nothing
+const lit = new Map(), litSeen = new Set();
+function litOld(left) {
+  const m = new Map();
+  for (const e of left.querySelectorAll(".it [data-v]")) m.set(`${e.closest(".it").dataset.id}\u0001${e.dataset.k ?? ""}`, e.dataset.v);
+  return m;
+}
+function litNew(left, old) {
+  const t = performance.now(), ready = S.packages && S.mocks;
+  for (const e of ready ? left.querySelectorAll(".it:has(.hide)") : []) {
+    if (litNew.ready && !litSeen.has(e.dataset.id)) lit.set(`${e.dataset.id}\u0001row`, t);
+    litSeen.add(e.dataset.id);
+  }
+  if (ready) litNew.ready = true;
+  for (const e of left.querySelectorAll(".it [data-v]")) {
+    const k = `${e.closest(".it").dataset.id}\u0001${e.dataset.k ?? ""}`;
+    if (old.size && (old.has(k) ? old.get(k) !== e.dataset.v : old.has(`${k.split("\u0001")[0]}\u0001`))) lit.set(k, t);
+  }
+  for (const [k, at] of lit) {
+    const gone = t - at;
+    if (gone > 1600) { lit.delete(k); continue; }
+    const [id, line] = k.split("\u0001");
+    const row = [...left.querySelectorAll(".it")].find((x) => x.dataset.id === id);
+    const e = line === "row" ? row : [...row?.querySelectorAll("[data-v]") ?? []].find((x) => (x.dataset.k ?? "") === line);
+    if (e) { e.classList.add("ch"); e.style.animationDelay = `${-gone}ms`; }
+  }
+}
 function draw() {
   const all = items();
   let sec = null, html = "";
   for (const i of all) {
     if ((i.sec ?? "") !== sec) { sec = i.sec ?? ""; if (sec) html += `<div class="sec">${sec}</div>`; }
-    html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""}" data-id="${esc(i.id)}" aria-current="${i.id === (isDoc(cur) ? "projects" : isFiles(cur) ? "files" : cur)}"><span class="d ${i.d}">${i.d === "q" ? "?" : ""}</span><span class="tx">${i.at === undefined ? `<div>${esc(i.title)}${i.tags ?? ""}</div>` : `<div class="t1"><b>${esc(i.title)}</b>${i.tags}<span class="at">\u200e${esc(i.at)}\u200e</span></div>`}<small>${esc(i.sub)}</small></span>${i.at === undefined ? `<time>${esc(i.t)}</time>` : ""}</div>`;
+    const up = i.sec === "updates", v = (x) => up ? ` data-v="${esc(x)}"` : "";
+    const right = i.at !== undefined ? `<span class="at">\u200e${esc(i.at)}\u200e</span>` : i.r !== undefined ? `<span class="at r">${esc(i.r)}</span>` : null;
+    const below = i.bar !== undefined ? `<span class="bar"><i style="width:${(i.bar * 100).toFixed(1)}%"></i></span>`
+      : i.list ? `<ul>${i.list.map(([a, b, e]) => `<li class="${e ? "e" : ""}" data-k="${esc(a)}"${v(b)}><span>${esc(a)}</span><span>${esc(b)}</span></li>`).join("")}${i.more ? `<li><span>${esc(i.more)}</span></li>` : ""}</ul>` : "";
+    const on = i.id === (isDoc(cur) ? "projects" : isFiles(cur) ? "files" : cur) || (i.open && i.open === cur && !all.some((x) => x.id === cur));
+    html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""} ${i.done ? "done" : ""}" data-id="${esc(i.id)}" aria-current="${on}"><span class="d ${i.d ?? ""}">${i.d === "q" ? "?" : ""}</span><span class="tx">${right === null ? `<div>${esc(i.title)}${i.tags ?? ""}</div>` : `<div class="t1"><b>${esc(i.title)}</b>${i.tags ?? ""}${right}</div>`}<small${v(i.sub)}>${esc(i.sub)}</small>${below}</span>${right === null ? `<time>${esc(i.t)}</time>` : ""}${up ? `<button class="hide" data-hide="${esc(i.id)}" aria-label="hide" title="hide">×</button>` : ""}</div>`;
   }
   if (S.offline) html += `<p class="meta" style="padding:0 1.1rem">${esc(S.offline)}</p>`;
   const left = $("#left"), was = slid && places(left);
+  const old = litOld(left);
   for (const c of [...left.children]) if (!c.classList.contains("gone")) c.remove();
   left.insertAdjacentHTML("afterbegin", `<div class="ptools">${toolButtons(false)}</div>${html}`);
+  litNew(left, old);
   if (was) slide(left, was);
   slid = !!S.listed && !matchMedia("(prefers-reduced-motion: reduce)").matches;
   const u = S.usage, p = pace();
@@ -843,13 +940,14 @@ function drawView(soft) {
   else if (!cur || cur === "nadya") html = nadyaView();
   else if (cur === "blog") html = `<iframe src="${BLOG}" title="blog" onload="this.contentDocument?.addEventListener('click', (e) => window.filesLink(e))"></iframe>`;
   else if (cur === "packages") html = `<iframe src="${PACKAGES}" title="packages"></iframe>`;
+  else if (cur === "mocks") html = mocksView();
   else if (cur === "projects") html = projectsView();
   else if (isDoc(cur)) html = projectView(cur.slice(8));
   else if (isFiles(cur)) html = filesView(cur.slice(6));
   else if (i?.r) { html = sessionView(i.r); ph = `Message ${i.r.name}`; }
   else html = `<article><p class="meta">gone</p></article>`;
   if (soft && html === lastView) return;
-  if (soft && (cur === "blog" || cur === "packages")) return;  // don't rebuild an iframe under the reader
+  if (soft && (cur === "blog" || cur === "packages" || (cur === "mocks" && S.mockOpen))) return;  // don't rebuild an iframe under the reader
   lastView = html;
   const t = same && view.querySelector(".msgs > .typing");
   if (t) dots = {cur, at: Date.now(), rect: t.getBoundingClientRect()};
@@ -1220,6 +1318,22 @@ function pjFind(p, q) {
   return m || hits.length ? {s: (m?.score ?? 0) * 10 + hits.length, name: m?.html ?? esc(p.id), hits} : null;
 }
 const PJF = {all: () => true, working: (p) => p.kind === "nadya" || p.state === "todo" || p.open.some((t) => t.how === "named"), ideas: (p) => p.kind === "idea", done: (p) => p.state === "done"};
+// new mocks: every mock of the last 2 days, the new ones in bold; one opens here, under a line back to the list
+function mocksView() {
+  const m = S.mocks?.find((x) => x.url === S.mockOpen);
+  if (m) return `<article class="doc page"><div class="crumbs"><a href="#" data-mocks>new mocks</a> / ${esc(m.dir)} / ${esc(m.name)} · <a href="${esc(m.url)}" target="_blank" rel="noopener">open in a tab</a></div><iframe src="${esc(m.url)}" title="${esc(m.name)}"></iframe></article>`;
+  if (!S.mocks) return `<article><p class="meta">loading…</p></article>`;
+  const nm = new Set(newMocks().map((x) => x.url));
+  return `<article><p class="meta">mocks changed in the last 2 days, in ~/web/&lt;project&gt;/mocks</p><ul class="mkl">${S.mocks.map((x) => `<li><a href="${esc(x.url)}" data-mock="${esc(x.url)}">${nm.has(x.url) ? `<b>${esc(x.name)}</b>` : esc(x.name)}</a> <span class="meta">${esc(x.dir)} · ${ago(x.at / 1000)}</span></li>`).join("") || "<li class=\"meta\">none</li>"}</ul></article>`;
+}
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("[data-mock], [data-mocks]");
+  if (!a || !$("#view").contains(a)) return;
+  e.preventDefault();
+  S.mockOpen = a.dataset.mock ?? null;
+  if (S.mockOpen) seeMock(S.mockOpen);
+  draw(); drawView();
+});
 function dueBox() {
   return dueTodos(true).map((t) => `<div class="need"><b>${esc(t.text)}</b><p>due ${esc(t.date)} ${esc(t.time ?? "")}</p>${sent.has("todo:" + t.full) ? `<p class="done">✓ ${esc(sent.get("todo:" + t.full))}</p>` : `<div class="opts" data-todo="${esc(t.full)}" data-file="${t.file}" data-due="${esc(`${t.date} ${t.time ?? ""}`.trim())}"><button>done</button><button>snooze 1 h</button><button>send to nadya</button></div>`}</div>`).join("");
 }
@@ -1843,13 +1957,20 @@ const PEND_BAR = `<button class="x" aria-label="cancel, take back into the box">
 // list, and a redraw between the press and the release replaced the row, so the click went to #left and was lost
 // (user, Oct 18th: "if I click too fast, it doesn't change sessions"; the opened session's log comes right after)
 let press = null;
-$("#left").addEventListener("pointerdown", (e) => { const row = e.button === 0 && e.target.closest(".it:not(.gone)"); press = row ? {id: aimed(e, row), pointer: e.pointerId} : null; });
+$("#left").addEventListener("click", (e) => {
+  const h = e.target.closest("[data-hide]");
+  if (!h) return;
+  const u = updates().find((x) => x.id === h.dataset.hide);
+  if (u) { upHidden[u.id] = u.ver; localStorage.cc_up_hidden = JSON.stringify(upHidden); draw(); }
+});
+$("#left").addEventListener("pointerdown", (e) => { const row = e.button === 0 && !e.target.closest(".hide") && e.target.closest(".it:not(.gone)"); press = row ? {id: aimed(e, row), pointer: e.pointerId} : null; });
 $("#left").addEventListener("pointercancel", () => { press = null; });  // a touch that turned into a scroll
 // on the document and by the point: a touch is captured to the row it pressed, and a replaced row sends its up nowhere
 document.addEventListener("pointerup", (e) => {
   const p = press; press = null;
   if (!p?.id || p.pointer !== e.pointerId || !document.elementFromPoint(e.clientX, e.clientY)?.closest("#left")) return;
-  cur = p.id; push(); if (cur === "blog") localStorage.cc_blog_seen = Math.max(Date.now(), ...S.posts.map((x) => Date.parse(x.time) || 0)); open();
+  cur = items().find((x) => x.id === p.id)?.open ?? p.id; if (cur === "mocks") S.mockOpen = null;
+  push(); if (cur === "blog") localStorage.cc_blog_seen = Math.max(Date.now(), ...S.posts.map((x) => Date.parse(x.time) || 0)); open();
   if ((cur === "nadya" || cur.includes(".")) && matchMedia("(hover: hover) and (pointer: fine)").matches) $("#say").q.focus();
 });
 // a bubble's thumbnail opens full size; a click anywhere or Escape closes it
@@ -2020,8 +2141,8 @@ function open() {
 
 // ---------- start
 listen();
-loadUsage(); loadBlog(); loadReminders(); loadPackages();
-setInterval(loadUsage, 60e3); setInterval(loadBlog, 60e3); setInterval(loadReminders, 30e3); setInterval(loadPackages, 5 * 60e3);
+loadUsage(); loadBlog(); loadReminders(); loadPackages(); loadMocks();
+setInterval(loadUsage, 60e3); setInterval(loadBlog, 60e3); setInterval(loadReminders, 30e3); setInterval(loadPackages, 5 * 60e3); setInterval(loadMocks, 60e3);
 // back on the tab or window (or the phone woke up): read everything again at once and reopen the streams.
 // focus, visibilitychange and pageshow often come together: one refresh per 2s
 let refreshed = Date.now();  // the load just read everything
@@ -2029,7 +2150,7 @@ function refresh() {
   if (document.visibilityState !== "visible" || Date.now() - refreshed < 2e3) return;
   refreshed = Date.now();
   listen(); if (stream) follow(stream.pid, true);  // a stream can sit open and dead after the phone slept
-  loadUsage(); loadBlog(); loadPackages(); if (isFiles(cur)) loadPath(cur.slice(6));
+  loadUsage(); loadBlog(); loadPackages(); loadMocks(); if (isFiles(cur)) loadPath(cur.slice(6));
 }
 document.addEventListener("visibilitychange", refresh);
 addEventListener("focus", refresh);
