@@ -179,8 +179,9 @@ function shQuote(s) {
 // new kitty window, and focuses it.
 // `name` is its `claude -n`. {pid, pane, into: the window it went after when reused}, or {error} with the pane when one was made,
 // since the screen still works off it. A claude by that name already in dir is the one
-// asked for: nothing starts, and {pid, pane, existing: true} names it.
-export async function spawn({dir, after = "", mkdir = false, name = "", focus = false}) {
+// asked for: nothing starts, and {pid, pane, existing: true} names it. `resume`, a sessionId
+// whose log is under dir's project, starts it as `claude --resume <id>`: that conversation again.
+export async function spawn({dir, after = "", mkdir = false, name = "", focus = false, resume = ""}) {
   dir = expandDir(dir ?? "");
   if (!dir.startsWith("/")) return {error: `not an absolute path: ${dir}`};
   if (!isDir(dir)) {
@@ -205,7 +206,7 @@ export async function spawn({dir, after = "", mkdir = false, name = "", focus = 
   if (made.error) return made;
   // a shell, not a claude: no dialog to guard against
   const err = await typeInto({pid: 0, pane: made.pane},
-    name ? `claude -n ${shQuote(name)}` : "claude", {force: true});
+    ["claude", name && `-n ${shQuote(name)}`, resume && `--resume ${resume}`].filter(Boolean).join(" "), {force: true});
   if (err) return {error: err, pane: made.pane};
   const pid = await claudeIn(made.pane);
   if (!pid) return {error: "claude did not start", pane: made.pane};

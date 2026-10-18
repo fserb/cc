@@ -56,6 +56,7 @@ async function serve(args) {
       } while (again);
       for (const i of instances) i.goal = goals.get(i.pid);
       goals.prune(instances.map((i) => i.pid));
+      goals.remember(instances);
       changes?.update(pending.splice(0), instances);
       server?.tick().catch((e) => console.error(e));
     } finally {

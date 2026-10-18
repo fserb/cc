@@ -23,6 +23,7 @@ import {attachSession, select, sendKeys, show, tmuxBackground, typeInto} from ".
 import {inputBox, unqueue} from "./queue.js";
 import {close, expandDir, homeRel, paneIn, spawn} from "./spawn.js";
 import {sendPeer} from "./peer.js";
+import {closedSessions} from "./closed.js";
 import {byDay, LONGER, pace, readUsage} from "./usage.js";
 import {localRows, series} from "./burn.js";
 import {base, burnReport, burnSeries, call, HOSTS, mergedUsage, SELF, tokenPace} from "./remote.js";
@@ -711,6 +712,18 @@ export class Server {
     return {dirs: got.flatMap((g) => g.dirs), exists: Boolean(host) && got[0].exists};
   }
 
+  // api/closed: the sessions that ended in the last week (closed.js), newest first; with
+  // `all` every host's, each tagged `host`
+  async closed(all) {
+    const here = () => closedSessions({goalOf: (id) => this.goals?.ofSession(id) ?? ""});
+    if (!all) return {closed: here()};
+    const got = await Promise.all(this.allHosts().map(async (h) => {
+      const body = h === this.self ? {closed: here()} : (await call(h, "/api/closed"))[0];
+      return (body?.closed ?? []).map((c) => ({...c, host: h}));
+    }));
+    return {closed: got.flat().sort((a, b) => b.at - a.at)};
+  }
+
   // api/spawn: on the host its `after` pane (`host/<pane>`) or its dir (`host:dir`) names,
   // with its pid and pane tagged as the list's; with neither, here as before
   async spawnRoute(req) {
@@ -754,7 +767,8 @@ export class Server {
       }
     }
     const r = await spawn({dir: String(body.dir ?? ""), after,
-      mkdir: body.mkdir === true, name: String(body.name ?? ""), focus});
+      mkdir: body.mkdir === true, name: String(body.name ?? ""), focus,
+      resume: /^[0-9a-f-]{36}$/.test(String(body.resume ?? "")) ? body.resume : ""});
     if (r.pid && typeof body.goal === "string" && body.goal.trim()) this.goals?.set(r.pid, body.goal);
     return r.error ? r : {...r, after};
   }
@@ -850,6 +864,7 @@ export class Server {
     if (get && path === "/api/dirs") {
       return json(await this.dirs(url.searchParams.get("prefix") ?? "", all));
     }
+    if (get && path === "/api/closed") return json(await this.closed(all));
     if (post && path === "/api/spawn") return await this.spawnRoute(req);
     if (post && path === "/api/focus") return await this.focusRoute(req);
     // `<host>.<pid>`, the merged list's id: another host's goes there, this host's is `<pid>`

@@ -5,10 +5,12 @@
 // reuses names like cc-a for new work. A pid not in the listing for GONE is dropped: a
 // session read off the pane can miss a poll, and spawn sets the goal before a poll lists
 // the new claude.
+// Each listed session's goal is also kept by sessionId in `ccx-goals-sessions.json` for
+// SESSION_KEEP, so cc's restore pop-up can say what a closed session was for (closed.js).
 
 import {HOME} from "./sh.js";
 
-const GONE = 10 * 60_000;
+const GONE = 10 * 60_000, SESSION_KEEP = 14 * 86400_000;
 
 export class Goals {
   constructor(file = `${HOME}/.claude/ccx-goals.json`) {
@@ -22,6 +24,37 @@ export class Goals {
       }
     } catch {
       // none yet
+    }
+    this.sessionFile = file.replace(/\.json$/, "-sessions.json");
+    this.bySession = new Map();  // sessionId -> [goal, ms last seen]
+    try {
+      this.bySession = new Map(Object.entries(JSON.parse(Deno.readTextFileSync(this.sessionFile))));
+    } catch {
+      // none yet
+    }
+  }
+
+  ofSession(id) {
+    return this.bySession.get(id)?.[0] ?? "";
+  }
+
+  // after each poll, with its instances: their goals by sessionId, saved when one changes
+  remember(instances, now = Date.now()) {
+    let changed = false;
+    for (const i of instances) {
+      if (!i.goal || !i.sessionId) continue;
+      const was = this.bySession.get(i.sessionId);
+      if (was?.[0] === i.goal && now - was[1] < 86400_000) continue;  // its last seen moves once a day
+      this.bySession.set(i.sessionId, [i.goal, now]);
+      changed = true;
+    }
+    for (const [id, [, at]] of this.bySession) if (now - at > SESSION_KEEP) { this.bySession.delete(id); changed = true; }
+    if (!changed) return;
+    try {
+      Deno.writeTextFileSync(`${this.sessionFile}.tmp`, JSON.stringify(Object.fromEntries(this.bySession)));
+      Deno.renameSync(`${this.sessionFile}.tmp`, this.sessionFile);
+    } catch (e) {
+      console.error(`goals: ${e.message}`);
     }
   }
 

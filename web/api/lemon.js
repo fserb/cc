@@ -1,5 +1,6 @@
 // cc's web-only support functions (cchost keeps the session work). Served at /cc/api/.
 //   GET grep?q=<text>   live grep over ~/nadya, as the files tab shows it: no dotfiles, no tmp/
+//   GET recent          the 10 files of ~/nadya changed last, the same ones left out: [{file, at (ms)}]
 import Lemon from "lemon";
 
 const MAX = 300;  // matching lines
@@ -28,7 +29,20 @@ async function grep(q) {
   return {q, hits, more: lines.length > MAX};
 }
 
+async function recent() {
+  const cmd = new Deno.Command("host", {
+    args: [`cd ~/nadya && find . -path ./tmp -prune -o -name '.?*' -prune -o -type f -printf '%T@ %P\\n' | sort -rn | head -n 10`],
+    stdout: "piped", stderr: "piped",
+  });
+  const {stdout} = await cmd.output();
+  return new TextDecoder().decode(stdout).split("\n").filter(Boolean).map((l) => {
+    const k = l.indexOf(" ");
+    return {file: l.slice(k + 1), at: Math.round(+l.slice(0, k) * 1000)};
+  });
+}
+
 async function get(req) {
+  if (req.subpath === "/recent") return await recent();
   if (req.subpath !== "/grep") return Response.HTTP_NOT_FOUND;
   const q = (req.url.searchParams.get("q") ?? "").replace(/[\r\n]+/g, " ").trim();
   if (q.length < 2) return {q, hits: [], more: false};
