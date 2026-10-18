@@ -249,7 +249,6 @@ const FILES = [
   {n: "todo/", k: "dir", c: 6, t: "today"}, {n: "days/", k: "dir", c: 8, t: "02:58"}, {n: "dream/", k: "dir", c: 4, t: "07:41"},
   {n: "user/", k: "dir", c: 3, t: "Oct 15"}, {n: "CLAUDE.md", t: "2h"}, {n: "nadya-log.md", t: "4 min"}, {n: "projects.md", t: "Oct 16"},
 ];
-const RUNS = [["research", "password sync", "3h ago, done"], ["track", "LX123456789CA", "this morning"], ["dream", "", "02:45, 4 ideas"], ["nightly", "", "02:41, digest Oct 16"], ["mocks", "less used place", "today"], ["daily", "", "08:07"]];
 const RECENT2 = [["projects/cc.md", "12 min"], ["nadya-log.md", "14 min"], ["todo/todo.md", "1h"], ["research/password-sync.md", "3h"], ["ideas/yt-witch.md", "5h"], ["days/2026-10-16.md", "02:58"], ["dream/2026-10-17/README.md", "07:41"], ["user/prefs.md", "Oct 15"]];
 const RECENT = ["projects/cc.md", "todo/todo.md", "research/password-sync.md", "ideas/yt-witch.md", "days/2026-10-16.md"];
 const DIRS = ["ai/cc", "web/tracker", "marx:web/arcade", "marx:web/soccer", "nadya", "web/blog", "ai/trig"];
@@ -322,7 +321,7 @@ function ipop(st, top) {
   const at = KINDS.findIndex(([v]) => v === st.ip), l = KINDS[at][1];
   const body = {
     new: () => `<h4>${l}</h4><div class="pad">${newForm(st)}</div>`,
-    tasks: () => `<h4>recent tasks</h4><div class="pad"><ul class="rows tight">${RUNS.map(([t, a, w]) => { const on = st.running.includes(t); return `<li><span class="nm"><b>${t}</b>${a ? `<code>${esc(a)}</code>` : ""}</span><small>${w}</small><span class="r"><button class="mini ${on ? "on" : ""}" data-act="run:${t}">${on ? "running" : "again"}</button></span></li>`; }).join("")}</ul><button class="go" data-act="open:tasks" style="display:table;margin:.7rem 0 0 auto">${I.tasks.replace("<svg", '<svg style="width:15px;height:15px;vertical-align:-2px;margin-right:.4rem"')}all tasks</button></div>`,
+    tasks: () => `<h4>tasks</h4><div class="pad"><ul class="rows tight">${TASKS.slice(0, 7).map((t) => { const on = st.running.includes(t.id); return `<li data-act="${t.ask ? "open:tasks" : `run:${t.id}`}" style="cursor:pointer"><span class="nm"><span>${t.id}${t.ask ? "…" : ""}</span></span><span class="r"><time>${on ? "running" : t.last ?? ""}</time></span></li>`; }).join("")}</ul><button class="go" data-act="open:tasks" style="display:table;margin:.7rem 0 0 auto">${I.tasks.replace("<svg", '<svg style="width:15px;height:15px;vertical-align:-2px;margin-right:.4rem"')}all tasks</button></div>`,
     closed: () => `<h4>${l}</h4><div class="pad">${closedList(st, 99, true)}</div>`,
     files: () => `<h4>recent files</h4><div class="pad"><ul class="rows tight">${RECENT2.map(([f, t]) => `<li data-act="open:f:${f}" style="cursor:pointer"><span class="nm"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f}</span></span><span class="r"><time>${t}</time></span></li>`).join("")}</ul><button class="go" data-act="open:files" style="display:table;margin:.7rem 0 0 auto">${I.files.replace("<svg", '<svg style="width:15px;height:15px;vertical-align:-2px;margin-right:.4rem"')}all files</button></div>`,
   }[st.ip]();
