@@ -36,6 +36,11 @@ Built (commits 342a5a0, 6152213, 8a4e8a7, 49db437; details in CLAUDE.md "The too
 - the bottom + of the list, the files row and the new-session page are gone
 - goals are kept by sessionId (~/.claude/ccx-goals-sessions.json) so closed sessions show them
 
+- the header title is the page shown (aab3d44): a session's name, plan, quota, a doc's or file's
+  name; pages dropped their own h1 (a doc its first `# ` heading, files crumbs their last part);
+  the phone's list screen still says nadya; the desktop title no longer jumps to nadya on click
+- tasks.md "hard queue" line reworded by nadya ("Do some hard work ..."), committed in ~/nadya
+
 User preferences learned in this talk: no buttons that are a row's only action (the row is the
 action); pop-up titles name the action ("restore session"); no decorative glyph columns.
 
