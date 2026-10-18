@@ -176,6 +176,11 @@
   .hb em { position: absolute; margin: -14px 0 0 18px; font-style: normal; font-size: 0.6rem; background: var(--gray); color: var(--text); border-radius: 999px; padding: 0 0.28rem; line-height: 1.4; }
   .hb { position: relative; }
   .irow.spread { display: grid; grid-template-columns: repeat(4, 1fr); padding: 0.3rem 0.5rem; } .irow.spread .hb { width: 100%; height: 36px; }
+  .app > header.three { display: grid; grid-template-columns: 300px minmax(0, 1fr) auto; gap: 0; padding: 0; }
+  header.three .hl { display: flex; align-items: center; gap: 2px; height: 100%; padding: 0 0.7rem; border-right: 1px solid var(--line); }
+  header.three .hl .sp { flex: 1; }
+  header.three > b { padding: 0 1.2rem; }
+  header.three > .q { padding-right: 1rem; }
   .pop.ipop { width: 360px; max-height: 500px; padding: 0.3rem 0 0.7rem; }
   .phone .pop.ipop { left: 0.4rem !important; right: 0.4rem; width: auto; max-height: 600px; }
   .pop.ipop h4 { margin: 0.6rem 1rem 0.3rem; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 400; display: flex; }
@@ -297,16 +302,16 @@ const quota = `<span class="q"><i></i><b>41%</b>1.1x</span>`;
 
 // ---------- the options
 const OPTS = [
-  {k: "K", name: "icons", note: "desktop: in the header, left of the title; phone: on top of the list, spread across. Each opens a pop-up",
-    head: (st) => st.phone ? "" : `<span class="gtabs">${icons(st)}</span>`,
+  {k: "K", name: "icons", note: "desktop: the header in three, the icons over the list (closed on its right end), the title over the page, the quota; phone: on top of the list, spread across. Each opens a pop-up",
+    hdr: (st) => `<header class="three"><span class="hl">${icons(st, KINDS.filter(([v]) => v !== "closed"))}<span class="sp"></span>${icons(st, KINDS.filter(([v]) => v === "closed"))}</span><b>${esc(title(st))}</b>${quota}</header>`,
     left: (st) => st.phone ? `<div class="irow spread">${icons(st)}</div>` + list(st) : list(st),
     pop: (st) => ipop(st, st.phone ? 84 : 44)},
 ];
 
 const KINDS = [["new", "new session"], ["tasks", "tasks"], ["closed", "closed sessions"], ["files", "files"]];
-function icons(st) {
+function icons(st, kinds = KINDS) {
   const n = CLOSED.length - st.back.length;
-  return KINDS.map(([v, l]) => `<button class="hb" data-act="ip:${v}" aria-pressed="${st.ip === v}" title="${l}">${I[v]}${v === "closed" ? `<em>${n}</em>` : ""}</button>`).join("");
+  return kinds.map(([v, l]) => `<button class="hb" data-act="ip:${v}" aria-pressed="${st.ip === v}" title="${l}">${I[v]}${v === "closed" ? `<em>${n}</em>` : ""}</button>`).join("");
 }
 function ipop(st, top) {
   if (!st.ip) return "";
@@ -370,7 +375,9 @@ function draw(el, st, keepPal) {
   const open = phone && st.cur && !(o.k === "G" && st.side);
   el.classList.toggle("open", !!open);
   const t = phone && open ? `<button class="back" data-act="back">‹</button><b>${esc(title(st))}</b>` : `<b>${phone ? "nadya" : esc(title(st))}</b>`;
-  el.innerHTML = `<header>${o.head?.(st) ?? ""}${t}${phone && o.k === "G" ? "" : quota}</header><div class="home"><nav class="left">${(o.left ?? list)(st)}</nav><div class="center">${center(st)}</div>${o.rail?.(st) ?? ""}${o.pop?.(st) ?? ""}</div>`;
+  el.innerHTML = `${o.hdr && !phone ? o.hdr(st) : `<header>${o.head?.(st) ?? ""}${t}${quota}</header>`}<div class="home"><nav class="left">${(o.left ?? list)(st)}</nav><div class="center">${center(st)}</div>${o.rail?.(st) ?? ""}${o.pop?.(st) ?? ""}</div>`;
+  const pb = st.ip && el.querySelector(`[data-act="ip:${st.ip}"]`), pp = el.querySelector(".ipop");
+  if (pb && pp && !phone) pp.style.left = `${Math.min(pb.getBoundingClientRect().left - el.getBoundingClientRect().left - 8, el.clientWidth - pp.offsetWidth - 8)}px`;
   if (keepPal) { const i = el.querySelector("[data-pal]"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
 }
 
