@@ -83,8 +83,9 @@
   .after .m { border-radius: 6px 16px 16px 6px; position: relative; }
   .after .m.first { border-top-left-radius: 16px; } .after .m.last { border-bottom-left-radius: 16px; }
   .after .m.first:not(:first-child) { margin-top: 0.6rem; }
-  .after .stamp { align-self: center; font-size: 0.72rem; color: var(--muted); margin: 0.9rem 0 0.3rem; font-variant-numeric: tabular-nums; }
-  .after .m time { position: absolute; left: calc(100% + 0.6rem); bottom: 0.45rem; font-size: 0.72rem; color: var(--muted); white-space: nowrap; opacity: 0; transition: opacity 120ms ease; font-variant-numeric: tabular-nums; }
+  /* the time only on hover, inside the bubble at its bottom right; a spacer at the end of the text keeps the last line clear of it */
+  .after .m::after { content: ""; display: inline-block; width: 2.6rem; }
+  .after .m time { position: absolute; right: 0.7rem; bottom: 0.35rem; font-size: 0.72rem; color: var(--muted); white-space: nowrap; opacity: 0; transition: opacity 120ms ease; font-variant-numeric: tabular-nums; }
   @media (hover: hover) { .after .m:hover time { opacity: 1; } }
   /* 5. the composer: one field, controls inside it, send is an arrow that wakes when there is text */
   .after .say { padding: 0.6rem 2rem 0.9rem; }
@@ -116,15 +117,6 @@
   .newer.off { opacity: 0; transform: translate(-50%, 8px); pointer-events: none; transition-duration: 120ms; }
   .after .newer:active { transform: translateX(-50%) scale(0.96); }
 
-  /* ---------- the list motion demo */
-  .lists { display: flex; gap: 1.5rem; }
-  .mini { width: 280px; background: var(--bg); border: 1px solid #dee2e6; border-radius: 10px; padding: 0.4rem 0; height: 250px; overflow: hidden; position: relative; }
-  .mini .it { background: var(--bg); }
-  .after .mini .it { margin: 1px 6px; border-radius: 8px; }
-  .demo-btns { display: flex; gap: 0.5rem; margin: 0.6rem 0 0; }
-  .demo-btns button { border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 0.25rem 0.8rem; cursor: pointer; transition: transform 120ms var(--ease-out); }
-  .demo-btns button:active { transform: scale(0.97); }
-  label.slow { font-size: 0.85rem; color: var(--muted); display: inline-flex; gap: 0.3rem; align-items: center; margin-left: 0.6rem; }
 
   table { border-collapse: collapse; background: #fff; font-size: 0.88rem; max-width: 1100px; }
   th, td { border: 1px solid #dee2e6; padding: 0.45rem 0.6rem; text-align: left; vertical-align: top; }
@@ -147,15 +139,6 @@ buttons, press rows, hover a reply, type in the box. The table at the end lists 
 </section>
 
 <section class="opt">
-  <h2>The list when sessions come and go <small>today a new row slides in from the left and a gone one leaves to the right</small></h2>
-  <div class="lists">
-    <div class="before"><p class="cap">before</p><div class="mini" id="lb"></div></div>
-    <div class="after"><p class="cap">after</p><div class="mini" id="la"></div></div>
-  </div>
-  <div class="demo-btns"><button id="add">a session starts</button><button id="drop">one ends</button><button id="bump">one moves to the top</button><label class="slow"><input type="checkbox" id="slow"> 4x slower</label></div>
-</section>
-
-<section class="opt">
   <h2>The changes</h2>
   <table>
     <tr><th>Where</th><th>Before</th><th>After</th><th>Why</th></tr>
@@ -163,15 +146,14 @@ buttons, press rows, hover a reply, type in the box. The table at the end lists 
     <tr><td>session list</td><td>selection and hover fill the full width, square</td><td>inset 6px, radius 8px, as macOS sidebars and the pop-up items do</td><td>Familiarity; the tool buttons are already 8px rounded squares, so the rows match them</td></tr>
     <tr><td>row path</td><td><code>0.66rem</code> mono, about 10px</td><td><code>0.72rem</code>, about 11px</td><td>11px is the smallest size Apple uses for text meant to be read</td></tr>
     <tr><td>header quota</td><td>date, %, pace all red, plus the red bar and tick</td><td>the bar and the date stay red; the % in text colour, the pace muted</td><td>Simplicity: when four things are red none stands out. The date is the one to act on</td></tr>
-    <tr><td>replies</td><td>every reply its own bubble, 8px apart, its own 9px time at 70% opacity</td><td>a run of replies 2px apart with small joined corners (Messages); a time label between runs more than 5 min apart; each time on hover, beside the bubble</td><td>Grouping: proximity says these belong together. A 9px time on every bubble is noise you cannot read anyway</td></tr>
+    <tr><td>replies</td><td>every reply its own bubble, 8px apart, its own 9px time at 70% opacity</td><td>a run of replies 2px apart with small joined corners (Messages), a larger gap where replies are more than 5 min apart; the time only on hover, at the bubble's bottom right</td><td>Grouping: proximity says these belong together. A 9px time on every bubble is noise you cannot read anyway</td></tr>
     <tr><td>composer</td><td>four separate controls: two bordered circles, the box, a "send" pill</td><td>one field; pop-out and <code>&gt;_</code> inside it on the left, a round ↑ send on the right, faded until there is text; focus is a soft 3px ring</td><td>Grouping and mapping: the controls act on the box, so they sit in it. The faded send shows the state without words</td></tr>
     <tr><td>pop-ups</td><td>appear and vanish in one frame; opaque</td><td>grow from the button that opened them (origin under it), <code>scale(0.96)</code>+opacity, 160ms in, 100ms out, custom ease-out; translucent material with blur; reduced motion and reduced transparency respected</td><td>Emil: opened a few times an hour, so a short animation; origin-aware; exit faster than enter. Apple §7, §12</td></tr>
     <tr><td>pop-up footer</td><td>"all tasks" is a filled blue button, the loudest thing in the pop-up</td><td>a plain accent row under a hairline, with a chevron</td><td>Hierarchy: the tasks are the content; "all" is a way out, not the main action</td></tr>
-    <tr><td>list motion</td><td>new row in from the left, gone row out to the right, <code>ease-out</code></td><td>new row fades in from 4px above at <code>scale(0.98)</code>; a gone row fades out in place; both custom ease-out, 200ms; the others still slide</td><td>Apple §7: enter and leave the same way. Nothing comes from off-screen here, so nothing should go there</td></tr>
     <tr><td>"↓ new" pill</td><td>appears and goes in one frame</td><td>rises 8px with a fade, 200ms in, 120ms out</td><td>it points down at new messages, so it comes from below (Apple §8)</td></tr>
     <tr><td>easing</td><td>browser <code>ease-out</code></td><td><code>cubic-bezier(0.23, 1, 0.32, 1)</code> as one <code>--ease-out</code> for all of cc</td><td>Emil: the built-in curves are too weak to read as intentional</td></tr>
   </table>
-  <p style="color:var(--muted);max-width:60rem;margin-top:1rem">Left out on purpose: no animation on list navigation or anything opened by a key (Emil: used tens of times a day);
+  <p style="color:var(--muted);max-width:60rem;margin-top:1rem">Left out on purpose: the list's motion when sessions start, end or move stays as it is (user); no animation on list navigation or anything opened by a key (Emil: used tens of times a day);
   no springs or drag gestures, since cc has nothing you drag. Not mocked, worth asking: a dark scheme (Apple's "colours that adapt to light and dark");
   cc has none, and it would touch every colour in index.html. The phone keeps its pop-up under the tool buttons with the dimmed page, which you already chose.</p>
 </section>
@@ -210,7 +192,6 @@ function frame(after) {
     const runs = [];
     for (const m of msgs) { const last = runs.at(-1); if (last && mins(m[0]) - mins(last.at(-1)[0]) <= 5) last.push(m); else runs.push([m]); }
     for (const run of runs) {
-      chat += `<div class="stamp">${run[0][0]}</div>`;
       run.forEach(([t, x], i) => chat += `<div class="m${i === 0 ? " first" : ""}${i === run.length - 1 ? " last" : ""}">${x}<time>${t}</time></div>`);
     }
   }
@@ -243,36 +224,6 @@ for (const el of document.querySelectorAll("[data-frame]")) {
     ta.oninput = () => field.classList.toggle("has", ta.value.trim() !== "");
   }
 }
-
-// ---------- the list motion demo: today's slide() against the proposal
-const ease = "cubic-bezier(0.23, 1, 0.32, 1)";
-let names = ["arcade-lbp-d", "iron-f", "soccer-c", "cc-a"], next = 0;
-const fresh = ["web-1b", "voices-a", "blog-b", "trig-a"];
-const mrow = (n) => `<div class="it" data-id="${n}"><span class="d"></span><span class="tx"><div class="t1"><b style="font-weight:400">${n}</b></div><small>hard queue</small></span></div>`;
-function places(box) { const m = new Map(), br = box.getBoundingClientRect(); for (const e of box.children) if (!e.classList.contains("gone")) m.set(e.dataset.id, {e, y: e.getBoundingClientRect().top - br.top}); return m; }
-function draw(box, after) {
-  const dur = (document.querySelector("#slow").checked ? 4 : 1) * 200;
-  const was = box.children.length ? places(box) : null;
-  for (const c of [...box.children]) if (!c.classList.contains("gone")) c.remove();
-  box.insertAdjacentHTML("afterbegin", names.map(mrow).join(""));
-  if (!was) return;
-  const now = places(box);
-  for (const [k, n] of now) {
-    const o = was.get(k);
-    if (o) { if (o.y !== n.y) n.e.animate([{transform: `translateY(${o.y - n.y}px)`}, {transform: "none"}], {duration: dur, easing: after ? ease : "ease-out"}); continue; }
-    n.e.animate(after ? [{transform: "translateY(-4px) scale(0.98)", opacity: 0}, {transform: "none", opacity: 1}] : [{transform: "translateX(-100%)", opacity: 0}, {transform: "none", opacity: 1}], {duration: dur, easing: after ? ease : "ease-out"});
-  }
-  for (const [k, o] of was) {
-    if (now.has(k)) continue;
-    const g = o.e; g.classList.add("gone"); g.style.cssText = `position:absolute;left:0;right:0;top:${o.y}px;pointer-events:none`; box.append(g);
-    g.animate(after ? [{opacity: 1}, {opacity: 0, transform: "scale(0.98)"}] : [{transform: "none", opacity: 1}, {transform: "translateX(100%)", opacity: 0}], {duration: after ? dur * 0.75 : dur, easing: after ? ease : "ease-out"}).onfinish = () => g.remove();
-  }
-}
-const both = () => { draw(document.querySelector("#lb"), false); draw(document.querySelector("#la"), true); };
-both();
-document.querySelector("#add").onclick = () => { names.splice(1, 0, fresh[next++ % fresh.length]); both(); };
-document.querySelector("#drop").onclick = () => { if (names.length > 1) names.splice(1, 1); both(); };
-document.querySelector("#bump").onclick = () => { names.unshift(names.pop()); both(); };
 </script>
 </body>
 </html>
