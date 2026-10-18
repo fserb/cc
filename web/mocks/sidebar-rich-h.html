@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc sidebar: rich items H</title>
+<style>
+:root { --bg: #fff; --text: #212529; --muted: #6c757d; --line: #e9ecef; --track: #f7f8f9; --hover: #f3f4f6;
+  --accent: #0b7bd3; --red: #d63939; --green: #2f9e44; --yel: #f59f00; --gray: #ced4da; --cur: #e7f1fb; --hot: #fff4e6; --hot-red: #fdecec; --press: #e9ecef;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #f1f3f5; color: var(--text); font: 15px/1.5 var(--font); }
+body > header { padding: 0.8rem 1.4rem; display: flex; gap: 1.2rem; align-items: center; flex-wrap: wrap; }
+body > header h1 { font-size: 1.05rem; margin: 0; } body > header nav a { margin-right: 0.8rem; color: var(--accent); text-decoration: none; } body > header nav a[aria-current] { color: var(--text); font-weight: 600; }
+.clock { display: flex; gap: 0.4rem; align-items: center; margin-left: 0.6rem; }
+.clock output { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 3.2rem; }
+.clock button { font: inherit; font-size: 0.85rem; border: 1px solid #dee2e6; background: #fff; border-radius: 6px; padding: 0.15rem 0.6rem; cursor: pointer; transition: transform 120ms var(--ease-out); }
+.clock button:active { transform: scale(0.96); } .clock small { color: var(--muted); font-size: 0.8rem; }
+.frames { display: flex; gap: 1.6rem; padding: 0 1.4rem 1rem; align-items: flex-start; flex-wrap: wrap; }
+.cap { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 0.3rem; }
+.desk { width: 800px; height: 720px; background: var(--bg); border: 1px solid #dee2e6; border-radius: 10px; overflow: hidden; display: grid; grid-template-rows: 48px minmax(0, 1fr); }
+.desk > .hd { display: grid; grid-template-columns: 320px 1fr auto; align-items: center; border-bottom: 1px solid var(--line); }
+.tl { display: flex; gap: 2px; padding: 0 0.7rem; height: 100%; align-items: center; border-right: 1px solid var(--line); } .tl .sp { flex: 1; }
+.desk > .hd b { padding: 0 1.2rem; } .desk > .hd .q { padding-right: 1.2rem; color: var(--muted); }
+.tb { width: 32px; height: 32px; border-radius: 8px; display: inline-grid; place-items: center; color: var(--muted); } .tb svg { width: 18px; height: 18px; }
+.desk > .bd { display: grid; grid-template-columns: 320px minmax(0, 1fr); min-height: 0; }
+.left { position: relative; border-right: 1px solid var(--line); overflow: hidden auto; padding: 0.25rem 0; user-select: none; -webkit-user-select: none; }
+.center { overflow: auto; min-height: 0; display: flex; flex-direction: column; }
+.center > .pg { padding: 1.4rem 1.8rem; } .center iframe { flex: 1; border: 0; width: 100%; }
+.pg h2 { font-size: 1.3rem; margin: 0 0 0.3rem; } .pg .meta { color: var(--muted); font-size: 0.88rem; margin-bottom: 1rem; } .hint { color: var(--muted); font-size: 0.9rem; }
+.phone { position: relative; width: 390px; height: 780px; background: var(--bg); border: 1px solid #dee2e6; border-radius: 26px; overflow: hidden; display: grid; grid-template-rows: 44px 48px auto minmax(0, 1fr); }
+.phone > .st { display: flex; justify-content: space-between; padding: 0.7rem 1.4rem 0; font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.phone > .hd { display: flex; align-items: center; padding: 0 1.1rem; border-bottom: 1px solid var(--line); } .phone > .hd .q { margin-left: auto; color: var(--muted); }
+.phone > .ptl { display: flex; gap: 2px; padding: 0.3rem 0.7rem; border-bottom: 1px solid var(--line); } .ptl .sp { flex: 1; }
+.phone .left { border: 0; padding: 0; }
+.pv { position: absolute; inset: 44px 0 0; background: var(--bg); display: flex; flex-direction: column; transition: transform 260ms cubic-bezier(0.32, 0.72, 0, 1); }
+.pv[hidden] { display: flex; transform: translateX(100%); pointer-events: none; }
+.pv > .hd { display: flex; align-items: center; gap: 0.6rem; height: 48px; padding: 0 0.8rem; border-bottom: 1px solid var(--line); flex: none; }
+.pv > .hd button { all: unset; cursor: pointer; color: var(--accent); padding: 0.2rem 0.4rem; } .pv > .bd { flex: 1; overflow: auto; display: flex; flex-direction: column; } .pv iframe { flex: 1; border: 0; width: 100%; }
+
+.sec { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 0.8rem 1.1rem 0.25rem; }
+.fr { position: relative; display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 0 0.7rem; padding: 0.45rem 1.1rem; cursor: pointer; align-items: baseline; background: var(--bg); transition: background-color 120ms ease; touch-action: pan-y; }
+.desk .fr { margin: 1px 6px; padding: 0.45rem calc(1.1rem - 6px); border-radius: 8px; }
+.fr:active:not(.drag) { background: var(--press); } .fr[aria-current=true] { background: var(--cur); }
+@media (hover: hover) and (pointer: fine) { .desk .fr:hover { background: var(--hover); } .desk .fr[aria-current=true]:hover { background: var(--cur); } .desk .fr.temp:hover > .x { display: grid; } .desk .fr.temp:hover .t1 .r { visibility: hidden; } }
+.fr .d { width: 8px; height: 8px; border-radius: 50%; position: relative; top: calc(4px - 0.5ex); } .d.green { background: var(--green); } .d.yel { background: var(--yel); }
+.fr .tx { min-width: 0; }
+.fr .t1 { display: flex; gap: 0.5rem; align-items: baseline; } .fr .t1 b { font-weight: 400; flex: none; } .fr.unread .t1 b { font-weight: 600; }
+.fr .t1 .l { font-size: 0.75rem; color: var(--muted); flex: none; }
+.fr .t1 .r { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fr .t1 .r.path { direction: rtl; font: 0.72rem var(--mono); }
+.fr .tx > small { display: block; color: var(--muted); font-size: 0.82rem; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 3px; }
+.fr .bar { display: block; height: 2px; margin-top: 0.45rem; border-radius: 1px; background: var(--line); } .fr .bar i { display: block; height: 100%; border-radius: 1px; background: var(--text); opacity: 0.55; }
+.fr.done .bar i { background: var(--green); opacity: 1; }
+.fr ul { list-style: none; margin: 0.3rem -0.35rem 0; padding: 0; font-size: 0.78rem; line-height: 1.45; color: var(--muted); }
+.fr li { display: flex; gap: 0.6rem; padding: 0 0.35rem; border-radius: 4px; }
+.fr li span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .fr li span + span { margin-left: auto; flex: none; }
+.fr li.e span + span { color: var(--red); }
+
+.fr > .x { all: unset; position: absolute; top: 0.4rem; right: 0.4rem; display: none; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--muted); font-size: 0.85rem; line-height: 1; background: var(--bg); cursor: pointer; }
+.fr > .x:hover { background: var(--press); color: var(--text); }
+.ch { animation: ch 1.6s ease-out; } @keyframes ch { from { background-color: var(--hot); color: var(--text); } }
+.gone { position: absolute; left: 0; right: 0; pointer-events: none; z-index: 1; }
+.undo { display: flex; gap: 0.6rem; padding: 0.4rem 1.1rem 0.4rem calc(1.1rem + 10px + 0.7rem); font-size: 0.82rem; color: var(--muted); }
+.desk .undo { margin: 1px 6px; padding-left: calc(1.1rem - 6px + 10px + 0.7rem); }
+.undo button { all: unset; cursor: pointer; color: var(--accent); margin-left: auto; }
+.sw { position: relative; background: var(--hot-red); } .sw::before { content: "hide"; position: absolute; right: 1.1rem; top: 50%; transform: translateY(-50%); color: var(--red); font-size: 0.85rem; }
+.btns { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.8rem; }
+.btns button { font: inherit; font-size: 0.88rem; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: 6px; padding: 0.3rem 0.8rem; cursor: pointer; transition: transform 120ms var(--ease-out); }
+.btns button:active { transform: scale(0.97); } .btns button.p { background: var(--accent); color: #fff; }
+.scan { list-style: none; padding: 0; margin: 0.6rem 0; font-size: 0.9rem; } .scan li { display: grid; grid-template-columns: 4rem 1fr; gap: 0.6rem; padding: 0.25rem 0; border-bottom: 1px solid var(--line); } .scan time { color: var(--muted); font-variant-numeric: tabular-nums; } .scan li.fut { color: var(--muted); }
+.notes { padding: 0 1.4rem 1.4rem; max-width: 1280px; } .notes ul { margin: 0.3rem 0 0; padding-left: 1.2rem; } .notes li { margin: 0.15rem 0; }
+@media (prefers-reduced-motion: reduce) { .pv { transition: none; } }
+</style>
+</head>
+<body>
+<header><h1>H · F with its own section</h1><nav><a href="sidebar-rich-f.html">F</a><a href="sidebar-rich-h.html" aria-current="page">H</a></nav>
+  <span class="clock"><output id="clk">13:32</output><button id="play">play</button><button id="next">next change</button><button id="reset">reset</button><small>play: 1 s = 1 min</small></span></header>
+<div class="frames">
+  <div><p class="cap">desktop</p><div class="desk"><div class="hd"><div class="tl" id="tools"></div><b id="title">nadya</b><span class="q">48% · 1.1x</span></div>
+    <div class="bd"><div class="left" id="dl"></div><div class="center" id="center"><div class="pg"><p class="hint">nadya's chat</p></div></div></div></div></div>
+  <div><p class="cap">phone</p><div class="phone"><div class="st"><span id="pclk">1:32</span><span>5G 82%</span></div><div class="hd"><b>nadya</b><span class="q">48%</span></div><div class="ptl" id="ptools"></div><div class="left" id="pl"></div>
+    <div class="pv" id="pv" hidden><div class="hd"><button id="back">‹ back</button><b id="pvt"></b></div><div class="bd" id="pvb"></div></div></div></div>
+</div>
+<div class="notes"><p class="cap">what to try</p><ul>
+  <li><b>play</b> or <b>next change</b>: the Uber Eats bar fills and its line changes (13:44 around the corner, 13:49 delivered, green, gone at 14:49); cc-d's mock joins the mocks list at 13:41 and the first three lines move down; FedEx moves at 13:45; a parcel at the front desk arrives as a new row at 13:52. A line that changed is lit for a moment.</li>
+    <li>Fixed rows, then the temporary ones under their own title, "updates", then "sessions". With no temporary rows the title is not drawn.</li>
+  <li>A click anywhere on a row opens its page, as every row does; nothing inside a row is a button. × on hover hides one (desktop).</li>
+  <li>The reminder's page has done / in 1 h / tomorrow; "in 1 h" takes it off the list until then.</li>
+</ul></div>
+<script type="module">
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
+const ICONS = [`<path d="M12 5v14M5 12h14"/>`, `<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>`, `<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/>`, null, `<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>`];
+const tools = ICONS.map((p) => p ? `<span class="tb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${p}</svg></span>` : `<span class="sp"></span>`).join("");
+$("#tools").innerHTML = tools; $("#ptools").innerHTML = tools;
+
+// the clock: minutes after 13:00 on Sun Oct 18th
+const START = 32, CHANGES = [41, 44, 45, 49, 52, 109];
+const hm = (m) => `${13 + Math.floor(m / 60)}:${String(Math.floor(m % 60)).padStart(2, "0")}`;
+const MOCKS = [
+  {k: "sidebar-rich-g", who: "cc-d", at: 41},
+  {k: "projects-f", who: "cc-c", at: 26}, {k: "project-f", who: "cc-c", at: 26}, {k: "projects-e", who: "cc-c", at: 21},
+  {k: "project-d", who: "cc-c", at: 14}, {k: "projects-d", who: "cc-c", at: 14}, {k: "project-c", who: "cc-c", at: 3},
+];
+const S = [
+  ["cc-a", "", "", "blog: multi media + project dir", "ai/cc/web"], ["cc-c", "", "", "cc: projects index + project page mocks", "ai/cc/web"],
+  ["cc-d", "", "", "cc: rich sidebar items mocks", "ai/cc/web"], ["arcade-switch-b", "yel", "", "hard queue: Mario Kart", "marx:web/arcade", true],
+  ["arcade-lbp-g", "", "", "hard queue: LBP quality", "marx:web/arcade"], ["iron-i", "", "+3", "hard queue: iron refactor", "marx:web/iron"],
+  ["voices-d", "", "+1", "voices: warren-buffett", "ai/voices"], ["voices-e", "", "", "voices: yanis-varoufakis", "ai/voices"], ["voices-f", "", "", "voices: slavoj-zizek", "ai/voices"],
+];
+let t, playing, hidden, snooze, opened, open, undo, cur, timer;
+function reset() { t = START; playing = false; hidden = new Set(); snooze = {}; opened = new Set(); open = new Set(); undo = null; cur = "nadya"; }
+
+function uber() {
+  if (t >= 109) return null;
+  const sub = t < 11 ? "Order placed, Damas is confirming" : t < 15 ? "Damas confirmed" : t < 29 ? "Damas is preparing your order" : t < 44 ? "Courier on the way, 2 blocks out" : t < 49 ? "Courier is around the corner" : "Delivered at the door";
+  return {id: "uber", title: "Uber Eats", l: "Damas", r: t < 49 ? "13:48" : "13:49", sub, bar: t < 49 ? Math.min(0.97, (t - 9) / 39) : 1, done: t >= 49};
+}
+function rows() {
+  const temp = [];
+  const u = uber(); if (u) temp.push(u);
+  if (t >= 52) temp.push({id: "desk", title: "front desk", l: "1", r: "13:52", sub: "A parcel is waiting downstairs", unread: true});
+  temp.push({id: "remind", title: "Katrina's todo list", r: "18:00", sub: "Send it on WhatsApp before you fly Monday"});
+  const ms = MOCKS.filter((m) => t >= m.at && !opened.has(m.k));
+  if (ms.length) {
+    const who = [...new Set(ms.map((m) => m.who))].join(", "), all = open.has("mocks");
+    temp.push({id: "mocks", title: "new mocks", l: who, r: hm(Math.max(...ms.map((m) => m.at))), unread: true,
+      sub: `${ms.length} not opened yet`,
+      list: (all ? ms : ms.slice(0, 3)).map((m) => ({k: m.k, a: m.k, b: m.who})), more: ms.length > 3 ? (all ? "fewer" : `${ms.length - 3} more`) : ""});
+  }
+  temp.push({id: "parcels", title: "parcels", l: "3", r: t < 45 ? "5:17" : "13:45", sub: t < 45 ? "Intelcom's tracking fails since 5:17" : "FedEx arrived in Memphis",
+    list: [{k: "fedex", a: "FedEx, Ecualama order", b: t < 45 ? "Quito" : "Memphis"}, {k: "intelcom", a: "Intelcom, ROUNY vacuum", b: "tracking error", e: true}, {k: "amazon", a: "Amazon, charger and cable", b: "Wed"}]});
+  for (const x of temp) x.temp = true;
+  return [
+    {id: "nadya", d: "green", title: "nadya", r: "13:31", sub: "cc-d's sidebar mocks are up, waiting on you", unread: true},
+    {id: "blog", title: "blog", l: "2 new", r: "13:33", sub: "Blog posts now show all their pictures and their project's folder"},
+    {id: "projects", title: "projects", sub: "18:00 Send Katrina her todo list"},
+    {sec: "updates"},
+    ...temp.filter((x) => !hidden.has(x.id) && !(snooze[x.id] > t)),
+    {sec: "sessions"},
+    ...S.map(([id, d, l, sub, r, unread]) => ({id, d, l, sub, r, title: id, path: true, unread})),
+  ];
+}
+function row(it, phone) {
+  if (it.sec) return `<div class="sec" data-id="sec:${it.sec}">${it.sec}</div>`;
+  const below = it.bar !== undefined ? `<span class="bar"><i style="width:${(it.bar * 100).toFixed(1)}%"></i></span>`
+    : it.list ? `<ul>${it.list.map((x) => `<li class="${x.e ? "e" : ""}" data-k="${x.k}" data-v="${esc(x.b)}"><span>${esc(x.a)}</span><span>${esc(x.b)}</span></li>`).join("")}${it.more ? `<li class="more"><span>${esc(it.more)}</span></li>` : ""}</ul>` : "";
+  const r = `<div class="fr ${it.temp ? "temp" : ""} ${it.unread ? "unread" : ""} ${it.done ? "done" : ""}" data-id="${it.id}" aria-current="${!phone && cur === it.id}"><span class="d ${it.d ?? ""}"></span><span class="tx"><div class="t1"><b>${esc(it.title)}</b>${it.l ? `<span class="l">${esc(it.l)}</span>` : ""}<span class="r ${it.path ? "path" : ""}">‎${esc(it.r ?? "")}‎</span></div><small data-v="${esc(it.sub)}">${esc(it.sub) || "&nbsp;"}</small>${below}</span>${it.temp ? `<button class="x" data-x="${it.id}" title="hide">×</button>` : ""}</div>`;
+  return false ? `<div class="sw" data-id="${it.id}">${r.replace(` data-id="${it.id}"`, ` data-row="${it.id}"`)}</div>` : r;
+}
+const undoRow = (phone) => undo ? `<div class="undo" data-id="undo:${undo.id}">${esc(undo.title)} hidden<button data-undo>undo</button></div>` : "";
+
+// redraw one list; rows that stay slide to their new place, new ones come in from the left, gone ones leave
+// to the right (desktop ×) or keep going left (a phone swipe already moved them)
+let dragging = null;
+const lit = new Map();
+function drawList(left, phone, how) {
+  if (phone && dragging) return;
+  const was = new Map(), lr = left.getBoundingClientRect(), old = new Map();
+  for (const e of left.querySelectorAll(":scope > [data-id]")) { const r = e.getBoundingClientRect(); was.set(e.dataset.id, {e, y: r.top - lr.top + left.scrollTop}); }
+  for (const e of left.querySelectorAll("[data-v]")) old.set(`${e.closest("[data-id]").dataset.id}/${e.dataset.k ?? "sub"}`, e.dataset.v);
+  // the undo line sits where the row was
+  const list = rows().filter((x, i, a) => !(x.sec === "updates" && a[i + 1]?.sec)), parts = list.map((it) => row(it, phone));
+  if (false) { const at = list.findIndex((x) => x.id === undo.after); parts.splice(at >= 0 ? at + 1 : 3, 0, undoRow(phone)); }
+  const html = parts.join("");
+  for (const c of [...left.children]) if (!c.classList.contains("gone")) c.remove();
+  left.insertAdjacentHTML("afterbegin", html);
+  for (const e of left.querySelectorAll("[data-v]")) {
+    const k = `${e.closest("[data-id]").dataset.id}/${e.dataset.k ?? "sub"}`;
+    const rowWas = old.has(`${k.split("/")[0]}/sub`);  // a new line in a row that was there lights too
+    if (rowWas && old.get(k) !== e.dataset.v) lit.set(k, performance.now());
+    const ago = performance.now() - (lit.get(k) ?? -1e9);
+    if (ago < 1600) { e.classList.add("ch"); e.style.animationDelay = `${-ago}ms`; }  // the redraws while playing keep it going
+  }
+  if (!was.size || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const now = new Map();
+  for (const e of left.querySelectorAll(":scope > [data-id]")) now.set(e.dataset.id, {e, y: e.getBoundingClientRect().top - lr.top + left.scrollTop});
+  for (const [k, n] of now) {
+    const o = was.get(k);
+    if (o) { if (o.y !== n.y) n.e.animate([{transform: `translateY(${o.y - n.y}px)`}, {transform: "none"}], {duration: 200, easing: "cubic-bezier(0.23, 1, 0.32, 1)"}); continue; }
+    n.e.animate([{transform: "translateX(-24px)", opacity: 0}, {transform: "none", opacity: 1}], {duration: 220, easing: "cubic-bezier(0.23, 1, 0.32, 1)"});
+  }
+  for (const [k, o] of was) {
+    if (now.has(k) || how?.swiped === k) continue;
+    const g = o.e; g.classList.add("gone"); g.style.top = `${o.y}px`; if (!phone) g.style.margin = "1px 6px"; left.append(g);
+    g.animate([{transform: "none", opacity: 1}, {transform: "translateX(60%)", opacity: 0}], {duration: 180, easing: "ease-out", fill: "forwards"}).onfinish = () => g.remove();
+  }
+}
+function draw(how) {
+  $("#clk").textContent = hm(t); $("#pclk").textContent = hm(t).replace(/^13/, "1").replace(/^14/, "2");
+  drawList($("#dl"), false, how); drawList($("#pl"), true, how);
+  $("#play").textContent = playing ? "pause" : "play";
+}
+
+// what a click opens
+function page(id, k) {
+  if (id === "mocks" && k) return {title: `${k}.html`, html: `<iframe src="${k}.html" title="${k}"></iframe>`};
+  if (id === "mocks") return {title: "new mocks", html: `<div class="pg"><h2>new mocks</h2><div class="meta">not opened yet</div><ul class="scan">${MOCKS.filter((m) => t >= m.at && !opened.has(m.k)).map((m) => `<li><time>${hm(m.at)}</time><span><a href="#" data-open="${m.k}">${m.k}.html</a> · ${m.who}</span></li>`).join("")}</ul></div>`};
+  if (id === "parcels" || id === "desk") return {title: id === "desk" ? "front desk" : "parcels", html: `<iframe src="../../tracker/" title="tracker"></iframe>`};
+  if (id === "uber") {
+    const st = [[9, "order placed"], [11, "Damas confirmed"], [15, "preparing"], [29, "courier picked it up"], [49, "delivered at the door"]];
+    return {title: "Uber Eats · Damas", html: `<div class="pg"><h2>Uber Eats · Damas</h2><div class="meta">ordered 13:09 · 2 items · ${t < 49 ? "arrives about 13:48" : "delivered 13:49"}</div><ul class="scan">${st.map(([m, s]) => `<li class="${m > t ? "fut" : ""}"><time>${m > t ? "" : hm(m)}</time>${s}</li>`).join("")}</ul><div class="btns"><button>open the tracker</button></div></div>`};
+  }
+  if (id === "remind") return {title: "Katrina's todo list", html: `<div class="pg"><h2>Send Katrina her todo list</h2><div class="meta">today 18:00 · yours · from reminders.md</div><p>Send Katrina a WhatsApp message with her todo list (todo/katrina.md). The wa.me link has the message ready.</p><div class="btns"><button class="p">open WhatsApp</button><button data-act="done">done</button><button data-act="1h">in 1 h</button><button data-act="tomorrow">tomorrow</button></div></div>`};
+  if (id === "blog") return {title: "blog", html: `<iframe src="../../blog/" title="blog"></iframe>`};
+  return {title: id, html: `<div class="pg"><p class="hint">${esc(id)}: as cc opens it today</p></div>`};
+}
+let shown = null;
+function show(id, k, phone) {
+  if (id === "mocks" && k) opened.add(k);
+  const p = page(id, k); shown = {id, k};
+  if (phone) { $("#pvt").textContent = p.title; $("#pvb").innerHTML = p.html; $("#pv").hidden = false; }
+  else { cur = id; $("#title").textContent = p.title; $("#center").innerHTML = p.html; }
+  draw();
+}
+$("#back").onclick = () => { $("#pv").hidden = true; };
+
+function hide(id, how = {}) {
+  const it = rows().find((x) => x.id === id), ids = rows().map((x) => x.id);
+  hidden.add(id);
+  draw(how);
+}
+document.addEventListener("click", (e) => {
+  const tg = e.target;
+  if (tg.closest("[data-undo]")) { hidden.delete(undo.id); undo = null; draw(); return; }
+  if (tg.closest("[data-x]")) { e.stopPropagation(); hide(tg.closest("[data-x]").dataset.x); return; }
+  if (tg.closest("[data-more]")) { const id = tg.closest("[data-more]").dataset.more; open.has(id) ? open.delete(id) : open.add(id); draw(); return; }
+  const act = tg.closest("[data-act]")?.dataset.act;
+  if (act) {
+    if (act === "done") hidden.add("remind"); else snooze.remind = t + (act === "1h" ? 60 : 24 * 60);
+    $("#center").innerHTML = `<div class="pg"><p class="hint">${act === "done" ? "Marked done in reminders.md." : `Back on the list ${act === "1h" ? `at ${hm(t + 60)}` : "tomorrow"}.`}</p></div>`;
+    $("#pv").hidden = true; draw(); return;
+  }
+  const o = tg.closest("[data-open]"); if (o) { e.preventDefault(); show("mocks", o.dataset.open, !!tg.closest("#pv")); return; }
+  const li = tg.closest("li[data-k]"), r = tg.closest(".fr");
+  if (!r || r.closest(".gone")) return;
+  const id = r.dataset.id ?? r.dataset.row, phone = !!r.closest("#pl");
+  show(id, null, phone);
+});
+
+
+function step() { t = Math.min(120, t + 0.25); draw(); if (t >= 120) toggle(false); }
+function toggle(on = !playing) { playing = on; clearInterval(timer); if (on) timer = setInterval(step, 250); draw(); }
+$("#play").onclick = () => toggle();
+$("#next").onclick = () => { const n = CHANGES.find((c) => c > t + 0.01); if (n !== undefined) { t = n; draw(); } };
+$("#reset").onclick = () => { toggle(false); reset(); $("#center").innerHTML = `<div class="pg"><p class="hint">nadya's chat</p></div>`; $("#title").textContent = "nadya"; $("#pv").hidden = true; draw(); };
+reset(); draw();
+</script>
+</body>
+</html>
