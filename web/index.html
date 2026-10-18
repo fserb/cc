@@ -485,7 +485,7 @@ function waitsOnYou(r) { return hasDialog(r) || (r.state === "wait" && !!r.quest
 function dueTodos(withSent) { const soon = Date.now() + 3600e3; return [...S.reminders, ...S.todo].filter((t) => t.due && t.due.getTime() <= soon && (withSent || !sent.has("todo:" + t.full))); }
 // the pace is cchost's (api/usage): x over the last 5 min, xl over the last 15 min (user, Oct 17th: the graph shows the longer trend), both
 // from every host's weighted tokens at the tokens per % the log measured (paceTokens, user, Oct 14th); from an older
-// cchost the log's 1h and 3h. out is the log's 1h one's
+// cchost the log's 1h and 3h. out is the shown x's (the 5 min one's with tokens; it was the log's 1h, user Oct 17th: "are we looking at different time scales here?")
 // the short pace against the long one, as shown (one decimal): ↑ faster lately, ↓ slower, nothing when equal or no long
 // the arrow is drawn: the font's ↑ is a thin hairline taller than the digits
 function trend(p) {
@@ -499,7 +499,7 @@ function paces(p) { return `${p.x.toFixed(1)}x (${p.w[0]})${p.xl == null ? "" : 
 function pace() {
   const p = S.usage?.pace; if (p?.ratio == null) return null;
   const t = S.usage.paceTokens, out = p.out ? new Date(p.out) : null;
-  if (t?.short?.ratio != null) return {x: t.short.ratio, xl: t.long?.ratio ?? null, w: ["5m", "15m"], out};
+  if (t?.short?.ratio != null) return {x: t.short.ratio, xl: t.long?.ratio ?? null, w: ["5m", "15m"], out: t.short.out ? new Date(t.short.out) : null};
   return {x: p.ratio, xl: S.usage.paceLong?.ratio ?? null, w: ["1h", "3h"], out};
 }
 // the header's graph: usage, weighted tokens per 5 min over the last 2h, every host (api/burn/series), scaled to
