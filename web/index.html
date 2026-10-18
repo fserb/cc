@@ -743,7 +743,7 @@ function updates() {
     const err = (x) => /^error/.test(x.status ?? "");
     up.push({id: "packages", title: "parcels", tags: ps.length ? `<span class="tag">${ps.length}</span>` : "", r: pk ? ago(Date.parse(ps[0]?.last ?? pk.updated) / 1000) : "",
       sub: "",  // the lines say it (user, Oct 18th: the subline repeated them); the front desk is a line of its own
-      list: [...desk ? [["front desk", `${desk} waiting`]] : [], ...ps.slice(0, desk ? 1 : 2).map((x) => [`${carrier(x)}, ${shortLabel(x)}`, err(x) ? "tracking error" : x.eta ? weekday(x.eta) : x.status ?? "", err(x)])], more: ps.length > (desk ? 1 : 2) ? `${ps.length - (desk ? 1 : 2)} more` : ""});
+      list: [...desk ? [["front desk", `${desk} waiting`]] : [], ...[...ps].sort((a, b) => (Date.parse(a.eta) || Infinity) - (Date.parse(b.eta) || Infinity)).slice(0, desk ? 2 : 3).map((x) => [`${carrier(x)}, ${shortLabel(x)}`, err(x) ? "tracking error" : x.eta ? weekday(x.eta) : x.status ?? "", err(x)])], more: ""});  // the 3 arriving soonest, no "N more": the count is beside the title (user)
   }
   for (const u of up) { u.sec = "updates"; u.ver = `${u.sub}|${u.r}`; }
   for (const k of Object.keys(upHidden)) if (!up.some((u) => u.id === k)) delete upHidden[k];
