@@ -51,6 +51,7 @@ code, .mono { font: 0.8rem var(--mono); color: var(--muted); }
 #mocknav { position: fixed; right: 12px; bottom: 12px; z-index: 50; background: #212529; color: #ddd; font-size: 0.78rem; border-radius: 10px; padding: 0.45rem 0.7rem; display: flex; gap: 0.7rem; align-items: center; box-shadow: 0 6px 20px #0003; }
 #mocknav a { color: #fff; } #mocknav a.on { color: #ffd43b; font-weight: 700; } #mocknav span { color: #888; }
 #note { max-width: 46rem; margin: 0 auto; padding: 0.8rem 2rem 0; } #note p { margin: 0; font-size: 0.82rem; color: #8a5a00; background: #fffaf0; border: 1px dashed var(--yel); border-radius: 8px; padding: 0.5rem 0.8rem; } article.wide + #note, #note.wide { max-width: 64rem; }
+#aboutbox { position: fixed; right: 12px; bottom: 56px; z-index: 50; width: 380px; background: #212529; color: #ddd; font-size: 0.8rem; line-height: 1.45; border-radius: 10px; padding: 0.7rem 0.9rem; box-shadow: 0 6px 20px #0003; } #aboutbox p { margin: 0 0 0.4rem; } #aboutbox p:last-child { margin: 0; }
 
 .cols { display: grid; grid-template-columns: minmax(0, 1fr) 20rem; gap: 2.2rem; align-items: start; }
 aside { position: sticky; top: 0; font-size: 0.88rem; } aside .rows li { font-size: 0.85rem; padding: 0.35rem 0; } aside .h:first-child { margin-top: 0.4rem; }
@@ -110,6 +111,12 @@ function sidebar(cur) {
 function shell(variant, page, title) {
   document.body.insertAdjacentHTML("afterbegin", `<header><div id="tools"><i></i><i></i><i></i><i></i></div><b>${title}</b><div class="sum"><span class="bar"><i></i></span><b>63%</b> 1.3x</div></header>`);
   document.getElementById("left").innerHTML = sidebar("projects");
+  if (variant === "f") {
+    // round 3: the note about the mock sits behind "about", off the page
+    document.body.insertAdjacentHTML("beforeend", `<nav id="mocknav"><span>round 3</span><a class="${page === "index" ? "on" : ""}" href="projects-f.html">index</a><a class="${page === "arcade" ? "on" : ""}" href="project-f.html?p=arcade">arcade</a><a class="${page === "tracker" ? "on" : ""}" href="project-f.html?p=tracker">tracker</a><span>|</span><a href="#" id="about">about this mock</a><span>|</span><a href="projects-d.html">round 2</a><a href="projects-a.html">1</a></nav><div id="aboutbox" hidden></div>`);
+    document.getElementById("about").onclick = (e) => { e.preventDefault(); const b = document.getElementById("aboutbox"); b.innerHTML = window.NOTE ?? ""; b.hidden = !b.hidden; };
+    return;
+  }
   if (variant === "d" || variant === "e") {
     // round 2: two indexes, one project page
     if (page === "index") sessionStorage.ix = variant;
