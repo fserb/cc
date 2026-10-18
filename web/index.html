@@ -39,6 +39,8 @@
   #pop .pl li b { font-weight: 600; } #pop .pl li code { font: 0.72rem var(--mono); color: var(--muted); margin-left: 0.5rem; }
   #pop .pl li small { grid-column: 1; color: var(--muted); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #pop .pl li time { grid-column: 2; grid-row: 1; font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+  #pop form.task { display: flex; align-items: center; gap: 0.5rem; grid-column: 1 / -1; } #pop form.task input { flex: 1; min-width: 0; font: inherit; font-size: 0.9rem; border: 1px solid var(--accent); border-radius: 6px; padding: 0.3rem 0.6rem; outline: 0; }
+  #pop form.task .go { all: unset; cursor: pointer; background: var(--accent); color: var(--on-accent); border-radius: 6px; padding: 0 0.9rem; } #pop li.ask { cursor: default; } #pop li.ask:hover { background: none; }
   #pop .pl li.busy { opacity: 0.6; pointer-events: none; } #pop .pl li .err { grid-column: 1 / -1; }
   #pop .meta { margin: 0.3rem 1rem; }
   #pop .pbtn { display: flex; justify-content: flex-end; padding: 0.6rem 1rem 0; }
@@ -1105,16 +1107,17 @@ async function spawn(dir, name, focus, more = {}) {
 }
 
 // ---------- the tools: buttons over the list (desktop: in the header; phone: on top of the list), each a pop-up
-// (user, Oct 18th; web/mocks/more.html): new session, files, restore session at the far end
+// (user, Oct 18th; web/mocks/more.html): new session, tasks, files, restore session at the far end
 const TOOLS = {
   new: ["new session", `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M10 4v12M4 10h12"/></svg>`],
+  tasks: ["tasks", `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M6 4.2v11.6L15.5 10z"/></svg>`],
   files: ["files", `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2.5 5.5a1 1 0 0 1 1-1h4l1.6 1.8h7.4a1 1 0 0 1 1 1v8.2a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1z"/></svg>`],
   restore: ["restore session", `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10a6.5 6.5 0 1 0 1.9-4.6M3.5 3.5v3h3"/><path d="M10 6.5V10l2.5 1.5"/></svg>`],
 };
-let popKind = null, popAt = null;
+let popKind = null, popAt = null, taskAsk = null;
 function toolButtons(spread) {
   const b = (k) => `<button type="button" class="tool" data-tool="${k}" aria-pressed="${popKind === k}" aria-label="${TOOLS[k][0]}" title="${TOOLS[k][0]}">${TOOLS[k][1]}</button>`;
-  return `${b("new")}${b("files")}${spread ? `<span class="sp"></span>` : ""}${b("restore")}`;
+  return `${b("new")}${b("tasks")}${b("files")}${spread ? `<span class="sp"></span>` : ""}${b("restore")}`;
 }
 $("#tools").innerHTML = toolButtons(true);
 const ago2 = (ms) => ago(ms / 1000);
@@ -1127,6 +1130,16 @@ function popBody() {
       <div class="chips">${dirs.map((d) => `<button type="button" data-dir="${esc(d)}">${esc(d)}</button>`).join("")}</div>
       <input name="goal" placeholder="goal: a few words on what it is for" autocomplete="off">
       <div class="row">${narrow() ? "" : `<label class="check"><input type="checkbox" name="focus"> focus in kitty</label>`}<button class="go">start</button></div><p class="err" id="addmsg" hidden></p></form>`;
+  }
+  if (popKind === "tasks") {
+    // the tasks sent last first, then the file's order; a click sends it, one with a <...> asks for that first
+    const ts = S.tasks, sent = JSON.parse(localStorage.cc_tasks ?? "{}");
+    const order = ts ? ts.map((t, k) => k).sort((a, b) => (sent[ts[b].name] ?? 0) - (sent[ts[a].name] ?? 0) || a - b).slice(0, 7) : [];
+    const ask = (t) => t.msg.match(/<([^>]*)>/)?.[1];
+    return `<h4>tasks</h4>${!ts ? `<p class="meta">loading…</p>` : !ts.length ? `<p class="meta">no tasks in tasks.md</p>` : `<ul class="pl">${order.map((k) => { const t = ts[k]; return taskAsk === k
+      ? `<li class="ask"><form class="task" data-task-form="${k}"><span>${esc(t.name)}</span><input name="v" placeholder="${esc(ask(t))}" autocomplete="off" autocapitalize="off"><button class="go">send</button></form>${t.err ? `<p class="err">${esc(t.err)}</p>` : ""}</li>`
+      : `<li data-task="${k}" title="${esc(t.msg)}"><span>${esc(t.name)}${ask(t) ? "…" : ""}</span><time>${t.sent ? "sent ✓" : sent[t.name] ? ago2(sent[t.name]) : ""}</time>${t.err ? `<p class="err">${esc(t.err)}</p>` : ""}</li>`; }).join("")}</ul>`}
+      <div class="pbtn"><button type="button" data-go="files/tasks.md">${TOOLS.tasks[1]}all tasks</button></div>`;
   }
   if (popKind === "files") {
     const fs = S.recent;
@@ -1154,14 +1167,40 @@ function openPop(kind, btn) {
   if (kind === "new") { if (!narrow()) $("#addf").q.focus(); if (!S.closed) loadClosed(); }
   if (kind === "files") json("api/recent").then((x) => { S.recent = x; if (popKind === "files") { $("#pop").hidden = true; drawPop(); } }).catch(() => {});
   if (kind === "restore") loadClosed();
+  if (kind === "tasks") loadTasks();
 }
+// ~/nadya/tasks.md: `- <name>: <what is said to nadya>` (user, Oct 18th: a task is always something we tell nadya)
+async function loadTasks() {
+  const r = await fetch(`${NADYA}tasks.md`, {cache: "no-cache"}).catch(() => null);
+  const text = r?.ok ? await r.text() : "";
+  S.tasks = [...text.matchAll(/^- ([^:\n]+):[ \t]*(.+)$/gm)].map(([, name, msg]) => ({name: name.trim(), msg: msg.trim()}));
+  if (popKind === "tasks") { $("#pop").hidden = true; drawPop(); }
+}
+async function runTask(k, value) {
+  const t = S.tasks[k];
+  t.err = "";
+  try {
+    await toNadya(`[cc task] ${value == null ? t.msg : t.msg.replace(/<[^>]*>/, value)}`);
+    localStorage.cc_tasks = JSON.stringify({...JSON.parse(localStorage.cc_tasks ?? "{}"), [t.name]: Date.now()});
+    t.sent = true; taskAsk = null;
+    setTimeout(() => { t.sent = false; if (popKind === "tasks") closePop(); }, 900);
+  } catch (err) { t.err = err.message; }
+  if (popKind === "tasks") { $("#pop").hidden = true; drawPop(); }
+}
+document.addEventListener("submit", (e) => {
+  const f = e.target.closest("#pop form.task"); if (!f) return;
+  e.preventDefault();
+  const v = f.v.value.trim(); if (!v) return;
+  f.querySelector(".go").disabled = true;
+  runTask(+f.dataset.taskForm, v);
+});
 async function loadClosed() {
   const x = await json(`${CCX}/closed?all=1`).catch(() => null);
   if (!x) return;
   S.closed = x.closed;
   if (popKind === "restore") { $("#pop").hidden = true; drawPop(); }
 }
-function closePop() { popKind = null; drawPop(); }
+function closePop() { popKind = null; taskAsk = null; drawPop(); }
 const closeAdd = closePop;
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && popKind && !e.target.closest?.("#addf")) closePop(); });
 addEventListener("resize", () => { if (popKind && !narrow()) closePop(); });
@@ -1499,6 +1538,8 @@ document.addEventListener("click", async (e) => {
   if (e.target.closest("#shade")) { closePop(); return; }
   if (popKind && (!e.target.closest("#pop") || e.target.closest("#pop [data-go]"))) closePop();
   const rs = e.target.closest("#pop [data-restore]"); if (rs) { restore(S.closed[+rs.dataset.restore]); return; }
+  const tk = e.target.closest("#pop [data-task]");
+  if (tk) { const k = +tk.dataset.task; if (/<[^>]*>/.test(S.tasks[k].msg)) { taskAsk = k; $("#pop").hidden = true; drawPop(); $("#pop form.task input").focus(); } else runTask(k); return; }
   const chip = e.target.closest("#addf [data-dir]"); if (chip) { const q = $("#addf").q; q.value = `${chip.dataset.dir}/`.replace(/\/\/$/, "/"); q.focus(); addHints(); return; }
   const pic = e.target.closest(".m img.att");
   if (pic) { $("#pic").firstChild.src = pic.src; $("#pic").showModal(); return; }
