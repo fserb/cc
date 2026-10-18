@@ -135,19 +135,20 @@ export async function measured(u, now = Date.now()) {
   }
   const oldest = Math.ceil((now - CALIB_SPANS.at(-1)) / 3600_000) * 3600_000;
   const {rows, down} = await allRows(oldest, now, localRows);
-  let c = calibrate(u, rows, now);
+  let c = calibrate(u, rows, now), keep = !down.length;
   const drop = lastDrop(u, now), M = 60_000;
   if ((!c || c.to < now) && drop && now - drop.at < FINE) {
     // still measuring from before the drop: by the minute since it, if that has CALIB_MIN%
     const s = await allSeries(Math.ceil((now - drop.at) / M) + 1, M, now);
-    if (!s.down.length) {
+    if (s.down.length) keep = false;
+    else {
       const fine = calibrate(u, s.w.map((w, i) => ({h: s.from + i * M, w})), now, M);
       if (fine?.to === now) c = fine;
     }
   }
   const m = {at: now, resetsAt: u.resetsAt, used: u.used, perPct: c?.perPct ?? PER_PCT,
     calib: c && {from: c.from, to: c.to, added: c.added, w: c.w}};
-  if (!down.length) lastMeasure = m;
+  if (keep) lastMeasure = m;
   return m;
 }
 
