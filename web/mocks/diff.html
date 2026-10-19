@@ -1,0 +1,1065 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc mock: review a session's change (diff page)</title>
+<style>
+  :root {
+    --bg: #fff; --text: #212529; --muted: #6c757d; --line: #e9ecef; --track: #f7f8f9; --hover: #f3f4f6;
+    --accent: #0b7bd3; --on-accent: #fff; --red: #d63939; --green: #2f9e44; --yel: #f59f00; --gray: #ced4da;
+    --cur: #e7f1fb; --press: #e9ecef; --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --bubble: #f3f4f6;
+    --add: #e9f7ee; --add-no: #d3f0dd; --del: #fdecec; --del-no: #f9d7d7; --hunk: #f1f6fc;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #fafafa; color: var(--text); font: 15px/1.5 var(--font); }
+  code { font: 0.85em var(--mono); }
+  a { color: var(--accent); }
+
+  /* ---------- the write-up page ---------- */
+  .doc { max-width: 1340px; margin: 0 auto; padding: 1.4rem 1.2rem 4rem; }
+  .doc > header h1 { font-size: 1.3rem; margin: 0 0 0.3rem; }
+  .doc p, .doc li { max-width: 62rem; }
+  .lead { color: var(--muted); margin: 0 0 0.6rem; }
+  .doc h2 { font-size: 1.05rem; margin: 2.4rem 0 0.4rem; }
+  .doc h3 { font-size: 0.95rem; margin: 1.4rem 0 0.3rem; }
+  .doc .note { color: var(--muted); font-size: 0.88rem; margin: 0.3rem 0 0.8rem; }
+  .wide { overflow-x: auto; padding-bottom: 0.4rem; }
+  .frame { display: block; border: 1px solid #d6dadf; border-radius: 10px; background: var(--bg); box-shadow: 0 1px 3px rgb(0 0 0 / 0.05); }
+  .desk { width: 1280px; height: 760px; }
+  /* on a phone the desktop frames are drawn at a third of their size; tap "open the page alone" for the real thing */
+  @media (max-width: 760px) { .desk { zoom: 0.33; } }
+  .phones { display: flex; gap: 1.4rem; flex-wrap: wrap; align-items: flex-start; }
+  .phones figure { margin: 0; width: min(448px, 100%); }
+  .phones .frame { width: 100%; height: 900px; border-radius: 22px; }
+  figcaption { font-size: 0.85rem; color: var(--muted); margin-top: 0.4rem; }
+  figcaption b { color: var(--text); }
+  pre.msg { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 0.8rem 1rem; font: 0.8rem/1.5 var(--mono); white-space: pre-wrap; max-width: 62rem; }
+  /* entry points, drawn in cc's look */
+  .entries { display: flex; flex-wrap: wrap; gap: 1.4rem; align-items: flex-start; }
+  .entries figure { margin: 0; width: 400px; max-width: 100%; }
+  .card { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; font-size: 0.9rem; }
+  .card .hd { height: 44px; display: flex; align-items: center; gap: 0.6rem; padding: 0 1rem; border-bottom: 1px solid var(--line); }
+  .card .strip { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.8rem; padding: 0.45rem 1rem; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 0.82rem; }
+  .card .chg { display: inline-flex; gap: 0.4rem; align-items: center; color: var(--text); text-decoration: none; border: 1px solid var(--line); border-radius: 7px; padding: 0.1rem 0.55rem; }
+  .card .chg:hover { background: var(--hover); }
+  .plus { color: var(--green); } .minus { color: var(--red); }
+  .card .b { background: var(--bubble); border-radius: 14px; padding: 0.5rem 0.75rem; margin: 0.7rem 1rem; }
+  .card .sq { margin: 0.7rem 1rem; border-right: 3px solid #0ca678; padding-right: 0.7rem; color: var(--muted); font-size: 0.86rem; }
+  .card .sq small { display: block; text-align: right; color: #0ca678; }
+  .card .row { display: grid; grid-template-columns: 1fr auto; padding: 0.5rem 1rem; text-decoration: none; color: inherit; }
+  .card .row:hover { background: var(--hover); }
+  .card .row small { grid-column: 1 / -1; color: var(--muted); }
+  .card .row time { color: var(--muted); font-size: 0.8rem; }
+  .card .sec { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0.6rem 1rem 0.1rem; }
+  table.alt { border-collapse: collapse; font-size: 0.88rem; max-width: 62rem; }
+  table.alt th, table.alt td { text-align: left; vertical-align: top; padding: 0.45rem 0.8rem 0.45rem 0; border-top: 1px solid var(--line); }
+  table.alt th { font-weight: 600; width: 15rem; }
+
+  /* ---------- the app (?app), cc's look ---------- */
+  body.app { background: var(--bg); height: 100dvh; overflow: hidden; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
+  .app > header { display: flex; align-items: center; gap: 0.8rem; height: 48px; padding: 0 1rem 0 0.6rem; border-bottom: 1px solid var(--line); min-width: 0; }
+  .app > header .back { display: inline-flex; align-items: center; gap: 0.2rem; color: var(--muted); text-decoration: none; padding: 0.3rem 0.5rem; border-radius: 8px; white-space: nowrap; }
+  .app > header .back:hover { background: var(--hover); color: var(--text); }
+  .app > header .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .app > header .t b { font-weight: 600; } .app > header .t code { color: var(--muted); margin-right: 0.4rem; }
+  .app > header .sp { flex: 1; }
+  .seg { display: inline-flex; background: var(--track); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
+  .seg button { all: unset; cursor: pointer; font-size: 0.8rem; padding: 0.15rem 0.65rem; border-radius: 6px; color: var(--muted); white-space: nowrap; transition: background-color 120ms, transform 120ms var(--ease-out); }
+  .seg button[aria-pressed=true] { background: var(--bg); color: var(--text); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+  .seg button:active { transform: scale(0.96); } .seg button:disabled { opacity: 0.4; cursor: default; }
+  .btn { all: unset; cursor: pointer; font-size: 0.85rem; padding: 0.3rem 0.8rem; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); white-space: nowrap; transition: transform 120ms var(--ease-out), background-color 120ms; }
+  .btn:hover { background: var(--hover); } .btn:active { transform: scale(0.96); background: var(--press); }
+  .btn.pri { background: var(--accent); color: var(--on-accent); border-color: var(--accent); } .btn.pri:hover { background: #096ab6; }
+  .btn.dec { color: var(--red); } .btn.small { font-size: 0.78rem; padding: 0.12rem 0.55rem; }
+  .btn .n { display: inline-block; min-width: 1.2rem; margin-left: 0.3rem; padding: 0 0.35rem; border-radius: 9px; background: rgb(255 255 255 / 0.25); text-align: center; font-size: 0.75rem; }
+  .sentbar { display: none; padding: 0.4rem 1rem; font-size: 0.85rem; background: var(--cur); color: #0b5c9e; border-bottom: 1px solid var(--line); }
+  .app.sent .sentbar { display: block; }
+  .main { display: grid; grid-template-columns: 290px minmax(0, 1fr); min-height: 0; grid-row: 3; }
+  .app > header { grid-row: 1; } .sentbar { grid-row: 2; }
+  .app nav.files { border-right: 1px solid var(--line); overflow: auto; padding: 0.6rem 0 1rem; }
+  .files .meta { padding: 0 1rem 0.7rem; font-size: 0.8rem; color: var(--muted); border-bottom: 1px solid var(--line); margin-bottom: 0.4rem; }
+  .files .meta b { color: var(--text); font-weight: 600; }
+  .files ul { list-style: none; margin: 0; padding: 0; }
+  .files li a { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 0 0.5rem; align-items: baseline; margin: 0 6px; padding: 0.35rem 0.6rem; border-radius: 7px; text-decoration: none; color: inherit; }
+  .files li a:hover { background: var(--hover); } .files li a:active { background: var(--press); }
+  .files li a.on { background: var(--cur); }
+  .files .st { font-size: 0.8rem; color: var(--gray); } .files .st.v { color: var(--green); }
+  .files .p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; font-size: 0.88rem; }
+  .files .p span { direction: ltr; unicode-bidi: isolate; }
+  .files .pm { font: 0.72rem var(--mono); white-space: nowrap; }
+  .files .tags { grid-column: 2 / -1; font-size: 0.75rem; color: var(--muted); display: flex; gap: 0.7rem; }
+  .files .tags .d { color: var(--red); } .files .tags .c { color: var(--accent); }
+  .files .key { padding: 0.8rem 1rem 0; font-size: 0.75rem; color: var(--muted); }
+  .scroll { overflow: auto; min-height: 0; padding-bottom: 40vh; scroll-padding-top: 8px; }
+  .filepicker { display: none; }
+
+  section.file { border-bottom: 1px solid var(--line); }
+  .fh { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 0.7rem; padding: 0.45rem 1rem; background: rgb(255 255 255 / 0.92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+  .fh b { font: 600 0.85rem var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .fh .new { font-size: 0.7rem; color: var(--green); border: 1px solid currentColor; border-radius: 5px; padding: 0 0.35rem; }
+  .fh .sp { flex: 1; }
+  .fh label { font-size: 0.8rem; color: var(--muted); display: inline-flex; align-items: center; gap: 0.3rem; cursor: pointer; white-space: nowrap; }
+  table.d { width: 100%; border-collapse: collapse; table-layout: fixed; font: 12.5px/1.6 var(--mono); }
+  table.d col.no { width: 3.6rem; }
+  table.d td { padding: 0; vertical-align: top; }
+  table.d td.c { white-space: pre; padding: 0 0.8rem 0 0.4rem; overflow: hidden; text-overflow: ellipsis; }
+  .split table.d td.c { white-space: pre-wrap; word-break: break-all; }
+  table.d td.c::before { content: attr(data-m); color: var(--muted); display: inline-block; width: 1ch; margin-right: 0.4rem; }
+  table.d td.no button { all: unset; display: block; width: 100%; box-sizing: border-box; text-align: right; padding: 0 0.6rem 0 0; color: #adb5bd; cursor: pointer; user-select: none; position: relative; }
+  table.d td.no button:hover { color: var(--accent); background: var(--cur); }
+  table.d tr:hover td.no button:not(:empty)::before { content: "+"; position: absolute; left: 4px; color: var(--accent); font-weight: 700; }
+  td.add { background: var(--add); } td.no.add { background: var(--add-no); }
+  td.del { background: var(--del); } td.no.del { background: var(--del-no); }
+  td.emp { background: var(--track); }
+  td.sel { box-shadow: inset 0 0 0 9999px rgb(11 123 211 / 0.13); }
+  td.no.sel button { color: var(--accent); }
+  td.cm.no { box-shadow: inset 3px 0 0 var(--accent); }
+  td.dx.c { color: #9aa1a8; text-decoration: line-through; text-decoration-color: rgb(214 57 57 / 0.55); }
+  td.dx.no { box-shadow: inset 3px 0 0 var(--red); }
+  tr.hk td { background: var(--hunk); color: #5c7fa3; font-size: 12px; padding: 0.15rem 0.6rem; }
+  tr.hk .ha { float: right; display: inline-flex; gap: 0.3rem; font-family: var(--font); }
+  tr.hk .ha button { all: unset; cursor: pointer; font-size: 0.75rem; padding: 0 0.45rem; border-radius: 6px; color: var(--muted); }
+  tr.hk .ha button:hover { background: var(--bg); color: var(--text); } tr.hk .ha button.dec:hover { color: var(--red); }
+  tr.it td { padding: 0.35rem 0.8rem 0.5rem; background: var(--bg); }
+  .item { font-family: var(--font); font-size: 0.86rem; line-height: 1.45; max-width: 46rem; border-radius: 10px; padding: 0.5rem 0.75rem; white-space: normal; }
+  .item.c { background: var(--bubble); }
+  .item.x { background: #fff7f7; border-left: 3px solid var(--red); border-radius: 0 10px 10px 0; }
+  .item .h { font-size: 0.75rem; color: var(--muted); display: flex; gap: 0.6rem; align-items: baseline; }
+  .item .h b { color: var(--text); font-weight: 600; } .item.x .h b { color: var(--red); }
+  .item .h .sp { flex: 1; }
+  .item .h button { all: unset; cursor: pointer; color: var(--muted); font-size: 0.75rem; } .item .h button:hover { color: var(--text); }
+  .item p { margin: 0.15rem 0 0; }
+  .item p.does { font-size: 0.78rem; color: var(--muted); }
+  .composer { font-family: var(--font); max-width: 46rem; border: 1px solid var(--accent); border-radius: 10px; padding: 0.5rem; background: var(--bg); box-shadow: 0 6px 20px rgb(0 0 0 / 0.08); }
+  .composer .h { font-size: 0.78rem; color: var(--muted); margin: 0 0.2rem 0.3rem; }
+  .composer .h b { color: var(--text); font-weight: 600; }
+  .composer textarea { width: 100%; min-height: 3.6rem; resize: vertical; border: 0; outline: 0; font: 0.9rem/1.45 var(--font); padding: 0.2rem; }
+  .composer .bs { display: flex; gap: 0.4rem; align-items: center; }
+  .composer .bs .sp { flex: 1; } .composer .hint { font-size: 0.75rem; color: var(--muted); }
+  @starting-style { .composer, .item { opacity: 0; transform: translateY(-3px); } }
+  .composer, .item { transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out); }
+
+  /* the review pop-up (desktop) / sheet (phone) */
+  #review { position: fixed; z-index: 20; right: 12px; top: 54px; width: 420px; max-height: calc(100dvh - 70px); overflow: auto; background: rgb(255 255 255 / 0.9); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); border: 1px solid rgb(0 0 0 / 0.06); border-radius: 12px; box-shadow: 0 12px 32px rgb(0 0 0 / 0.14), 0 1px 2px rgb(0 0 0 / 0.06); padding: 0.8rem 1rem 1rem; transform-origin: top right; }
+  #review { transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out), display 160ms allow-discrete; }
+  #review[hidden] { display: none; opacity: 0; transform: scale(0.96) translateY(-4px); transition-duration: 100ms; }
+  @starting-style { #review:not([hidden]) { opacity: 0; transform: scale(0.96) translateY(-4px); } }
+  #review h4 { margin: 0 0 0.3rem; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 400; }
+  #review .verdict { font-weight: 600; margin: 0 0 0.5rem; }
+  #review ol { margin: 0 0 0.6rem; padding: 0; list-style: none; font-size: 0.85rem; }
+  #review ol li a { display: block; padding: 0.25rem 0.4rem; margin: 0 -0.4rem; border-radius: 6px; color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #review ol li a:hover { background: rgb(0 0 0 / 0.05); }
+  #review ol code { color: var(--muted); } #review ol .k { font-weight: 600; } #review ol .k.x { color: var(--red); } #review ol .k.c { color: var(--accent); }
+  #review textarea { width: 100%; min-height: 4rem; border: 1px solid var(--line); border-radius: 8px; padding: 0.4rem 0.5rem; font: 0.9rem/1.45 var(--font); outline: 0; background: var(--bg); }
+  #review textarea:focus { border-color: var(--accent); }
+  #review details { margin: 0.5rem 0; font-size: 0.82rem; } #review summary { cursor: pointer; color: var(--muted); }
+  #review pre { white-space: pre-wrap; font: 0.74rem/1.45 var(--mono); background: var(--track); border-radius: 8px; padding: 0.5rem 0.6rem; margin: 0.4rem 0 0; }
+  #review .send { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.6rem; }
+  #review .send small { color: var(--muted); font-size: 0.76rem; line-height: 1.35; }
+  #shade { display: none; }
+
+  /* ---------- the app on a phone ---------- */
+  @media (max-width: 760px) {
+    body.app { grid-template-rows: auto auto minmax(0, 1fr) auto; } .main { grid-row: 3; }
+    /* the file bar at the bottom, under the thumb */
+    .app > header { padding: 0 0.6rem 0 0.2rem; gap: 0.4rem; height: 52px; }
+    .app > header .back { min-height: 44px; padding: 0 0.5rem; }
+    .app > header .t code { display: none; }
+    .app > header .seg { display: none; }
+    .app > header .btn { min-height: 36px; display: inline-flex; align-items: center; }
+    .main { grid-template-columns: minmax(0, 1fr); }
+    .app nav.files { display: none; }
+    .filepicker { display: flex; align-items: center; gap: 0.3rem; border-bottom: 1px solid var(--line); padding: 0.2rem 0.4rem calc(0.2rem + env(safe-area-inset-bottom)); grid-row: 4; border-top: 1px solid var(--line); background: var(--bg); }
+    .filepicker a.arrow { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 22px; color: var(--muted); text-decoration: none; font-size: 1.2rem; }
+    .filepicker a.arrow:active { background: var(--press); }
+    .filepicker button { all: unset; flex: 1; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 0.5rem; padding: 0 0.4rem; border-radius: 8px; cursor: pointer; }
+    .filepicker button:active { background: var(--press); }
+    .filepicker .p { font: 600 0.85rem var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+    .filepicker .of { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
+    .fh { padding: 0.35rem 0.7rem; } .fh label { min-height: 36px; }
+    table.d { font-size: 12px; }
+    table.d col.no { width: 2.6rem; } table.d col.no.o { width: 0; }
+    table.d td.no.o button { display: none; }
+    table.d td.c { white-space: pre-wrap; word-break: break-all; padding-right: 0.5rem; }
+    table.d td.no button { min-height: 1.6em; padding-right: 0.4rem; }
+    tr.hk .ha { float: none; display: flex; margin-top: 0.15rem; }
+    tr.hk .ha button { min-height: 32px; display: inline-flex; align-items: center; }
+    tr.it td { padding: 0.3rem 0.5rem 0.5rem; }
+    .composer .bs .btn { min-height: 40px; display: inline-flex; align-items: center; }
+    .composer .hint { display: block; flex-basis: 100%; }
+    .composer .bs { flex-wrap: wrap; }
+    #review, #filesheet { left: 0; right: 0; top: auto; bottom: 0; width: auto; max-height: 82dvh; border-radius: 16px 16px 0 0; background: var(--bg); transform-origin: bottom center; padding-bottom: 1.4rem; }
+    #review[hidden], #filesheet[hidden] { transform: translateY(24px); }
+    @starting-style { #review:not([hidden]), #filesheet:not([hidden]) { opacity: 0; transform: translateY(24px); } }
+    #review .send .btn { min-height: 44px; display: inline-flex; align-items: center; }
+    #shade { display: block; position: fixed; inset: 0; z-index: 19; background: rgb(0 0 0 / 0.25); transition: opacity 160ms, display 160ms allow-discrete; }
+    #shade[hidden] { display: none; opacity: 0; } @starting-style { #shade:not([hidden]) { opacity: 0; } }
+  }
+  #filesheet { position: fixed; z-index: 20; overflow: auto; border: 1px solid var(--line); box-shadow: 0 -8px 30px rgb(0 0 0 / 0.12); padding: 0.6rem 0 1.4rem; transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out), display 160ms allow-discrete; }
+  #filesheet[hidden] { display: none; opacity: 0; }
+  #filesheet li a { min-height: 44px; align-content: center; }
+  /* the phone turned sideways (997 px) is a desktop width: side by side works there */
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<!-- ======================= the write-up ======================= -->
+<main class="doc" id="doc">
+  <header>
+    <h1>A diff page in cc: review a session's change, comment and decline line by line</h1>
+    <p class="lead">Mock for the user's ask (Oct 19th): "design a diff page that shows a change diff (side by side and unified
+      options) that I can review changes, comment / decline line by line". Nothing is implemented in cc or cchost. The frames
+      below are one working page (this file with <code>?app</code>) drawn at desktop width and at the phone's 448 px; click
+      and type in them. The data is a real commit, <code>5773960</code> in nadya:~/ai/cc, "away mode in cchost" (5 files,
+      +261 −2), with a review already started: 2 comments and 2 declines. cc-d, Oct 19th.</p>
+    <p class="note">Open the page alone: <a href="?app">desktop or phone, whatever this window is</a> ·
+      <a href="?app&amp;view=unified">unified</a> · <a href="?app&amp;state=review">with the review open</a> · <a href="#phone">jump to the phone views</a></p>
+  </header>
+
+  <h2>1. Desktop: side by side</h2>
+  <p class="note">Files on the left with their state (○ not viewed, ✓ viewed, then the comments and declines in each); the diff
+    on the right, one section per file, its header stuck to the top while you scroll it. Click a line number to start on a
+    line; shift-click, drag, or click a second number while the box is empty to make it a range. One box for both
+    actions: <b>Comment</b> sends the text as a note, <b>Decline</b> sends it as the reason to undo those lines. A hunk's
+    header has "comment on hunk" and "decline hunk"; the file header has "viewed".</p>
+  <div class="wide"><iframe class="frame desk" src="?app&amp;view=split&amp;state=compose" title="desktop, side by side, a range being commented"></iframe></div>
+
+  <h2>2. Desktop: unified, and sending the review</h2>
+  <p class="note">The switch in the header (<b>Unified / Side by side</b>) is kept per device. <b>Review</b> opens the summary:
+    every comment and decline (each a link to its line), an overall note, the exact text the session gets, and the send
+    button. The verdict follows from what is in it: any decline is "changes requested", only comments is "comments",
+    nothing is "looks good".</p>
+  <div class="wide"><iframe class="frame desk" src="?app&amp;view=unified&amp;state=review" title="desktop, unified, the review pop-up"></iframe></div>
+
+  <h2 id="phone">3. The phone (Pixel 9 Pro XL, 448 px)</h2>
+  <p class="note">Unified only: two columns of code at 448 px are about 25 characters each. Side by side comes back when the phone
+    is turned sideways (997 px is a desktop width). Code wraps instead of scrolling sideways; one line-number column (the
+    new number, the old one on removed lines). The file list is a bar with ‹ › and a sheet. A tap on a line number opens
+    the box under it; a tap on a second number while the box is empty makes the range. All targets are 44 px or more.</p>
+  <div class="phones">
+    <figure><iframe class="frame" src="?app&amp;file=1" title="phone, the diff with a comment and a decline"></iframe>
+      <figcaption><b>Reading.</b> host/cchost: a declined line (struck, red bar, the reason under it).</figcaption></figure>
+    <figure><iframe class="frame" src="?app&amp;state=compose" title="phone, a range being commented"></iframe>
+      <figcaption><b>A range.</b> Lines 29-31 of away.js picked by two taps; the box under the last one.</figcaption></figure>
+    <figure><iframe class="frame" src="?app&amp;state=files" title="phone, the file sheet"></iframe>
+      <figcaption><b>Files.</b> The sheet from the file bar: state, +/−, comments and declines per file.</figcaption></figure>
+    <figure><iframe class="frame" src="?app&amp;state=review" title="phone, the review sheet"></iframe>
+      <figcaption><b>Sending.</b> The review sheet; the message cc-a gets is one tap away.</figcaption></figure>
+    <figure><iframe class="frame" src="?app&amp;state=sent" title="phone, after sending"></iframe>
+      <figcaption><b>Sent.</b> The page keeps the review read-only and says where the answer will show.</figcaption></figure>
+  </div>
+
+  <h2>4. How a change gets to this page</h2>
+  <p class="note">Assumed: cc learns a session's commits from its own transcript (a Bash <code>git commit</code> whose output has
+    <code>[main 5773960]</code>), not from <code>git log</code>, because cc-a, cc-b and cc-c all commit to ~/ai/cc as the user and
+    the author can't tell them apart. The page's address is <code>/cc/#diff/nadya:~/ai/cc@5773960</code> (a range is
+    <code>@a..b</code>, the working tree <code>@work</code>), so every entry point below is a plain link.</p>
+  <div class="entries">
+    <figure><div class="card">
+      <div class="hd"><b>cc-a</b><span style="color:var(--muted);font-size:0.82rem">~/ai/cc</span></div>
+      <div class="strip"><span>● wait</span><span>away mode in cchost</span>
+        <a class="chg" href="?app">5773960 · 5 files <span class="plus">+261</span> <span class="minus">−2</span> · review</a>
+        <a class="chg" href="?app">uncommitted · 1 file</a></div>
+      <div class="b">Committed 5773960: away mode in cchost. <a href="?app">5773960</a> · tests pass (112).</div>
+    </div><figcaption><b>The session page.</b> Its strip gets one link per commit the session made today (newest first, "+2 more"
+      past two), and one for uncommitted changes in its dir. A commit hash in a reply is a link too.</figcaption></figure>
+    <figure><div class="card">
+      <div class="sec">Updates</div>
+      <a class="row" href="?app"><span><b>inbox</b> · 2 new</span><time>07:04</time>
+        <small>review: away mode in cchost · cc-a</small><small>cc phone proposals · cc-a</small></a>
+    </div><figcaption><b>The inbox.</b> A session asks for a review with <code>ccx post review:5773960 "away mode in cchost"</code>
+      (or a new <code>ccx review [rev]</code>); the row opens the diff page, not a file.</figcaption></figure>
+    <figure><div class="card">
+      <div class="hd"><b>cc-a</b><span style="color:var(--muted);font-size:0.82rem">busy</span></div>
+      <div class="sq"><small>cc review</small>[cc review] 5773960, changes requested: 2 declined, 2 comments. <a href="?app&amp;state=sent">open</a></div>
+      <div class="b">Reverted the setInterval and moved the check into the poll; RULES now names pushing. New commit 8c1e2f0 (<a href="?app">diff since your review</a>).</div>
+    </div><figcaption><b>After sending.</b> The review shows in the session as a typed side quote ("cc review", its own colour), and
+      the agent's answer links the new commit, which opens as the diff since the review.</figcaption></figure>
+  </div>
+
+  <h2>5. What "decline" does (assumed)</h2>
+  <p>Declining is a request to the agent, not an edit by the page: cc never changes the repo. When you send, the session gets
+    one message, typed into its prompt as you (the same path as <code>ccx user --as cc</code>, so it shows as a cc side quote and
+    queues behind a running turn). It says, per declined line or hunk: take it out (an added line), put it back (a removed
+    line), and do what the reason says instead; per comment: answer or act on it. The agent does it as a <b>new commit</b>
+    (no amend, no force push), runs the tests, and replies with the hash. The review stays on this page, read-only, with
+    "diff since your review" once that commit exists. With no declines and no comments the button says <b>Looks good</b> and
+    the message is one line.</p>
+  <p class="note">The message for the review in the frames above (it updates live in the review pop-up):</p>
+  <pre class="msg" id="msgdoc"></pre>
+
+  <h2>6. Not picked</h2>
+  <table class="alt">
+    <tr><th>The page reverts declined lines itself</th><td>cchost would <code>git apply -R</code> the hunks. Picked the agent instead:
+      a revert usually breaks something nearby (an import, a test, the docs), the agent knows what, and cc stays out of the
+      repo. Could be a later "revert now" button for a whole file.</td></tr>
+    <tr><th>Approve / Comment / Request changes (GitHub)</th><td>Three buttons for a one-person review. The verdict here follows from
+      the content; one Send button.</td></tr>
+    <tr><th>Votes and patch sets (Gerrit)</th><td>Code-Review −2..+2 per change, every revision kept as a set. Too heavy; only "diff
+      since your review" is kept from it.</td></tr>
+    <tr><th>Each comment sent as you write it</th><td>Interrupts the agent once per line, and a later comment can contradict an
+      earlier one. Batched in one message, like a GitHub review.</td></tr>
+    <tr><th>Suggested edits (GitHub "suggestion" blocks)</th><td>Typing replacement code on a phone is slow; the reason text covers it.
+      Open point below.</td></tr>
+    <tr><th>Swipe a line to decline (phone)</th><td>Hidden, and easy to set off while scrolling a diff. A tap on the number, then a
+      button, is two taps and visible.</td></tr>
+    <tr><th>Side by side on the phone</th><td>~25 characters a side at 448 px. Unified with wrapping; sideways works.</td></tr>
+    <tr><th>Send through SendMessage</th><td>A peer message reaches the session only at its next turn boundary, and many were never
+      delivered (CLAUDE.md, "Messaging another instance"). Typing is what <code>ccx user</code> already does reliably.</td></tr>
+    <tr><th>Open plannotator's review UI instead</th><td>It runs a local server per review and opens a browser on that machine; not
+      reachable from the phone, and not tied to the session that made the change.</td></tr>
+  </table>
+
+  <h2>7. Open points</h2>
+  <ol>
+    <li><b>Which commits are a session's.</b> Assumed: from its transcript's <code>git commit</code> output. Commits by hand, or by a
+      helper the session started, would not show on its page (the inbox still works).</li>
+    <li><b>Where a draft review is kept.</b> Started on the phone, finished on the desktop needs it on the server (web/api, like the
+      inbox file), not in localStorage. Proposed: web/api, one file per diff address.</li>
+    <li><b>Uncommitted changes move while you read them.</b> The page would read the working tree once and keep that copy; if it
+      changed by the time you send, say so and show the lines that moved.</li>
+    <li><b>The session is gone.</b> Send to a closed session: restore it first (restore already exists), or send the review to nadya,
+      who starts a helper. Proposed: restore.</li>
+    <li><b>Long lines.</b> cc's index.html has lines over 300 characters; on desktop unified they are cut with … (click to wrap?) and
+      in side by side they wrap. Not settled.</li>
+    <li><b>Images and binary files</b> (mocks/*.jpg): show old and new pictures side by side, or only name them.</li>
+    <li><b>Syntax colours.</b> Left out to keep it calm; would need a small highlighter (no dependency) per language.</li>
+    <li><b>Suggested replacement code</b> in a comment, applied by the agent as written.</li>
+    <li><b>Big diffs.</b> Over ~2000 lines: fold files and generated ones until opened, like GitHub's "load diff".</li>
+    <li><b>Where it lives in cc.</b> Assumed a page in the main pane with no sidebar row; a "reviews" list (pending ones across
+      sessions) could go in UPDATES if reviews become frequent.</li>
+  </ol>
+</main>
+
+<!-- ======================= the app (?app) ======================= -->
+<template id="apptpl">
+  <header>
+    <a class="back" href="/cc/#nadya.cc-a" title="back to cc-a">‹ cc-a</a>
+    <span class="t"><code>5773960</code><b>away mode in cchost</b></span>
+    <span class="sp"></span>
+    <span class="seg" role="group" aria-label="view"><button data-view="unified">Unified</button><button data-view="split">Side by side</button></span>
+    <button class="btn pri" id="revbtn">Review<span class="n" id="revn"></span></button>
+  </header>
+  <div class="sentbar">Review sent to cc-a at 07:12, changes requested. cc-a is busy on it; its reply and new commit will show here
+    as "diff since your review".</div>
+  <div class="main">
+    <nav class="files" aria-label="files">
+      <div class="meta"><b>cc-a</b> · nadya:~/ai/cc · commit 5773960 · today 07:03<br>5 files <span class="plus">+261</span> <span class="minus">−2</span></div>
+      <ul id="filelist"></ul>
+      <p class="key">○ not viewed · ✓ viewed</p>
+    </nav>
+    <div class="scroll" id="scroll"></div>
+  </div>
+  <div id="shade" hidden></div>
+  <aside id="review" hidden aria-label="review"></aside>
+  <aside id="filesheet" class="files" hidden aria-label="files"><div class="meta"><b>cc-a</b> · commit 5773960 · 5 files <span class="plus">+261</span> <span class="minus">−2</span></div><ul id="filelist2"></ul></aside>
+</template>
+
+<script type="text/plain" id="patch">diff --git a/host/away.js b/host/away.js
+new file mode 100644
+index 0000000..097e67e
+--- /dev/null
++++ b/host/away.js
+@@ -0,0 +1,171 @@
++// Away mode (user, 2026-10-19: "auto answer questions ... when I'm offline, so work doesn't
++// get stuck on me"). While it is on, a session's question box (the AskUserQuestion dialog,
++// never a permission, trust, plan or any other dialog) that has waited DELAY with nothing in
++// cc's box for it is answered with ANSWER, and the answer is written down for cc to list.
++//
++// - the question tool is told apart by its `Chat about this` option, which no other dialog
++//   has (fixtures/dialog), and its review page by `Review your answers` over `Submit answers`
++// - a single-select question with a free-text field gets ANSWER typed there: the agent picks
++//   its recommended option, says which and why, and goes on (tried on 2.1.303, 2026-10-19)
++// - a multi-select or a preview layout has no field that takes a sentence and an Enter, so
++//   it gets `Chat about this` and then AFTER_CHAT typed as a prompt once the session is idle.
++//   `Chat about this` alone ("talk about it") left the agent asking in text what to clarify,
++//   still waiting on the user (same test), which is why it is never the whole answer
++// - several questions are tabs: each is answered as it comes up, then the review is submitted,
++//   one step per check; once one step is taken, the next does not wait DELAY again
++// - each host answers its own sessions; the setting and the log are per host, in
++//   `~/.claude/ccx-away.json` and `~/.claude/ccx-away.jsonl` (KEEP days)
++
++import {HOME} from "./sh.js";
++import {parseDialog, pendingAsk, pick, screen, withAsk} from "./dialog.js";
++import {typeInto} from "./jump.js";
++import {logPath, readFrom, sizeOf} from "./transcript.js";
++
++export const DELAY = 5 * 60_000;
++const STEP = 90_000;            // a later tab or the review, this soon after the last step
++const TYPE_BY = 120_000;        // a prompt left after `Chat about this` is dropped this late
++const KEEP = 14 * 86400_000;
++
++const RULES = "Pick the option you'd recommend, note the pick and why in your reply, and continue. " +
++  "If the choice can't be undone (spending, sending, deleting, changing other repos), don't pick: " +
++  "stop and leave the question for the user.";
++export const ANSWER = `The user is away (auto-answer). ${RULES}`;
++export const AFTER_CHAT = (q) =>
++  `[auto-answer] Your question${q ? ` ("${q}")` : ""} went unanswered: the user is away. ${RULES}`;
++
++// What to do with a dialog: {how: "free"|"chat"|"submit", i}, or null when it is not the
++// question tool's
++export function plan(dialog) {
++  if (!dialog) return null;
++  const at = (label) => dialog.options.findIndex((o) => o.label === label);
++  if (/^Review your answers/.test(dialog.title) && at("Submit answers") >= 0) return {how: "submit", i: at("Submit answers")};
++  const chat = at("Chat about this");
++  if (chat < 0) return null;
++  const multi = dialog.options.some((o) => o.checked !== null);
++  const free = dialog.options.findIndex((o) => o.free);
++  if (!multi && free >= 0 && dialog.options[free].n !== null) return {how: "free", i: free};
++  return {how: "chat", i: chat};
++}
++
++export class Away {
++  constructor({file = `${HOME}/.claude/ccx-away.json`, log = `${HOME}/.claude/ccx-away.jsonl`,
++    delay = DELAY} = {}) {
++    Object.assign(this, {file, log, delay});
++    this.on = false;
++    this.since = 0;
++    try {
++      ({on: this.on = false, since: this.since = 0} = JSON.parse(Deno.readTextFileSync(file)));
++    } catch {
++      // off
++    }
++    this.list = [];             // {at, pid, name, cwd, sessionId, question, options, how, text, end}
++    try {
++      for (const line of Deno.readTextFileSync(log).split("\n")) {
++        try {
++          if (line) this.list.push(JSON.parse(line));
++        } catch {
++          // a torn line
++        }
++      }
++    } catch {
++      // none yet
++    }
++    this.list = this.list.filter((a) => a.at > Date.now() - KEEP);
++    this.steps = new Map();     // pid -> ms of the last step taken
++    this.typing = new Map();    // pid -> {text, at}: a prompt to type once the chat closed the box
++    this.busy = false;
++  }
++
++  set(on) {
++    if (Boolean(on) === this.on) return this.state();
++    this.on = Boolean(on);
++    this.since = Date.now();
++    Deno.writeTextFileSync(this.file, JSON.stringify({on: this.on, since: this.since}));
++    return this.state();
++  }
++
++  state() {
++    return {on: this.on, since: this.since, delay: this.delay};
++  }
++
++  // the answers of the last KEEP days, newest first, each with the agent's first reply after it
++  answered() {
++    return this.list.map((a) => ({...a, reply: a.reply ?? replyAfter(a)})).reverse();
++  }
++
++  // one look at every session; `draftOf(pid)` is the text in cc's box for it
++  async check(instances, draftOf = () => "") {
++    if (this.busy) return;
++    this.busy = true;
++    try {
++      const now = Date.now();
++      for (const inst of instances) {
++        if (!inst.pane) continue;
++        const t = this.typing.get(inst.pid);
++        if (t && now - t.at > TYPE_BY) this.typing.delete(inst.pid);
++        else if (t && (inst.state === "wait" || inst.state === "free") && !inst.asking) {
++          this.typing.delete(inst.pid);
++          const err = await typeInto(inst, t.text);
++          if (err) console.error(`away: ${inst.name || inst.pid}: ${err}`);
++          continue;
++        }
++        if (!this.on || inst.state !== "wait" || !inst.asking || draftOf(inst.pid)) continue;
++        const stepped = now - (this.steps.get(inst.pid) ?? 0) < STEP;
++        if (!stepped && now - inst.since * 1000 < this.delay) continue;
++        await this.answer(inst, now);
++      }
++    } finally {
++      this.busy = false;
++    }
++  }
++
++  async answer(inst, now) {
++    const text = await screen(inst.pane);
++    if (text === null) return;
++    const dialog = parseDialog(text);
++    const p = plan(dialog);
++    if (!p) return;
++    const log = inst.sessionId ? logPath(inst.cwd, inst.sessionId) : "";
++    const asked = withAsk(dialog, pendingAsk(inst.sessionId, log))?.ask;
++    const labels = dialog.options.map((o) => o.label);
++    const question = asked?.question || dialog.title || dialog.body.split("\n")[0] || "";
++    const end = log ? sizeOf(log) : -1;
++    const err = await pick(inst, p.i, labels, p.how === "free" ? ANSWER : undefined);
++    this.steps.set(inst.pid, now);
++    if (err) {
++      console.error(`away: ${inst.name || inst.pid}: ${err}`);
++      return;
++    }
++    if (p.how === "chat") this.typing.set(inst.pid, {text: AFTER_CHAT(question), at: now});
++    if (p.how === "submit") return;
++    const options = asked ? asked.options.map((o) => o.label)
++      : dialog.options.filter((o) => !o.free && o.label !== "Chat about this" && o.n !== null).map((o) => o.label);
++    const a = {at: now, pid: inst.pid, name: inst.name ?? "", cwd: inst.cwd ?? "", sessionId: inst.sessionId ?? "",
++      question, options, how: p.how, text: p.how === "free" ? ANSWER : AFTER_CHAT(question), end};
++    this.list.push(a);
++    console.log(`away: answered ${inst.name || inst.pid} (${p.how}): ${question}`);
++    try {
++      Deno.writeTextFileSync(this.log, `${JSON.stringify(a)}\n`, {append: true});
++    } catch (e) {
++      console.error(`away: ${e.message}`);
++    }
++  }
++}
++
++// The agent's first text after the answer, read from where the log ended when it was sent,
++// up to the user's next own prompt. After an `[auto-answer]` prompt (a `Chat about this` in
++// this or a later tab declines the whole box), the first text after it. Kept once found
++function replyAfter(a) {
++  if (!a.sessionId || a.end < 0) return "";
++  let {events} = readFrom(logPath(a.cwd, a.sessionId), a.end);
++  const auto = (e) => e.type === "user" && e.text?.startsWith("[auto-answer]");
++  const next = events.findIndex((e) => e.type === "user" && !auto(e));
++  if (next >= 0) events = events.slice(0, next);
++  const typed = events.findLastIndex(auto);
++  if (a.how === "chat" && typed < 0) return "";
++  const t = events.slice(typed + 1).find((e) => e.type === "text" && e.text?.trim());
++  if (!t) return "";
++  // still mid-turn: the text may be one of several, so it is read again next time
++  if (events.at(-1) !== t || typed >= 0 || next >= 0) a.reply = t.text;
++  return t.text;
++}
+diff --git a/host/away_test.js b/host/away_test.js
+new file mode 100644
+index 0000000..b017021
+--- /dev/null
++++ b/host/away_test.js
+@@ -0,0 +1,37 @@
++// `deno test -A --ext js away_test.js`: which dialogs away mode answers, and how, on the
++// captures in fixtures/dialog.
++
++import {Away, plan} from "./away.js";
++import {parseDialog} from "./dialog.js";
++
++function eq(got, want, what) {
++  const g = JSON.stringify(got), w = JSON.stringify(want);
++  if (g !== w) throw new Error(`${what}: got ${g}, want ${w}`);
++}
++
++const dialog = (name) =>
++  parseDialog(Deno.readTextFileSync(new URL(`fixtures/dialog/${name}.txt`, import.meta.url)));
++
++Deno.test("plan: only the question tool, free text where it takes a sentence", () => {
++  for (const name of ["bash", "bash-code", "write", "write-narrow", "trust", "plan", "exit-background"]) {
++    eq(plan(dialog(name)), null, name);
++  }
++  eq(plan(dialog("question")), {how: "free", i: 3}, "question");
++  eq(plan(dialog("question-multi")), {how: "chat", i: 5}, "question-multi");
++  eq(plan(dialog("question-tabs")), {how: "chat", i: 3}, "question-tabs (preview)");
++  eq(plan(dialog("question-submit")), {how: "submit", i: 0}, "question-submit");
++  eq(plan(dialog("question-tabs-review")), {how: "submit", i: 0}, "question-tabs-review");
++  eq(plan(null), null, "no dialog");
++});
++
++Deno.test("Away: the setting and the log survive a restart", () => {
++  const dir = Deno.makeTempDirSync();
++  const opts = {file: `${dir}/away.json`, log: `${dir}/away.jsonl`};
++  const a = new Away(opts);
++  eq(a.state().on, false, "off by default");
++  a.set(true);
++  Deno.writeTextFileSync(opts.log, `${JSON.stringify({at: Date.now(), pid: 1, question: "q?", how: "free", sessionId: "", end: -1})}\n`);
++  const b = new Away(opts);
++  eq(b.state().on, true, "on after a restart");
++  eq(b.answered().map((x) => [x.question, x.reply]), [["q?", ""]], "the log");
++});
+diff --git a/host/cchost b/host/cchost
+index dcb0e01..c11bbaf 100755
+--- a/host/cchost
++++ b/host/cchost
+@@ -19,6 +19,7 @@ import {HOME} from "./sh.js";
+ import {sendPeer} from "./peer.js";
+ import {settle} from "./burn.js";
+ import {Changes} from "./changes.js";
++import {Away} from "./away.js";
+ 
+ function usage() {
+   console.error("usage: cchost [serve] [--port N]");
+@@ -94,13 +95,16 @@ async function serve(args) {
+   clearStandIns(remote.SELF);
+   const relay = new Relay(remote.SELF, async (host, body) =>
+     (await remote.call(host, "/api/relay", body))[1]);
++  const away = new Away();
+   const r = runServer({source: () => ({instances, net}), port, hostname: "0.0.0.0", relay,
+-    subs, goals, typed: new Typed(), changes});
++    subs, goals, typed: new Typed(), changes, away});
+   if (r.error) {
+     console.error(`cchost: ${r.error}`);
+     Deno.exit(1);
+   }
+   server = r.server;
++  // away mode: a question box left DELAY is answered (away.js); a look every 10s
++  setInterval(() => away.check(instances, (pid) => server.draft(pid)).catch((e) => console.error(`away: ${e.message}`)), 10_000);
+   // each other host's list stream feeds the relay's stand-ins and the merged list
+   // (api/list?all=1) both
+   const stops = remote.others().map((h) => remote.follow(h, (rows, body, why) => {
+diff --git a/host/server.js b/host/server.js
+index 3cffe43..5c2307d 100644
+--- a/host/server.js
++++ b/host/server.js
+@@ -259,6 +259,7 @@ export class Server {
+     this.subs = subs;                     // a Subs, under `cchost`
+     this.goals = null;                    // a Goals, under `cchost`
+     this.typed = null;                    // a Typed, under `cchost`
++    this.away = null;                     // an Away, under `cchost`
+     this.drafts = new Map();              // pid -> {text, at}: cc's chat box for it, api/s/<pid>/draft
+     this.lists = new Set();               // api/events clients
+     this.allLists = new Set();            // api/events?all=1 clients
+@@ -724,6 +725,29 @@ export class Server {
+     return {closed: got.flat().sort((a, b) => b.at - a.at)};
+   }
+ 
++  // api/away: away mode (away.js), this host's or with `all` every host's: {hosts: [{host,
++  // on, since, delay} or {host, down}], answered: [...each with `host`, newest first]}. A
++  // POST {on} sets it, on every host that answers with `all`
++  async awayRoute(req, all) {
++    const here = () => this.away ? {...this.away.state(), answered: this.away.answered()}
++      : {error: "no away mode here; it runs under cchost"};
++    let on;
++    if (req.method === "POST") {
++      on = (await req.json().catch(() => ({}))).on;
++      if (typeof on !== "boolean") return json({error: "on is true or false"}, 400);
++      if (!this.away) return json(here(), 409);
++      this.away.set(on);
++    }
++    if (!all) return json(here(), this.away ? 200 : 409);
++    const got = await Promise.all(this.allHosts().map(async (h) => {
++      if (h === this.self) return [h, here()];
++      const [body, err] = await call(h, "/api/away", on === undefined ? undefined : {on});
++      return [h, body ?? {error: err}];
++    }));
++    return json({hosts: got.map(([host, b]) => b.error ? {host, down: b.error} : {host, on: b.on, since: b.since, delay: b.delay}),
++      answered: got.flatMap(([host, b]) => (b.answered ?? []).map((a) => ({...a, host}))).sort((a, b) => b.at - a.at)});
++  }
++
+   // api/spawn: on the host its `after` pane (`host/<pane>`) or its dir (`host:dir`) names,
+   // with its pid and pane tagged as the list's; with neither, here as before
+   async spawnRoute(req) {
+@@ -864,6 +888,7 @@ export class Server {
+     if (get && path === "/api/dirs") {
+       return json(await this.dirs(url.searchParams.get("prefix") ?? "", all));
+     }
++    if ((get || post) && path === "/api/away") return await this.awayRoute(req, all);
+     if (get && path === "/api/closed") return json(await this.closed(all));
+     if (post && path === "/api/spawn") return await this.spawnRoute(req);
+     if (post && path === "/api/focus") return await this.focusRoute(req);
+@@ -986,10 +1011,11 @@ export class Server {
+ // Start serving. {server, stop} or {error}: a port already taken is reported, not thrown,
+ // so a caller can say why.
+ export function runServer({source, port = PORT, hostname = "127.0.0.1", relay = null,
+-  subs = null, goals = null, typed = null, changes = null}) {
++  subs = null, goals = null, typed = null, changes = null, away = null}) {
+   const s = new Server(source, port, relay, subs);
+   s.goals = goals;
+   s.typed = typed;
++  s.away = away;
+   if (changes) s.useChanges(changes);
+   let http;
+   try {
+diff --git a/host/server.md b/host/server.md
+index c12272f..7b644c3 100644
+--- a/host/server.md
++++ b/host/server.md
+@@ -149,6 +149,10 @@ All JSON, all under `api/`.
+                                    dir field, and whether prefix itself is one. Here and
+                                    in spawn a dir not starting with ~ or / is under ~
+                                    (`ai/c` is `~/ai/c`; 2026-10-13, user)
++    GET  api/away[?all=1]          away mode (away.js): {on, since, delay, answered}; with
++                                   all, {hosts: [{host, on, since, delay} | {host, down}],
++                                   answered: [... each with host], newest first}
++    POST api/away[?all=1] {on}     turn it on or off, here or on every host that answers
+ 
+ ### Rows
+ 
+@@ -267,6 +271,23 @@ findings are at the top of `dialog.js`; the ones that changed the design:
+ - `pick` re-captures and refuses with "the dialog changed" unless the labels are the ones
+   the client drew. Live: a stale list was refused, then `No` declined a Bash command
+ 
++## Away mode (away.js, 2026-10-19)
++
++User: "auto answer questions ... when I'm offline, so work doesn't get stuck on me". Off by
++default; while on, each cchost answers its own sessions' question boxes (AskUserQuestion
++only, told apart by `Chat about this`) after 5 minutes on one with nothing in cc's box for
++it. A single-select gets a typed answer in its free-text field: "The user is away
++(auto-answer). Pick the option you'd recommend, note the pick and why in your reply, and
++continue. If the choice can't be undone (...), don't pick: stop and leave the question for
++the user." A multi-select or a preview layout gets `Chat about this`, then the same words as
++an `[auto-answer]` prompt once idle; several tabs go one by one, then `Submit answers`.
++
++Tried on 2.1.303, 2026-10-19, on a throwaway session: `Chat about this` alone ("talk about
++it") left the agent asking "What would you like to clarify?", still waiting; the typed answer
++got a pick with its reason, and the work went on. Each answer goes to
++`~/.claude/ccx-away.jsonl` (14 days) with the question, its options, how, the text, and the
++log's size then, from which `answered` reads the agent's reply.
++
+ ## Taking a queued message back (queue.js, 2026-10-12)
+ 
+ Measured on 2.1.296 on a scratch session kept busy by a foreground sleep:</script>
+
+<script type="module">
+const PARAMS = new URLSearchParams(location.search);
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
+
+// one diff -> [{path, isNew, add, del, hunks: [{head, ctx}], lines: [{t, o, n, s, h}]}]
+function parse(text) {
+  const files = [];
+  let f = null, o = 0, n = 0;
+  for (const raw of text.split("\n")) {
+    const m = raw.match(/^diff --git a\/(\S+) b\/(\S+)/);
+    if (m) { f = {path: m[2], isNew: false, add: 0, del: 0, hunks: [], lines: []}; files.push(f); continue; }
+    if (!f) continue;
+    if (raw.startsWith("new file")) { f.isNew = true; continue; }
+    const h = raw.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@ ?(.*)/);
+    if (h) { o = +h[1]; n = +h[2]; f.hunks.push({head: raw.replace(/ @@.*/, " @@"), ctx: h[3]}); continue; }
+    if (!f.hunks.length || /^(---|\+\+\+|index |\\)/.test(raw)) continue;
+    const t = raw[0] ?? " ", s = raw.slice(1), hk = f.hunks.length - 1;
+    if (t === "+") { f.lines.push({t, o: null, n: n++, s, h: hk}); f.add++; }
+    else if (t === "-") { f.lines.push({t, o: o++, n: null, s, h: hk}); f.del++; }
+    else if (t === " ") f.lines.push({t, o: o++, n: n++, s, h: hk});
+  }
+  return files;
+}
+
+const FILES = parse(document.getElementById("patch").textContent);
+
+// a line's place in its file: by new number, else old
+const lineAt = (fi, n, old = false) => FILES[fi].lines.findIndex((l) => (old ? l.o : l.n) === n);
+const fileIdx = (p) => FILES.findIndex((f) => f.path === p);
+const labelOf = (fi, a, b) => {
+  const L = FILES[fi].lines, nums = L.slice(a, b + 1).map((l) => l.n).filter((x) => x !== null);
+  const olds = L.slice(a, b + 1).map((l) => l.o).filter((x) => x !== null);
+  const r = nums.length ? nums : olds, pre = nums.length ? "" : "old ";
+  if (!r.length) return "";
+  return r[0] === r.at(-1) ? `${pre}${r[0]}` : `${pre}${r[0]}-${r.at(-1)}`;
+};
+const span = (fi, a, b) => `${FILES[fi].path}:${labelOf(fi, a, b)}`;
+
+// the review already started in the mock
+const st = {
+  view: PARAMS.get("view") ?? "split",
+  viewed: new Set([fileIdx("host/cchost"), fileIdx("host/away_test.js")]),
+  items: [],   // {kind: "c"|"x", fi, a, b, text, scope}
+  sel: null,   // {fi, a, b}
+  draft: "",
+  note: "The idea is right. Two things back, then it's good to ship.",
+  sent: PARAMS.get("state") === "sent",
+};
+function seed(kind, path, from, to, text, scope = "lines") {
+  const fi = fileIdx(path), a = lineAt(fi, from), b = lineAt(fi, to);
+  st.items.push({kind, fi, a, b, text, scope});
+}
+seed("c", "host/away.js", 24, 24, "5 minutes is long while I'm on the phone between flights. Make the delay a setting in the moon pop-up (1, 5, 15 min)?");
+seed("x", "host/cchost", 107, 107, "No second timer: call away.check() from the poll that already runs (discover), it has the fresh rows.");
+{
+  const fi = fileIdx("host/server.md"), L = FILES[fi].lines;
+  const hk = L.find((l) => l.n === 274).h;
+  const a = L.findIndex((l) => l.h === hk), b = L.findLastIndex((l) => l.h === hk);
+  st.items.push({kind: "x", fi, a, b, text: "This repeats CLAUDE.md's Away mode section word for word. Keep the route lines above and leave one line here pointing there.", scope: "hunk"});
+}
+seed("c", "host/away.js", 29, 31, "Add pushing to a remote and anything that messages a person to the can't-be-undone list.");
+
+if (!PARAMS.has("app")) {
+  document.getElementById("msgdoc").textContent = message();
+} else {
+  document.body.className = "app";
+  document.getElementById("doc").remove();
+  document.body.append(document.getElementById("apptpl").content.cloneNode(true));
+  if (st.sent) document.body.classList.add("sent");
+  const phone = matchMedia("(max-width: 760px)");
+  if (phone.matches) st.view = "unified";
+  if (PARAMS.get("state") === "compose") {
+    const fi = fileIdx("host/away.js");
+    st.sel = {fi, a: lineAt(fi, 29), b: lineAt(fi, 31)};
+    st.items = st.items.filter((i) => !(i.fi === fi && i.a === st.sel.a && i.kind === "c"));
+    st.draft = "Add pushing to a remote and anything that messages a person to the can't-be-undone list.";
+  }
+  render();
+  const go = PARAMS.get("state") === "compose" ? document.querySelector(".composer")
+    : PARAMS.get("file") ? document.getElementById(`f${PARAMS.get("file")}`) : null;
+  if (go) {
+    const sc = document.getElementById("scroll");
+    sc.scrollTop = go.getBoundingClientRect().top - sc.getBoundingClientRect().top - (go.classList.contains("composer") ? 220 : 0);
+  }
+  if (["review", "sent"].includes(PARAMS.get("state")) && !(st.sent && !phone.matches)) openReview();
+  if (PARAMS.get("state") === "files") openSheet();
+  if (st.sent && phone.matches) closeAll();
+  wire();
+}
+
+function rowsOf(f) {
+  // unified: one row per line; split: removals and additions of one run side by side
+  // a new file has no left side: one column even in side by side
+  if (st.view !== "split" || f.isNew) return f.lines.map((l, i) => ({hk: l.h, L: l.t === "+" ? null : i, R: l.t === "-" ? null : i, u: i}));
+  const rows = [];
+  let i = 0;
+  while (i < f.lines.length) {
+    const l = f.lines[i];
+    if (l.t === " ") { rows.push({hk: l.h, L: i, R: i}); i++; continue; }
+    const dels = [], adds = [];
+    while (i < f.lines.length && f.lines[i].t === "-" && f.lines[i].h === l.h) dels.push(i++);
+    while (i < f.lines.length && f.lines[i].t === "+" && f.lines[i].h === l.h) adds.push(i++);
+    for (let k = 0; k < Math.max(dels.length, adds.length); k++) rows.push({hk: l.h, L: dels[k] ?? null, R: adds[k] ?? null});
+  }
+  return rows;
+}
+
+function cls(fi, i) {
+  const l = FILES[fi].lines[i], c = [];
+  if (l.t === "+") c.push("add"); else if (l.t === "-") c.push("del");
+  if (st.sel?.fi === fi && i >= Math.min(st.sel.a, st.sel.b) && i <= Math.max(st.sel.a, st.sel.b)) c.push("sel");
+  for (const it of st.items) if (it.fi === fi && i >= it.a && i <= it.b) c.push(it.kind === "x" ? "dx" : "cm");
+  return c.join(" ");
+}
+
+function cells(fi, i, side) {
+  if (i === null) return `<td class="no emp"></td><td class="c emp"></td>`;
+  const l = FILES[fi].lines[i], k = cls(fi, i), num = side === "L" ? l.o : l.n;
+  return `<td class="no ${k}"><button data-f="${fi}" data-i="${i}" aria-label="line ${num}">${num ?? ""}</button></td><td class="c ${k}" data-m="${side === "U" ? (l.t === " " ? "" : l.t) : ""}">${esc(l.s)}</td>`;
+}
+
+function itemHtml(it, idx) {
+  const where = it.scope === "hunk" ? `hunk ${labelOf(it.fi, it.a, it.b)}` : it.scope === "file" ? "whole file" : `line ${labelOf(it.fi, it.a, it.b)}`;
+  const L = FILES[it.fi].lines.slice(it.a, it.b + 1);
+  const does = it.kind !== "x" ? "" : L.every((l) => l.t === "+") ? "cc-a takes these lines out and does what the reason says instead."
+    : L.every((l) => l.t === "-") ? "cc-a puts these lines back." : "cc-a undoes this part of the change and does what the reason says instead.";
+  const del = st.sent ? "" : `<button data-edit="${idx}">edit</button><button data-rm="${idx}">${it.kind === "x" ? "undo decline" : "delete"}</button>`;
+  return `<div class="item ${it.kind}" id="it${idx}"><div class="h"><b>${it.kind === "x" ? "Declined" : "You"}</b><span>${where}</span><span class="sp"></span>${del}</div>
+    <p>${esc(it.text || "(no reason given)")}</p>${does ? `<p class="does">${does}</p>` : ""}</div>`;
+}
+
+function composerHtml() {
+  const {fi, a, b} = st.sel, lo = Math.min(a, b), hi = Math.max(a, b);
+  const hint = matchMedia("(max-width: 760px)").matches ? "Tap another line number to make it a range." : "Shift-click or drag line numbers for a range.";
+  return `<div class="composer"><div class="h"><b>${st.sel.scope === "hunk" ? "Hunk" : lo === hi ? "Line" : "Lines"} ${labelOf(fi, lo, hi)}</b> of ${FILES[fi].path}</div>
+    <textarea id="draft" placeholder="A comment, or why it should go">${esc(st.draft)}</textarea>
+    <div class="bs"><button class="btn pri small" data-act="c">Comment</button><button class="btn dec small" data-act="x">Decline</button>
+    <button class="btn small" data-act="cancel">Cancel</button><span class="sp"></span><span class="hint">${hint}</span></div></div>`;
+}
+
+function render() {
+  const split = st.view === "split";
+  document.body.classList.toggle("split", split);
+  for (const b of document.querySelectorAll(".seg button")) b.setAttribute("aria-pressed", b.dataset.view === st.view);
+  const colsU = `<col class="no o"><col class="no"><col>`, colsS = `<col class="no"><col><col class="no"><col>`;
+  let html = "";
+  FILES.forEach((f, fi) => {
+    const rows = rowsOf(f), two = split && !f.isNew;
+    let body = "", lastHk = -1;
+    rows.forEach((r, ri) => {
+      if (r.hk !== lastHk) {
+        lastHk = r.hk;
+        const hk = f.hunks[r.hk];
+        body += `<tr class="hk"><td colspan="${two ? 4 : 3}">${esc(hk.head)} <span>${esc(hk.ctx)}</span>${st.sent ? "" :
+          `<span class="ha"><button data-hc="${fi}.${r.hk}">comment on hunk</button><button class="dec" data-hx="${fi}.${r.hk}">decline hunk</button></span>`}</td></tr>`;
+      }
+      body += `<tr>${two ? cells(fi, r.L, "L") + cells(fi, r.R, "R")
+        : `<td class="no o ${cls(fi, r.u)}"><button>${f.lines[r.u].o ?? ""}</button></td>${cells(fi, r.u, "U").replace(/^<td class="no ([^"]*)"><button([^>]*)>[^<]*</, (m, k, at) => `<td class="no ${k}"><button${at}>${f.lines[r.u].n ?? f.lines[r.u].o}<`)}`}</tr>`;
+      // items and the composer go under the row holding the last line of their range
+      const ids = [r.L, r.R, r.u].filter((x) => x !== null && x !== undefined);
+      const after = (end) => ids.includes(end) && !rows.slice(ri + 1).some((q) => [q.L, q.R, q.u].includes(end));
+      st.items.forEach((it, idx) => { if (it.fi === fi && after(it.b)) body += `<tr class="it"><td colspan="${two ? 4 : 3}">${itemHtml(it, idx)}</td></tr>`; });
+      if (st.sel?.fi === fi && after(Math.max(st.sel.a, st.sel.b))) body += `<tr class="it"><td colspan="${two ? 4 : 3}">${composerHtml()}</td></tr>`;
+    });
+    html += `<section class="file" id="f${fi}"><div class="fh"><b>${esc(f.path)}</b>${f.isNew ? `<span class="new">new</span>` : ""}
+      <span class="pm"><span class="plus">+${f.add}</span> <span class="minus">−${f.del}</span></span><span class="sp"></span>
+      <label><input type="checkbox" data-viewed="${fi}" ${st.viewed.has(fi) ? "checked" : ""}> viewed</label></div>
+      <table class="d">${two ? colsS : colsU}<tbody>${body}</tbody></table></section>`;
+  });
+  const sc = document.getElementById("scroll"), top = sc.scrollTop;
+  sc.innerHTML = `<div class="filepicker"></div>${html}`;
+  sc.scrollTop = top;
+  renderFiles();
+  const n = st.items.length;
+  document.getElementById("revn").textContent = n || "";
+  if (!document.getElementById("review").hidden) openReview();
+  document.getElementById("draft")?.focus({preventScroll: true});
+}
+
+function fileTags(fi) {
+  const c = st.items.filter((i) => i.fi === fi && i.kind === "c").length, x = st.items.filter((i) => i.fi === fi && i.kind === "x").length;
+  return `${c ? `<span class="c">${c} comment${c > 1 ? "s" : ""}</span>` : ""}${x ? `<span class="d">${x} declined</span>` : ""}`;
+}
+
+function renderFiles() {
+  const cur = curFile();
+  const li = FILES.map((f, fi) => `<li><a href="#f${fi}" class="${fi === cur ? "on" : ""}"><span class="st ${st.viewed.has(fi) ? "v" : ""}">${st.viewed.has(fi) ? "✓" : "○"}</span>
+    <span class="p"><span>${esc(f.path)}</span></span><span class="pm"><span class="plus">+${f.add}</span> <span class="minus">−${f.del}</span></span>
+    <span class="tags">${fileTags(fi)}</span></a></li>`).join("");
+  document.getElementById("filelist").innerHTML = li;
+  document.getElementById("filelist2").innerHTML = li;
+  const fp = document.querySelector(".filepicker");
+  fp.remove();
+  const bar = document.querySelector("body > .filepicker") ?? document.createElement("div");
+  bar.className = "filepicker";
+  const f = FILES[cur];
+  bar.innerHTML = `<a class="arrow" href="#f${Math.max(cur - 1, 0)}" aria-label="previous file">‹</a>
+    <button id="pickfile"><span class="p">${esc(f.path)}</span><span class="of">${cur + 1} of ${FILES.length} ▾</span></button>
+    <a class="arrow" href="#f${Math.min(cur + 1, FILES.length - 1)}" aria-label="next file">›</a>`;
+  if (!bar.parentNode) document.querySelector(".main").before(bar);
+}
+
+function curFile() {
+  const sc = document.getElementById("scroll");
+  if (!sc) return 0;
+  const y = sc.getBoundingClientRect().top + 60;
+  let cur = 0;
+  document.querySelectorAll("section.file").forEach((s, i) => { if (s.getBoundingClientRect().top <= y) cur = i; });
+  return cur;
+}
+
+function verdict() {
+  const x = st.items.filter((i) => i.kind === "x").length, c = st.items.length - x;
+  return {x, c, word: x ? "changes requested" : c ? "comments" : "looks good"};
+}
+
+function message() {
+  const {x, c, word} = verdict();
+  if (!x && !c && !st.note) return `[cc review] 5773960 (away mode in cchost): looks good.`;
+  const lines = [`[cc review] 5773960 (away mode in cchost), ${word}: ${x} declined, ${c} comment${c === 1 ? "" : "s"}.`];
+  if (st.note) lines.push("", st.note);
+  const sorted = (k) => st.items.filter((i) => i.kind === k).sort((p, q) => p.fi - q.fi || p.a - q.a);
+  if (x) {
+    lines.push("", "Declined: undo each (take added lines out, put removed lines back) and do what the reason says instead:");
+    for (const it of sorted("x")) {
+      const L = FILES[it.fi].lines.slice(it.a, it.b + 1);
+      lines.push(`- ${span(it.fi, it.a, it.b)}${it.scope === "hunk" ? " (whole hunk)" : ""}${L.length === 1 ? ` \`${L[0].s.trim().slice(0, 50)}${L[0].s.trim().length > 50 ? "…" : ""}\`` : ""}: ${it.text || "no reason given"}`);
+    }
+  }
+  if (c) {
+    lines.push("", "Comments: answer or act on each:");
+    for (const it of sorted("c")) lines.push(`- ${span(it.fi, it.a, it.b)}: ${it.text}`);
+  }
+  lines.push("", "Do it as a new commit (no amend), run ./task test, and reply with the new hash.");
+  return lines.join("\n");
+}
+
+function openReview() {
+  const {x, c, word} = verdict();
+  const r = document.getElementById("review");
+  const list = st.items.map((it, idx) => ({it, idx})).sort((p, q) => p.it.fi - q.it.fi || p.it.a - q.it.a)
+    .map(({it, idx}) => `<li><a href="#it${idx}"><span class="k ${it.kind}">${it.kind === "x" ? "declined" : "comment"}</span> <code>${esc(span(it.fi, it.a, it.b))}</code> ${esc(it.text)}</a></li>`).join("");
+  r.innerHTML = st.sent ? `<h4>Review of 5773960</h4><p class="verdict">Sent to cc-a at 07:12, ${word}</p><ol>${list}</ol>
+      <p style="font-size:0.85rem;color:var(--muted)">cc-a is busy on it. Its reply and new commit show here and on its page.</p><pre>${esc(message())}</pre>`
+    : `<h4>Review of 5773960 · to cc-a</h4><p class="verdict">${word[0].toUpperCase() + word.slice(1)}: ${x} declined, ${c} comment${c === 1 ? "" : "s"}</p>
+    <ol>${list}</ol>
+    <textarea id="note" placeholder="Overall note (optional)">${esc(st.note)}</textarea>
+    <div class="send"><button class="btn pri" id="send">${x || c ? "Send to cc-a" : "Looks good"}</button>
+    <small>Typed into cc-a's prompt as you, from cc (like <code>ccx user --as cc</code>). cc-a is idle, so it starts now.</small></div>
+    <details ${PARAMS.get("state") === "review" ? "open" : ""}><summary>What cc-a gets</summary><pre id="msgpre">${esc(message())}</pre></details>`;
+  r.hidden = false;
+  document.getElementById("shade").hidden = false;
+}
+
+function openSheet() {
+  document.getElementById("filesheet").hidden = false;
+  document.getElementById("shade").hidden = false;
+}
+
+function closeAll() {
+  document.getElementById("review").hidden = true;
+  document.getElementById("filesheet").hidden = true;
+  document.getElementById("shade").hidden = true;
+}
+
+function select(fi, i, extend) {
+  if (st.sent) return;
+  if (st.sel && st.sel.fi === fi && (extend || !document.getElementById("draft")?.value)) {
+    if (i !== st.sel.a) { st.sel.b = i; st.sel.scope = "lines"; st.draft = document.getElementById("draft")?.value ?? ""; render(); return; }
+  }
+  st.sel = {fi, a: i, b: i, scope: "lines"};
+  st.draft = "";
+  render();
+}
+
+function wire() {
+  let drag = null;
+  document.addEventListener("pointerdown", (e) => {
+    const b = e.target.closest("td.no button[data-i]");
+    if (!b || e.pointerType === "touch" || e.button !== 0) return;
+    drag = {fi: +b.dataset.f, moved: false};
+  });
+  document.addEventListener("pointerover", (e) => {
+    const b = e.target.closest("td.no button[data-i]");
+    if (!drag || !b || +b.dataset.f !== drag.fi) return;
+    if (!drag.moved) { drag.moved = true; st.sel = {fi: drag.fi, a: +b.dataset.i, b: +b.dataset.i, scope: "lines"}; }
+    else st.sel.b = +b.dataset.i;
+    render();
+  });
+  document.addEventListener("pointerup", () => { if (drag?.moved) drag.skip = true; setTimeout(() => (drag = null)); });
+  document.addEventListener("input", (e) => {
+    if (e.target.id === "note") { st.note = e.target.value; document.getElementById("msgpre").textContent = message(); }
+    if (e.target.id === "draft") st.draft = e.target.value;
+  });
+  document.addEventListener("change", (e) => {
+    const v = e.target.dataset.viewed;
+    if (v === undefined) return;
+    e.target.checked ? st.viewed.add(+v) : st.viewed.delete(+v);
+    renderFiles();
+  });
+  document.getElementById("scroll").addEventListener("scroll", () => renderFiles(), {passive: true});
+  document.addEventListener("click", (e) => {
+    const t = e.target;
+    // links: only a plain click is ours; a modified one is the browser's
+    const a = t.closest("a[href^='#']");
+    if (a) {
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      const el = document.getElementById(a.getAttribute("href").slice(1));
+      closeAll();
+      const sc = document.getElementById("scroll");
+      if (el) sc.scrollTop += el.getBoundingClientRect().top - sc.getBoundingClientRect().top - (el.classList.contains("item") ? 120 : 0);
+      return;
+    }
+    if (t.closest("#shade")) return closeAll();
+    if (t.closest("#revbtn")) return document.getElementById("review").hidden ? openReview() : closeAll();
+    if (t.closest("#pickfile")) return openSheet();
+    if (t.closest("#send")) { st.sent = true; document.body.classList.add("sent"); st.sel = null; closeAll(); render(); return; }
+    const vb = t.closest(".seg button");
+    if (vb) { st.view = vb.dataset.view; render(); return; }
+    const nb = t.closest("td.no button[data-i]");
+    if (nb) { if (drag?.skip) return; select(+nb.dataset.f, +nb.dataset.i, e.shiftKey); return; }
+    const hk = t.closest("[data-hc],[data-hx]");
+    if (hk) {
+      const [fi, h] = (hk.dataset.hc ?? hk.dataset.hx).split(".").map(Number), L = FILES[fi].lines;
+      st.sel = {fi, a: L.findIndex((l) => l.h === h), b: L.findLastIndex((l) => l.h === h), scope: "hunk"};
+      st.draft = "";
+      render();
+      if (hk.dataset.hx !== undefined) document.getElementById("draft").placeholder = "Why this hunk should go (optional)";
+      return;
+    }
+    const act = t.closest("[data-act]")?.dataset.act;
+    if (act) {
+      const text = document.getElementById("draft").value.trim();
+      if (act !== "cancel" && (act === "x" || text)) {
+        const {fi, a, b, scope} = st.sel;
+        st.items.push({kind: act, fi, a: Math.min(a, b), b: Math.max(a, b), text, scope});
+      }
+      st.sel = null; st.draft = "";
+      render();
+      return;
+    }
+    const rm = t.closest("[data-rm]");
+    if (rm) { st.items.splice(+rm.dataset.rm, 1); render(); return; }
+    const ed = t.closest("[data-edit]");
+    if (ed) { const [it] = st.items.splice(+ed.dataset.edit, 1); st.sel = {fi: it.fi, a: it.a, b: it.b, scope: it.scope}; st.draft = it.text; render(); }
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeAll(); if (st.sel) { st.sel = null; render(); } } });
+}
+</script>
+</body>
+</html>
