@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc on the phone, round 2: reading on the trip (cc-a, Oct 19th)</title>
+<style>
+  :root { --bg: #fff; --text: #212529; --muted: #6c757d; --line: #e9ecef; --hover: #f3f4f6; --press: #e9ecef; --accent: #0b7bd3; --on-accent: #fff; --green: #2f9e44; --yel: #f59f00; --red: #d63939; --bubble: #f3f4f6; --need: #f4f8fd; --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f1f3f5; color: var(--text); font: 15px/1.5 var(--font); }
+  main { max-width: 1100px; margin: 0 auto; padding: 1.2rem 1rem 4rem; }
+  h1 { font-size: 1.3rem; line-height: 1.25; margin: 0 0 0.4rem; }
+  h2 { font-size: 1.08rem; margin: 2.4rem 0 0.4rem; }
+  p, li { max-width: 680px; }
+  .lead { color: var(--muted); margin: 0 0 1rem; }
+  table { border-collapse: collapse; font-size: 0.9rem; background: var(--bg); margin: 0.6rem 0 1rem; max-width: 100%; }
+  td, th { border-bottom: 1px solid var(--line); padding: 0.35rem 0.6rem; text-align: left; vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); font-size: 0.8rem; }
+  .scroll { overflow-x: auto; }
+  .row { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-start; margin-top: 1rem; }
+  figure { margin: 0; width: min(380px, 100%); }
+  figcaption { font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; }
+  figcaption b { color: var(--text); }
+  .phone { width: 100%; aspect-ratio: 448 / 907; max-height: 770px; background: var(--bg); border: 1px solid #d0d4d8; border-radius: 22px; overflow: hidden; position: relative; display: flex; flex-direction: column; box-shadow: 0 6px 24px rgb(0 0 0 / 0.08); }
+  .phone > img { width: 100%; display: block; }
+  .facts { font-size: 0.9rem; color: var(--muted); }
+  .facts b { color: var(--text); }
+  code { font: 0.85em var(--mono); background: #e9ecef; padding: 0 0.25em; border-radius: 3px; }
+  .open { background: #fff9db; border: 1px solid #ffe066; border-radius: 8px; padding: 0.6rem 1rem; max-width: 680px; }
+  .open h3 { margin: 0.2rem 0 0.4rem; font-size: 0.95rem; }
+
+  /* the drawn cc screens */
+  .hd { display: flex; align-items: center; gap: 0.3rem; padding: 0 0.8rem 0 0.2rem; height: 48px; border-bottom: 1px solid var(--line); flex: none; }
+  .hd .bk { width: 44px; height: 44px; display: grid; place-items: center; font-size: 1.4rem; color: var(--text); text-decoration: none; }
+  .hd .t { font-weight: 700; font-size: 1.05rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hd .q { margin-left: auto; font-weight: 700; font-size: 0.9rem; flex: none; }
+  .scr { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; position: relative; }
+  .sec { font-size: 0.72rem; letter-spacing: 0.06em; color: var(--muted); padding: 0.9rem 1rem 0.3rem; }
+  .it { display: grid; grid-template-columns: 18px 1fr auto; column-gap: 0.4rem; padding: 0.5rem 1rem 0.5rem 0.6rem; color: inherit; text-decoration: none; min-height: 44px; -webkit-tap-highlight-color: transparent; }
+  .it:active { background: var(--press); }
+  .it .d { width: 8px; height: 8px; border-radius: 4px; margin: 0.55rem auto 0; }
+  .it .n { font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .it .r { font: 0.78rem var(--mono); color: var(--muted); padding-top: 0.2rem; }
+  .it .s { grid-column: 2 / 4; color: var(--muted); font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .it.need { background: var(--need); }
+  .it.need .s { color: var(--text); white-space: normal; }
+  .it .ask { grid-column: 2 / 4; display: flex; gap: 0.4rem; margin-top: 0.4rem; flex-wrap: wrap; }
+  .chip { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 0 0.85rem; min-height: 36px; color: var(--text); }
+  .one { display: grid; grid-template-columns: 18px 1fr auto; column-gap: 0.4rem; padding: 0.45rem 1rem 0.45rem 0.6rem; color: inherit; text-decoration: none; min-height: 44px; align-items: center; }
+  .one:active { background: var(--press); }
+  .one .n { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .one .n small { color: var(--muted); font-size: 0.85rem; margin-left: 0.35rem; }
+  .one .r { color: var(--muted); font-size: 0.8rem; }
+  .one .dot { width: 8px; height: 8px; border-radius: 4px; background: var(--green); margin: auto; }
+  .fold { position: absolute; left: 0; right: 0; border-top: 2px dashed #f08c00; pointer-events: none; }
+  .fold span { position: absolute; right: 0.4rem; top: -1.2rem; font-size: 0.7rem; color: #e8590c; background: rgb(255 255 255 / 0.85); padding: 0 0.3rem; }
+
+  /* chat */
+  .msgs { display: flex; flex-direction: column; gap: 0.6rem; padding: 0.8rem; }
+  .m { align-self: flex-start; max-width: 78%; padding: 0.5rem 0.8rem; border-radius: 16px; background: var(--bubble); font-size: 0.9rem; }
+  .m.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); }
+  .m p { margin: 0 0 0.5rem; } .m p:last-child { margin: 0; }
+  .m ul { margin: 0 0 0.5rem; padding-left: 1.1rem; }
+  .full .m:not(.me) { max-width: none; align-self: stretch; background: none; padding: 0.2rem 0.2rem 0.6rem; border-radius: 0; border-bottom: 1px solid var(--line); }
+  .m.new { box-shadow: inset 3px 0 0 var(--accent); }
+  .full .m.new { box-shadow: none; }
+  .mark { font-size: 0.75rem; color: var(--accent); padding: 0 0.2rem; display: flex; align-items: center; gap: 0.5rem; }
+  .mark::after { content: ""; flex: 1; height: 1px; background: var(--accent); opacity: 0.4; }
+  .pill { position: absolute; left: 50%; bottom: 0.6rem; transform: translateX(-50%); background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 0 1rem; height: 36px; display: grid; place-items: center; font-size: 0.85rem; border: 0; font-family: inherit; box-shadow: 0 2px 8px rgb(0 0 0 / 0.18); white-space: nowrap; }
+  .say { flex: none; padding: 0.5rem 0.7rem 0.7rem; }
+  .say .f { border: 1px solid var(--line); border-radius: 1.3rem; display: flex; align-items: center; min-height: 46px; padding: 0 0.3rem 0 0.9rem; color: var(--muted); gap: 0.4rem; font-size: 0.95rem; }
+  .say .f span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .say .f i { width: 38px; height: 38px; border-radius: 19px; background: var(--accent); opacity: 0.35; flex: none; }
+
+  /* inbox reader */
+  .doc { padding: 0.9rem 1rem; font-size: 0.9rem; }
+  .doc .k { color: var(--muted); font-size: 0.75rem; }
+  .doc h4 { font-size: 1.35rem; line-height: 1.2; margin: 0.2rem 0 0.6rem; }
+  .doc p { color: #444; }
+  .rdbar { flex: none; border-top: 1px solid var(--line); display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; height: 48px; padding: 0 0.3rem; }
+  .rdbar button { all: unset; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 22px; font-size: 1.3rem; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: transform 120ms var(--ease-out); }
+  .rdbar button:active { transform: scale(0.92); background: var(--press); }
+  .rdbar button:disabled { opacity: 0.3; }
+  .rdbar .mid { text-align: center; font-size: 0.85rem; color: var(--muted); line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rdbar .mid b { color: var(--text); font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; }
+  .sent { font-size: 0.8rem; color: var(--muted); padding: 0 1rem 0.2rem; }
+  .sent a { color: var(--accent); }
+  .ilist .grp { font-size: 0.72rem; letter-spacing: 0.06em; color: var(--muted); padding: 0.8rem 1rem 0.2rem; }
+  .ilist a { display: grid; grid-template-columns: 1fr 44px; padding: 0.4rem 0 0.4rem 1rem; color: inherit; text-decoration: none; min-height: 52px; }
+  .ilist a:active { background: var(--press); }
+  .ilist a b { font-weight: 600; } .ilist a.read b { font-weight: 400; color: var(--muted); }
+  .ilist a small { display: block; color: var(--muted); font-size: 0.8rem; }
+  .ilist a i { grid-row: 1 / 3; grid-column: 2; display: grid; place-items: center; color: var(--muted); font-style: normal; }
+  @media (prefers-reduced-motion: reduce) { .rdbar button { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+<h1>cc on the phone, round 2: reading and answering on the trip</h1>
+<p class="lead">cc-a, October 19th, 2026, for the free-cycles item "research / mock ways to improve cc (both web ui and tooling)". Round 1 (<a href="phone.html">phone.html</a>, report <a href="https://nadya.gum.ts.net/nadya/research/cc-phone.html">cc-phone.html</a>) was built today in 29759c4..283e406: offline, the service worker, push, 44 px targets. This round looks at what is left once cc loads: what the user does on the phone this week is read what nadya and the helpers wrote and answer it. Proposals only; nothing here changed the live page.</p>
+
+<p class="facts">Measured on the live page in a headless Chrome at <b>448x907, dpr 2.25, touch</b> (the Pixel 9 Pro XL in the nadya app, cc-screens.jsonl), Oct 19th 12:35-12:45, and from index.html at 283e406.</p>
+
+<div class="scroll"><table>
+<tr><th>#</th><th>what</th><th>now</th><th>change</th><th>cost</th></tr>
+<tr><td>1</td><td>a long reply opens at its end</td><td>nadya's last reply 1,147 px tall in a 324 px wide bubble; the chat opens at the bottom, so its first 330 px are above the screen</td><td>open at the start of the first reply not yet seen; on a phone, replies full width, no bubble</td><td>cc ~25 lines</td></tr>
+<tr><td>2</td><td>the inbox has no "next"</td><td>53 new posts; each one: tap, read, back, find the next in a list of underlined links. A message typed under a post goes to nadya and switches to nadya's chat, away from the post</td><td>a bar under an open post: previous, "3 of 53", next unread; a message sent from a post stays on the post, with a "sent to nadya" line and nadya's answer there</td><td>cc ~60 lines</td></tr>
+<tr><td>3</td><td>sessions start below the middle of the screen</td><td>SESSIONS begins at 662 px of 907; 2 of 6 sessions are below the fold; UPDATES takes 370 px (inbox 130, away 88, parcels 109)</td><td>a session waiting on you goes above UPDATES, with its question; on a phone each update is one line</td><td>cc ~30 lines CSS + ~15 JS</td></tr>
+</table></div>
+
+<h2>1. A long reply opens at its start, full width</h2>
+<p>On a phone most of nadya's replies are summaries of helpers' work: of the last 12 messages in nadya's chat, 3 replies were 440 to 1,147 px tall. cc opens a chat at the bottom (the right place for a short reply or a running session), so the user lands on the last lines of a long reply and scrolls up to find where it starts. The bubble is 78% wide (324 px of 448), which makes each reply ~1.3 times taller than the text needs.</p>
+<p>Change: on open, if a reply came since this chat was last shown, scroll to the top of the first such reply and draw a thin "new" line above it; a pill "↓ latest" goes to the bottom. Under 761 px, replies from nadya or a session are drawn as plain text across the screen with a rule between them; the user's own messages stay blue bubbles on the right. Desktop stays as it is.</p>
+<div class="row">
+  <figure><div class="phone"><img src="phone2-nadya-now.jpg" alt="cc's nadya chat on the phone now: the screen shows the middle and end of a long reply in a bubble, its start off the top"></div>
+    <figcaption><b>Now.</b> Opened at the bottom: the reply's first lines are above the screen.</figcaption></figure>
+  <figure><div class="phone" id="c1">
+    <div class="hd"><a class="bk" href="#c1">‹</a><span class="t">nadya</span><span class="q">92%</span></div>
+    <div class="scr" id="c1s"><div class="msgs full">
+      <div class="m me">flux-a, flux-b: go</div>
+      <div class="mark">new since 12:31</div>
+      <div class="m new"><p><b>Sync to marx:</b> a mutagen sync now copies <code>nadya:~/prj/flux</code> to <code>marx:~/prj/flux</code> in both directions; it is connected and watching for changes. I deleted the 2024 CEF files there first, as you chose.</p>
+        <p><b>Round 4:</b> nadya-c finished it and I closed it.</p>
+        <ul><li>All four features you asked for work in stock Chrome 155: favorites, spaces, split view and quick open.</li><li>Report: <a href="https://nadya.gum.ts.net/nadya/research/flux-arc.html">flux-arc.html</a>. It has a table of the 20 groups of Chrome internals flux depends on.</li><li>The blog has five flux posts since noon.</li><li>Not done yet: a run on the Mac, tab peek, resizing split panes, and a test with a real Tailscale proxy.</li></ul>
+        <p><b>Final quota push:</b> the reset is at 13:00 and usage was 92% at the last check. Besides flux-a and flux-b, I started three more helpers:</p>
+        <ul><li>nadya-a: a new round on the multiline-calculator idea.</li><li>nadya-b: a new round on the shelf idea.</li><li>cc-a: mockups of ways to make cc easier to use on the phone this week.</li></ul>
+        <p>They start minutes before the 13:00 reset, so most of their work will use next week's quota.</p></div>
+    </div><button class="pill" id="c1p" type="button">↓ latest</button></div>
+    <div class="say"><div class="f"><span>Message nadya</span><i></i></div></div>
+  </div><figcaption><b>Proposed.</b> Opened at the "new since" line. The same reply is about one screen tall at full width. Tap the pill.</figcaption></figure>
+</div>
+
+<h2>2. The inbox as a reading queue</h2>
+<p>The inbox had 53 new posts at 12:40, almost all reports and mocks from free cycles, which is what the user reads on the trip. Reading them is a loop of tap, read, back, scroll to find where you were. The list is browser-default underlined blue (cc-c noted it too, <a href="https://nadya.gum.ts.net/nadya/research/cc-web.html">cc-web.html</a> §2).</p>
+<p>Under a post the box says "Message nadya" and the text goes with <code>[cc, &lt;the post&gt;]</code> in front, so nadya knows which post it is about. Then cc switches to nadya's chat (index.html, the submit handler: <code>if (!r &amp;&amp; cur !== "nadya") { cur = "nadya"; open(); }</code>), and the post is one back press away, at its top again.</p>
+<p>Change: an open post gets a bar at the bottom: ‹ previous, the title and "3 of 53 new", next › (the next unread, newest first). Sending from a post stays on the post: a line "sent to nadya · 12:41" appears over the box, and nadya's reply, when it comes, as "nadya: …" with a link to the chat. The list groups new posts by project, one bold title and a "who · age" line each, × at 44 px. cc-c's proposal 2 (a post that asks a question, with options) fits in the same bar later.</p>
+<div class="row">
+  <figure><div class="phone"><img src="phone2-inbox-now.jpg" alt="cc's inbox on the phone now: a list of underlined blue links with who and age, and an x beside each"></div>
+    <figcaption><b>Now.</b> 53 links; after each post, back here.</figcaption></figure>
+  <figure><div class="phone" id="c2">
+    <div class="hd"><a class="bk" href="#c2l">‹</a><span class="t">inbox</span><span class="q">92%</span></div>
+    <div class="scr ilist" id="c2l"></div>
+  </div><figcaption><b>Proposed, the list.</b> New posts by project. Tap one.</figcaption></figure>
+  <figure><div class="phone" id="c3">
+    <div class="hd"><a class="bk" href="#c2l" id="c3b">‹</a><span class="t">inbox</span><span class="q">92%</span></div>
+    <div class="scr"><div class="doc" id="c3d"></div></div>
+    <div class="sent" id="c3s" hidden></div>
+    <form class="say" id="c3f"><div class="f"><span id="c3ph">Message nadya about this post</span><i></i></div></form>
+    <nav class="rdbar" aria-label="inbox posts"><button type="button" id="c3prev" aria-label="previous post">‹</button><div class="mid" id="c3m"></div><button type="button" id="c3next" aria-label="next unread post">›</button></nav>
+  </div><figcaption><b>Proposed, a post.</b> ‹ and › walk the new posts; the bar says where you are. Tap the box to see what sending does.</figcaption></figure>
+</div>
+
+<h2>3. What waits on you, first</h2>
+<p>The list is: nadya, blog, projects, UPDATES (inbox with 3 titles, away mode, parcels with 3 lines), then SESSIONS. On the phone at 12:35 SESSIONS started at 662 px of 907, and nadya-a and nadya-b were below the screen. SESSIONS is sorted with waiting ones first, so a session with a question is the first row there, still at 662 px, under the parcels. Round 1's push (167c4cd) brings the user to such a session after 2 minutes; opening cc by hand does not.</p>
+<p>Change, phone only: a session that waits on you (a dialog or a turn ending in a question) is drawn above UPDATES on a light blue row with its question and, for a question box, its options as buttons (the pane still picks, as the session page does today). Each update is one line, its count on the right; the lines under it show only on its own page. A gold line would mark "nothing waits on you" if wanted; left out here.</p>
+<div class="row">
+  <figure><div class="phone" style="position:relative"><img src="phone2-home-now.jpg" alt="cc's list on the phone now: header, tools, nadya, blog, projects, updates with inbox, away mode and parcels, then sessions from two thirds down"><div class="fold" style="top:73%"><span>sessions start here</span></div></div>
+    <figcaption><b>Now.</b> Updates take the middle of the screen.</figcaption></figure>
+  <figure><div class="phone">
+    <div class="hd"><span class="t" style="padding-left:0.8rem">nadya</span><span class="q">92%</span></div>
+    <div class="scr">
+      <div class="sec">WAITS ON YOU</div>
+      <a class="it need" href="#c4"><span class="d" style="background:var(--accent)"></span><span class="n">iron-k</span><span class="r">web/iron</span><span class="s">Merge the objects branch now, or after the gates run finishes?</span><span class="ask"><button class="chip" type="button">Merge now</button><button class="chip" type="button">After gates</button><button class="chip" type="button">open</button></span></a>
+      <a class="one" href="#c4"><span class="dot"></span><span class="n">nadya</span><span class="r"></span></a>
+      <a class="one" href="#c4"><span></span><span class="n">blog <small>flux report: all four Arc features…</small></span><span class="r">24s</span></a>
+      <a class="one" href="#c4"><span></span><span class="n">projects</span><span class="r"></span></a>
+      <div class="sec">UPDATES</div>
+      <a class="one" href="#c4"><span class="dot"></span><span class="n"><b>inbox</b> <small>flux round 4: Arc features…</small></span><span class="r">53 new</span></a>
+      <a class="one" href="#c4"><span class="dot"></span><span class="n"><b>away mode</b> <small>Which name for the config file?</small></span><span class="r">1</span></a>
+      <a class="one" href="#c4"><span></span><span class="n">parcels <small>FedEx, Ecualama · Mon</small></span><span class="r">5</span></a>
+      <div class="sec">SESSIONS</div>
+      <a class="it" href="#c4"><span></span><span class="n">cc-a</span><span class="r">ai/cc/web</span><span class="s">free cycles: cc on the phone mocks</span></a>
+      <a class="it" href="#c4"><span></span><span class="n">flux-a</span><span class="r">prj/flux</span><span class="s">flux path A: full extension</span></a>
+      <a class="it" href="#c4"><span></span><span class="n">flux-b</span><span class="r">prj/flux</span><span class="s">flux path B: bridge + html page</span></a>
+      <a class="it" href="#c4"><span></span><span class="n">nadya-a</span><span class="r">nadya</span><span class="s">free cycles: multiline-calculator</span></a>
+      <a class="it" href="#c4"><span></span><span class="n">nadya-b</span><span class="r">nadya</span><span class="s">free cycles: shelf</span></a>
+    </div>
+  </div><figcaption><b>Proposed.</b> iron-k's question is invented for the drawing (no session was asking at 12:35). The tools row is left out of the drawing; with it, SESSIONS would start ~45 px lower, at about 590 px of 907 instead of 662, with the question row above.</figcaption></figure>
+</div>
+
+<h2>Looked at, no proposal</h2>
+<ul>
+  <li>Reading a report inside cc: research pages are one column at 448 px since round 1's template change; the calculator report read well.</li>
+  <li>The header: title, quota bar, %, graph and pace fit in 448 px; on long titles the title is cut first.</li>
+  <li>Sending from a post already says which post (<code>[cc, …]</code> prefix); only the switch away is in proposal 2.</li>
+  <li>Sessions on dialogs: answering on the session page has 44 px option buttons since round 1.</li>
+</ul>
+
+<h2>Alternative framing</h2>
+<p>All three make cc better at browsing a pile of posts. The pile is the issue: 53 posts in one morning is more than anyone reads on a phone between flights. nadya could instead post one digest twice a day, "4 posts need a pick from you, 12 are for later", each pick a line with its options, and hold the rest as "for later" until the user is back at a desk. Then proposal 2 matters less and proposal 3 (what waits on you, first) matters more. That is a change to how nadya posts, not to cc, and it means nadya decides what is "for later".</p>
+
+<div class="open">
+<h3>Open points</h3>
+<ul>
+  <li>Proposal 1: should "new since" count from when the chat was last on screen on this device, or on any device? Per device needs nothing on the server; any device needs a seen mark in web/api.</li>
+  <li>Proposal 1: full-width replies on the phone only, or on desktop too? Desktop's bubbles were picked in the design pass (Oct 18th), so only the phone here.</li>
+  <li>Proposal 2: "next" goes to the next unread, newest first. Oldest first reads in the order things happened; newest first matches the list.</li>
+  <li>Proposal 3: option buttons on the list row answer without opening the session; one tap on a row that moves could pick by mistake (the click bug of Oct 18th). Showing the question with only "open" is the safer start.</li>
+  <li>Not checked on the Pixel itself; all of this is headless Chrome at 448x907 with touch. The question in proposal 3's drawing is invented.</li>
+  <li>While checking proposal 2, opening "Calculator: can the range numbers be trusted?" from the inbox marked it read in the user's inbox (12:42).</li>
+</ul>
+</div>
+</main>
+
+<script type="module">
+const $ = (s) => document.querySelector(s);
+
+// 1: open at the first new reply
+const c1s = $("#c1s");
+c1s.scrollTop = $("#c1 .mark").offsetTop - 8;
+$("#c1p").addEventListener("click", () => c1s.scrollTo({top: c1s.scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"}));
+function pill() { $("#c1p").hidden = c1s.scrollTop + c1s.clientHeight >= c1s.scrollHeight - 4; }
+c1s.addEventListener("scroll", pill); pill();
+
+// 2: the inbox list and the reader
+const posts = [
+  {p: "flux", t: "flux round 4: Arc features on Webium + internal dependencies", by: "nadya-c", age: "2min", k: "Research", s: "All four features you asked for work in stock Chrome 155: favorites, spaces, split view and quick open. A table of the 20 groups of Chrome internals flux depends on."},
+  {p: "flux", t: "flux: Webium on Chrome 155, own UI injected (tested)", by: "nadya-b", age: "1h", k: "Research", s: "Webium runs on Chrome 155 with its own UI injected into the browser's pages; what was tested and what was not."},
+  {p: "fractal-git", t: "fractal-git: home repo built from nadya's ~", by: "nadya-b", age: "50min", k: "Mock", s: "A home repo built from nadya's home directory, with each project as its own history."},
+  {p: "exercise-guide", t: "Exercise guide: floor start frames by image edit", by: "nadya-a", age: "1h", k: "Research", s: "Start frames for floor exercises made by editing one image, compared with generating each."},
+  {p: "multiline-calculator", t: "Calculator: can the range numbers be trusted?", by: "nadya-b", age: "1h", k: "Research", s: "12 of 16 v3 range results change when a blank line is added at the top; 0 of 16 with each line seeded from its own text."},
+  {p: "page-watch", t: "page-watch: a first watch list, from your records", by: "nadya-a", age: "1h", k: "Mock", s: "A first watch list made from the user's records, with what each page is checked for."},
+];
+const read = new Set();
+let at = 0, sent = false;
+function list() {
+  const groups = Map.groupBy(posts.map((x, i) => ({...x, i})), (x) => x.p);
+  $("#c2l").innerHTML = [...groups].map(([p, xs]) => `<div class="grp">${p.toUpperCase()}</div>${xs.map((x) => `<a href="${location.pathname}#post-${x.i}" data-i="${x.i}" class="${read.has(x.i) ? "read" : ""}"><span><b>${x.t}</b><small>${x.by} · ${x.age}</small></span><i aria-label="remove">×</i></a>`).join("")}`).join("");
+}
+function show(i) {
+  at = i; read.add(i); sent = false;
+  const x = posts[i], unread = posts.filter((_, j) => !read.has(j)).length;
+  $("#c3d").innerHTML = `<div class="k">${x.k} · ${x.by} · ${x.age}</div><h4>${x.t}</h4><p>${x.s}</p><p>(the post's page, as cc frames it today)</p>`;
+  $("#c3m").innerHTML = `<b>${x.t}</b>${i + 1} of ${posts.length} · ${unread} unread`;
+  $("#c3prev").disabled = i === 0;
+  $("#c3next").disabled = unread === 0 && i === posts.length - 1;
+  $("#c3s").hidden = true;
+  $("#c3ph").textContent = "Message nadya about this post";
+  list();
+}
+function next() {
+  const j = posts.findIndex((_, k) => k > at && !read.has(k));
+  show(j >= 0 ? j : Math.min(at + 1, posts.length - 1));
+}
+$("#c2l").addEventListener("click", (e) => {
+  const a = e.target.closest("a");
+  if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  if (e.target.closest("i")) { posts.splice(+a.dataset.i, 1); return list(); }
+  show(+a.dataset.i);
+  $("#c3").scrollIntoView({behavior: "smooth", block: "nearest", inline: "nearest"});
+});
+$("#c3prev").addEventListener("click", () => show(Math.max(0, at - 1)));
+$("#c3next").addEventListener("click", next);
+$("#c3f").addEventListener("click", () => {
+  const s = $("#c3s");
+  s.hidden = false;
+  if (!sent) { s.innerHTML = `you: "keep the stratified one" · sent to nadya · 12:41`; sent = true; setTimeout(() => { if (sent) s.innerHTML += `<br>nadya: noted for the calculator round 3 · <a href="#c1">chat</a>`; }, 1500); }
+});
+list(); show(4);
+</script>
+</body>
+</html>
