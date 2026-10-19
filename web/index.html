@@ -552,9 +552,12 @@ function seeMock(url) {
 // away mode (user, Oct 19th: "auto answer questions ... when I'm offline, so work doesn't get stuck on me"): each cchost
 // answers its sessions' question boxes left 5 min (host/away.js). On is every host that answers being on; the answers
 // are new until #away is opened (cc_away_seen)
+// a read started before a switch is set answers with the old state: dropped
+let awaySet = 0;
 async function loadAway() {
+  const at = awaySet;
   const x = await json(`${CCX}/away?all=1`).catch(() => null);
-  if (x) setAway(x);
+  if (x && at === awaySet) setAway(x);
 }
 function setAway(x) {
   const up = x.hosts.filter((h) => !h.down);
@@ -565,7 +568,7 @@ function setAway(x) {
   if (cur === "away") { drawView(true); awaySeen(); }
 }
 async function setAwayOn(on) {
-  S.away = {...S.away, on, err: ""};
+  S.away = {...S.away, on, err: ""}; awaySet++;
   try { setAway(await post(`${CCX}/away?all=1`, {on})); } catch (err) { S.away.err = err.message; loadAway(); }
 }
 const awaySince = () => +localStorage.cc_away_seen || 0;
@@ -687,8 +690,12 @@ function listen() {
     for (const p of recorded) if (!rows.some((r) => r.pid === p)) recorded.delete(p);
     S.rows = rows.filter((r) => r.status || !recorded.has(r.pid)); S.offline = d.offline; S.listed = true;
     const back = S.lost || S.stale; S.lost = false; S.stale = null; if (back) flushOutbox();
-    // the open session ended (its host still answers): go to nadya, replacing the hash
     const up = S.up = d.up ?? [];
+    // each host's away switch: a change made on another device is read again at once (api/away has the answers)
+    const aw = JSON.stringify(d.away ?? null);
+    if (d.away && listen.away !== undefined && aw !== listen.away) loadAway();
+    listen.away = aw;
+    // the open session ended (its host still answers): go to nadya, replacing the hash
     if (had && !S.rows.some((r) => r.pid === cur) && up.includes(cur.split(".")[0])) { cur = "nadya"; if (history.state?.cc) history.replaceState({cc: cur}, ""); open(); return; }
     draw(); drawView(true);
   });

@@ -316,7 +316,7 @@ export class Server {
   listBody() {
     const {instances, net} = this.source();
     return {rows: tmuxOrder(instances).map(rowOf), offline: net?.offline ? net.label : "",
-      host: HOSTNAME};
+      host: HOSTNAME, away: this.away?.on};
   }
 
   // Another host's list, from the event stream `cchost` follows for the relay: its body
@@ -335,7 +335,7 @@ export class Server {
   // in, `down` [host, why] for the rest; `host` says the same as text, for a client that
   // reads it
   mergedBody() {
-    const rows = [], up = [], down = [];
+    const rows = [], up = [], down = [], away = {};
     let offline = "";
     for (const h of this.allHosts()) {
       const p = this.peers.get(h);
@@ -347,8 +347,9 @@ export class Server {
       up.push(h);
       rows.push(...body.rows.map((r) => tagRow(h, r)));
       offline ||= body.offline ?? "";
+      if (typeof body.away === "boolean") away[h] = body.away;
     }
-    return {rows, offline, up, down, self: this.self, hosts: this.allHosts(),
+    return {rows, offline, up, down, away, self: this.self, hosts: this.allHosts(),
       host: up.join(" · ") + (down.length ? ` (${down.map(([h]) => h).join(", ")} down)` : "")};
   }
 
@@ -737,6 +738,7 @@ export class Server {
       if (typeof on !== "boolean") return json({error: "on is true or false"}, 400);
       if (!this.away) return json(here(), 409);
       this.away.set(on);
+      this.pushList();  // the switch reaches every open cc on the list stream (`away`)
     }
     if (!all) return json(here(), this.away ? 200 : 409);
     const got = await Promise.all(this.allHosts().map(async (h) => {
