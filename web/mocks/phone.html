@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc on the phone: mocks (cc-a, Oct 19th)</title>
+<style>
+  :root { --bg: #fff; --text: #212529; --muted: #6c757d; --line: #e9ecef; --accent: #0b7bd3; --green: #2f9e44; --yel: #f59f00; --red: #d63939; --bubble: #f3f4f6; --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f1f3f5; color: var(--text); font: 15px/1.5 var(--font); }
+  main { max-width: 1400px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+  h1 { font-size: 1.3rem; margin: 0 0 0.3rem; }
+  .lead { color: var(--muted); margin: 0 0 1.5rem; max-width: 760px; }
+  .row { display: flex; flex-wrap: wrap; gap: 2rem; align-items: flex-start; }
+  figure { margin: 0; width: 330px; }
+  figcaption { font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; }
+  figcaption b { color: var(--text); }
+  h2 { font-size: 1rem; margin: 2.2rem 0 0.8rem; }
+  .phone { width: 330px; height: 690px; background: var(--bg); border: 1px solid #d0d4d8; border-radius: 26px; overflow: hidden; position: relative; display: flex; flex-direction: column; box-shadow: 0 6px 24px rgb(0 0 0 / 0.08); }
+  .phone img { width: 100%; display: block; }
+  .shot { height: 690px; overflow: hidden; }
+  header { display: flex; align-items: center; gap: 0.4rem; padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--line); min-height: 52px; }
+  header .t { font-weight: 700; font-size: 1.05rem; }
+  header .q { margin-left: auto; display: flex; align-items: center; gap: 0.35rem; font-weight: 700; font-size: 0.9rem; }
+  header .q i { display: block; width: 46px; height: 5px; border-radius: 3px; background: var(--line); position: relative; overflow: hidden; }
+  header .q i::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 89%; background: var(--accent); }
+  .back { width: 44px; height: 44px; margin-left: -0.6rem; display: grid; place-items: center; font-size: 1.3rem; border-radius: 22px; outline: 1px dashed #f08c00; outline-offset: -2px; }
+  .tools { display: flex; justify-content: space-around; border-bottom: 1px solid var(--line); padding: 0.25rem 0; color: var(--muted); }
+  .tools span { width: 48px; height: 44px; display: grid; place-items: center; }
+  .band { font-size: 0.8rem; padding: 0.35rem 0.9rem; background: #f8f9fa; color: var(--muted); border-bottom: 1px solid var(--line); display: flex; gap: 0.5rem; }
+  .band b { color: var(--text); font-weight: 600; }
+  .band.upd { background: #e7f1fb; color: #0b5c9e; justify-content: space-between; }
+  ul.list { list-style: none; margin: 0; padding: 0.3rem 0; overflow: hidden; flex: 1; }
+  ul.list li { display: grid; grid-template-columns: 22px 1fr auto; padding: 0.45rem 0.9rem 0.45rem 0.5rem; }
+  ul.list .d { width: 8px; height: 8px; border-radius: 4px; margin: 0.5rem auto 0; }
+  ul.list .n { font-size: 1rem; }
+  ul.list .r { color: var(--muted); font: 0.75rem var(--mono); padding-top: 0.25rem; }
+  ul.list .s { grid-column: 2 / 4; color: var(--muted); font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  ul.list .h { grid-column: 1 / 4; font-size: 0.72rem; letter-spacing: 0.08em; color: var(--muted); padding-top: 0.6rem; }
+  .stale { opacity: 0.55; }
+  .chat { flex: 1; padding: 0.7rem; display: flex; flex-direction: column; gap: 0.4rem; overflow: hidden; justify-content: flex-end; }
+  .m { background: var(--bubble); border-radius: 14px; padding: 0.5rem 0.75rem; max-width: 92%; font-size: 0.9rem; }
+  .ask { border: 1px solid var(--line); border-radius: 14px; padding: 0.6rem 0.75rem; font-size: 0.9rem; }
+  .ask .hd { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .opt { display: flex; align-items: center; gap: 0.5rem; min-height: 44px; border-top: 1px solid var(--line); }
+  .opt:first-of-type { border-top: 0; }
+  .opt small { color: var(--muted); display: block; }
+  .say { display: flex; align-items: center; gap: 0.4rem; margin: 0.5rem 0.7rem 0.8rem; border: 1px solid var(--line); border-radius: 24px; padding: 0.2rem 0.25rem 0.2rem 0.9rem; color: var(--muted); }
+  .say span:first-child { flex: 1; }
+  .say .go { width: 44px; height: 44px; border-radius: 22px; background: var(--accent); color: #fff; display: grid; place-items: center; outline: 1px dashed #f08c00; outline-offset: 2px; }
+  .note { position: absolute; left: 10px; right: 10px; top: 10px; background: #fff; border-radius: 18px; box-shadow: 0 6px 22px rgb(0 0 0 / 0.18); padding: 0.7rem 0.9rem; font-size: 0.85rem; z-index: 2; }
+  .note .app { font-size: 0.72rem; color: var(--muted); }
+  .note b { display: block; }
+  .note .acts { display: flex; gap: 1.2rem; margin-top: 0.4rem; color: var(--accent); font-weight: 600; font-size: 0.8rem; }
+  .dim { position: absolute; inset: 0; background: rgb(0 0 0 / 0.25); z-index: 1; }
+  .key { font-size: 0.8rem; color: var(--muted); margin-top: 1rem; }
+  .key span { outline: 1px dashed #f08c00; padding: 0 0.3rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>cc on the phone</h1>
+  <p class="lead">Mocks for research/cc-phone.html (cc-a, Oct 19th). A and B are real screenshots at 412x915 in headless Chrome; the "after" in A is the live page with the six CSS lines of proposal 1 added in the browser. C, D and E are drawn.</p>
+
+  <h2>A. A research post from the inbox (proposal 1)</h2>
+  <div class="row">
+    <figure><div class="phone shot"><img src="phone-research-now.jpg" alt="research page today at 412 px: two columns, text cut at the right"></div><figcaption><b>Now.</b> template.css has no narrow layout: a 180 px column for the section names, ~150 px left for the text, tables cut at the right. 30 of the 41 inbox posts were wider than the screen.</figcaption></figure>
+    <figure><div class="phone shot"><img src="phone-research-fixed.jpg" alt="the same page with one column"></div><figcaption><b>With one @media block.</b> Under 640 px the names go above their section; 412 px wide, no sideways scroll.</figcaption></figure>
+  </div>
+
+  <h2>B. No connection (proposal 4)</h2>
+  <div class="row">
+    <figure><div class="phone shot"><img src="phone-offline-now.jpg" alt="cc offline today: nadya not running, empty list"></div><figcaption><b>Now.</b> Opened with no network: "nadya not running", no sessions, no updates, no quota.</figcaption></figure>
+    <figure>
+      <div class="phone">
+        <header><span class="t">nadya</span><span class="q"><i></i>89%</span></header>
+        <div class="band"><b>no connection</b> · showing 14:02, retrying</div>
+        <div class="tools"><span>＋</span><span>▷</span><span>▢</span><span>☾</span><span>↺</span></div>
+        <ul class="list stale">
+          <li><span class="d" style="background:var(--green)"></span><span class="n">nadya</span><span class="r">nadya</span></li>
+          <li><span></span><span class="n">blog</span><span class="r">14:01</span><span class="s">fractal-git's two-way sync passed all 41 checks…</span></li>
+          <li><span></span><span class="n">projects</span><span></span></li>
+          <li class="h">UPDATES</li>
+          <li><span class="d" style="background:var(--green)"></span><span class="n"><b>inbox</b> 41 new</span><span class="r">14:00</span><span class="s">Daily cut after Reddit: what replaces the art…</span></li>
+          <li><span></span><span class="n">parcels 5</span><span class="r">Wed</span><span class="s">FedEx, Ecualama</span></li>
+          <li class="h">SESSIONS</li>
+          <li><span class="d" style="background:var(--yel)"></span><span class="n">iron-k</span><span class="r">web/iron</span><span class="s">iron: cleanup + refactor on nadya</span></li>
+          <li><span></span><span class="n">nadya-d</span><span class="r">nadya</span><span class="s">free cycles: shelf</span></li>
+        </ul>
+        <div class="say"><span>Message nadya · sent when back online</span><span class="go">↑</span></div>
+      </div>
+      <figcaption><b>Proposed.</b> The last list, updates and quota come from localStorage, faded, under one line saying when they are from. A message typed now waits and goes when the connection returns.</figcaption>
+    </figure>
+  </div>
+
+  <h2>C, D, E. A push, a tap, a fresh page (proposals 5, 6, 7)</h2>
+  <div class="row">
+    <figure>
+      <div class="phone">
+        <div class="dim"></div>
+        <div class="note"><span class="app">nadya · now</span><b>iron-k waits on you (2 min)</b>Which name for the config file? · iron.toml / config.json</div>
+        <header><span class="t">nadya</span><span class="q"><i></i>89%</span></header>
+        <div class="tools"><span>＋</span><span>▷</span><span>▢</span><span>☾</span><span>↺</span></div>
+        <ul class="list">
+          <li><span class="d" style="background:var(--green)"></span><span class="n">nadya</span><span class="r">nadya</span></li>
+          <li><span></span><span class="n">blog</span><span class="r">3min</span></li>
+          <li class="h">SESSIONS</li>
+          <li><span class="d" style="background:var(--accent)"></span><span class="n">iron-k ?</span><span class="r">web/iron</span><span class="s">Which name for the config file?</span></li>
+        </ul>
+      </div>
+      <figcaption><b>C.</b> A session that waits on you sends one push after 2 minutes, before away mode answers at 5. Its link is <code>/cc/#nadya.1716283</code>.</figcaption>
+    </figure>
+    <figure>
+      <div class="phone">
+        <header><span class="back">‹</span><span class="t">iron-k</span><span class="q"><i></i>89%</span></header>
+        <div class="chat">
+          <div class="m">The ports-flow trial needs a config file before I commit it.</div>
+          <div class="ask"><div class="hd">question · 2 min</div><p style="margin:0.2rem 0 0.3rem">Which name for the config file?</p>
+            <div class="opt">○ <span>iron.toml<small>next to package.json</small></span></div>
+            <div class="opt">○ <span>config.json<small>in src/</small></span></div>
+          </div>
+        </div>
+        <div class="say"><span>Message iron-k</span><span class="go">↑</span></div>
+      </div>
+      <figcaption><b>D.</b> The tap opens that session even when cc is already open (today a hash change on a phone is ignored). Back and send are 44 px (today 17x34 and 34x34).</figcaption>
+    </figure>
+    <figure>
+      <div class="phone">
+        <header><span class="t">nadya</span><span class="q"><i></i>89%</span></header>
+        <div class="band upd"><span>cc was updated 4 min ago</span><b>reload</b></div>
+        <div class="tools"><span>＋</span><span>▷</span><span>▢</span><span>☾</span><span>↺</span></div>
+        <ul class="list">
+          <li><span class="d" style="background:var(--green)"></span><span class="n">nadya</span><span class="r">nadya</span></li>
+          <li><span></span><span class="n">blog</span><span class="r">3min</span></li>
+          <li><span></span><span class="n">projects</span><span></span></li>
+          <li class="h">UPDATES</li>
+          <li><span class="d" style="background:var(--green)"></span><span class="n"><b>inbox</b> 41 new</span><span class="r">1min</span></li>
+          <li class="h">SESSIONS</li>
+          <li><span></span><span class="n">nadya-d</span><span class="r">nadya</span><span class="s">free cycles: shelf</span></li>
+        </ul>
+      </div>
+      <figcaption><b>E.</b> The page checks index.html's Last-Modified when it comes back to the screen. If the app was in the background it reloads by itself; if it is on screen, a line offers it.</figcaption>
+    </figure>
+  </div>
+  <p class="key"><span>dashed</span> marks a tap target at 44 px or more.</p>
+</main>
+</body>
+</html>
