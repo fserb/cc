@@ -379,8 +379,8 @@ const S = {rows: [], usage: null, burn: null, posts: [], todo: [], reminders: []
 const hash = decodeURIComponent(location.hash.slice(1));
 const isDoc = (c) => /^project\//.test(c ?? "");  // project/<id>: a project's page
 const isFiles = (c) => /^files(\/|$)/.test(c ?? "");  // files, files/<dir>/, files/<dir>/<file>: a path in ~/nadya
-// an old #idea/<x>.md or #project/<x>.md is that project's page, an old #plan the projects page (they are one now)
-const oldHash = (h) => h === "plan" ? "projects" : /^(idea|project)\/[\w.-]+\.md$/.test(h) ? `project/${h.split("/")[1].replace(/\.md$/, "")}` : h;
+// an old #idea/<x>.md or #project/<x>.md is that project's page, an old #plan the projects page (they are one now), #mocks the inbox
+const oldHash = (h) => h === "plan" ? "projects" : h === "mocks" ? "inbox" : /^(idea|project)\/[\w.-]+\.md$/.test(h) ? `project/${h.split("/")[1].replace(/\.md$/, "")}` : h;
 const hashCur = isDoc(oldHash(hash)) || isFiles(hash) ? oldHash(hash) : oldHash(hash.split("/")[0]);
 let cur = hashCur || (innerWidth > 760 ? "nadya" : null);
 const isPid = (c) => c?.includes(".") && !isDoc(c) && !isFiles(c);  // marx.1234
@@ -532,23 +532,6 @@ async function loadPackages() {
   S.packages = await fetch(`${PACKAGES}packages.json`, {cache: "no-cache"}).then((r) => r.json()).catch(() => S.packages);
   draw();
 }
-// the sidebar's new mocks: ~/web/<x>/mocks/*.html changed in the last 2 days (web/api mocks). One is new until it is
-// opened here; cc_mocks_seen keeps url -> the time seen, and the first visit counts what is there as seen, as the blog's does
-let mockSeen = JSON.parse(localStorage.cc_mocks_seen ?? "null");
-async function loadMocks() {
-  S.mocks = await fetch("api/mocks", {cache: "no-cache"}).then((r) => r.ok ? r.json() : S.mocks).catch(() => S.mocks);
-  if (!mockSeen && S.mocks) { mockSeen = Object.fromEntries(S.mocks.map((m) => [m.url, m.at])); localStorage.cc_mocks_seen = JSON.stringify(mockSeen); }
-  draw();
-  if (cur === "mocks" && !S.mockOpen) drawView(true);
-}
-const newMocks = () => (S.mocks ?? []).filter((m) => m.at > (mockSeen?.[m.url] ?? 0));
-function seeMock(url) {
-  const m = S.mocks?.find((x) => x.url === url);
-  if (!m || !mockSeen) return;
-  mockSeen[url] = m.at;
-  for (const k of Object.keys(mockSeen)) if (!S.mocks.some((x) => x.url === k)) delete mockSeen[k];
-  localStorage.cc_mocks_seen = JSON.stringify(mockSeen);
-}
 // away mode (user, Oct 19th: "auto answer questions ... when I'm offline, so work doesn't get stuck on me"): each cchost
 // answers its sessions' question boxes left 5 min (host/away.js). On is every host that answers being on; the answers
 // are new until #away is opened (cc_away_seen)
@@ -590,7 +573,11 @@ function awayView() {
 document.addEventListener("change", (e) => { if (e.target.matches("[data-away]")) setAwayOn(e.target.checked); });
 
 // the inbox (user, Oct 19th: "like an inbox"): mocks and reports nadya and the sessions post (`ccx post`, web/api inbox,
-// ~/nadya/tmp/inbox.jsonl), newest first. One is new until opened here; the page's × takes it out, for every device
+// ~/nadya/tmp/inbox.jsonl), newest first, and every ~/web/<x>/mocks/*.html that changed (user: "mocks and researchs
+// together in inbox"; web/api adds them). One is new until opened here; the page's × takes it out, for every device.
+// An agent's browser (headless, driven, or ?noread) opens one without marking it read for the user (inbox-review.md)
+const noRead = navigator.webdriver || /HeadlessChrome/.test(navigator.userAgent) || new URLSearchParams(location.search).has("noread");
+localStorage.removeItem("cc_mocks_seen");  // the old "new mocks" row's
 async function loadInbox() {
   S.inbox = await fetch("api/inbox", {cache: "no-cache"}).then((r) => r.ok ? r.json() : S.inbox).catch(() => S.inbox);
   draw();
@@ -616,6 +603,7 @@ async function inboxDo(verb, id) {
   for (const x of S.inbox ?? []) if (x.id === id || (id === "read" && x.read)) { if (verb === "read") x.read = true; else x.gone = true; }
   S.inbox = S.inbox?.filter((x) => !x.gone);
   draw(); if (cur === "inbox") drawView();
+  if (verb === "read" && noRead) return;
   await fetch(`api/inbox/${verb}`, {method: "POST", body: JSON.stringify({id})}).catch(() => {});
   loadInbox();
 }
@@ -863,9 +851,6 @@ function updates() {
     up.push({id: "away", title: "away mode", tags: S.away?.on ? `<span class="tag">on</span>` : "", r: aw[0] ? ago(aw[0].at / 1000) : "", unread: aw.length, d: aw.length ? "green" : "",
       sub: aw.length ? `${aw.length} answered while away` : S.away?.on ? "answering question boxes after 5 min" : "", ver: `${S.away?.on}|${aw.map((a) => a.at).join()}`,
       list: aw.slice(0, 3).map((a) => [a.question, a.name]), more: aw.length > 3 ? `${aw.length - 3} more` : ""});
-  const nm = newMocks();
-  if (nm.length) up.push({id: "mocks", title: "new mocks", tags: `<span class="tag">${esc([...new Set(nm.map((m) => m.dir))].join(", "))}</span>`, r: ago(nm[0].at / 1000),
-    sub: `${nm.length} not opened yet`, list: nm.slice(0, 2).map((m) => [m.name, m.dir]), more: nm.length > 2 ? `${nm.length - 2} more` : ""});
   // parcels not yet delivered, with a tracking number or not (an order the tracker read from a shop's mail), and the front desk
   const desk = pk?.desk.count ?? 0, ps = (pk?.packages.filter((x) => x.carrier !== "ubereats" && !x.unknown && !x.delivered) ?? []).sort((a, b) => Date.parse(b.last) - Date.parse(a.last));
   if (desk || ps.length || cur === "packages") {
@@ -930,7 +915,7 @@ function slide(left, was) {
   }
 }
 // an update's line that changed, or an update that came, is lit for 1.6 s (user liked it in the mock). Nothing lights
-// until packages and mocks have loaded once, so opening the page lights nothing
+// until packages and the inbox have loaded once, so opening the page lights nothing
 const lit = new Map(), litSeen = new Set();
 function litOld(left) {
   const m = new Map();
@@ -938,7 +923,7 @@ function litOld(left) {
   return m;
 }
 function litNew(left, old) {
-  const t = performance.now(), ready = S.packages && S.mocks && S.inbox;
+  const t = performance.now(), ready = S.packages && S.inbox;
   for (const e of ready ? left.querySelectorAll(".it:has(.hide)") : []) {
     if (litNew.ready && !litSeen.has(e.dataset.id)) lit.set(`${e.dataset.id}\u0001row`, t);
     litSeen.add(e.dataset.id);
@@ -1074,7 +1059,6 @@ function drawView(soft) {
   else if (!cur || cur === "nadya") html = nadyaView();
   else if (cur === "blog") html = `<iframe src="${BLOG}" title="blog" onload="this.contentDocument?.addEventListener('click', (e) => window.filesLink(e))"></iframe>`;
   else if (cur === "packages") html = `<iframe src="${PACKAGES}" title="packages"></iframe>`;
-  else if (cur === "mocks") html = mocksView();
   else if (cur === "inbox") html = inboxView();
   else if (cur === "away") html = awayView();
   else if (cur?.startsWith("rem-")) html = reminderView(cur);
@@ -1084,7 +1068,7 @@ function drawView(soft) {
   else if (i?.r) { html = sessionView(i.r); ph = `Message ${i.r.name}`; }
   else html = `<article><p class="meta">gone</p></article>`;
   if (soft && html === lastView) return;
-  if (soft && (cur === "blog" || cur === "packages" || (cur === "mocks" && S.mockOpen) || (cur === "inbox" && S.inboxOpen))) return;  // don't rebuild an iframe under the reader
+  if (soft && (cur === "blog" || cur === "packages" || (cur === "inbox" && S.inboxOpen))) return;  // don't rebuild an iframe under the reader
   lastView = html;
   const t = same && view.querySelector(".msgs > .typing");
   if (t) dots = {cur, at: Date.now(), rect: t.getBoundingClientRect()};
@@ -1455,14 +1439,6 @@ function pjFind(p, q) {
   return m || hits.length ? {s: (m?.score ?? 0) * 10 + hits.length, name: m?.html ?? esc(p.id), hits} : null;
 }
 const PJF = {all: () => true, working: (p) => p.kind === "nadya" || p.state === "todo" || p.open.some((t) => t.how === "named"), ideas: (p) => p.kind === "idea", done: (p) => p.state === "done"};
-// new mocks: every mock of the last 2 days, the new ones in bold; one opens here, under a line back to the list
-function mocksView() {
-  const m = S.mocks?.find((x) => x.url === S.mockOpen);
-  if (m) return `<article class="doc page"><div class="crumbs"><a href="#mocks" data-mocks>new mocks</a> / ${esc(m.dir)} / ${esc(m.name)} · <a href="${esc(m.url)}" target="_blank" rel="noopener">open in a tab</a></div><iframe src="${esc(m.url)}" title="${esc(m.name)}"></iframe></article>`;
-  if (!S.mocks) return `<article><p class="meta">loading…</p></article>`;
-  const nm = new Set(newMocks().map((x) => x.url));
-  return `<article><p class="meta">mocks changed in the last 2 days, in ~/web/&lt;project&gt;/mocks</p><ul class="mkl">${S.mocks.map((x) => `<li><a href="${esc(x.url)}" data-mock="${esc(x.url)}">${nm.has(x.url) ? `<b>${esc(x.name)}</b>` : esc(x.name)}</a> <span class="meta">${esc(x.dir)} · ${ago(x.at / 1000)}</span></li>`).join("") || "<li class=\"meta\">none</li>"}</ul></article>`;
-}
 // the inbox: every post, the new ones in bold; a link opens here under a line back to the list, a path in the files tab
 const inboxGo = (u) => /^(https?:\/\/|\/)/.test(u) ? null : `files/${u}`;  // a URL, or a path on this server (/cc/mocks/x.html)
 function inboxView() {
@@ -1471,7 +1447,7 @@ function inboxView() {
   if (!S.inbox) return `<article><p class="meta">loading…</p></article>`;
   const any = ibShown().some((x) => x.read);
   const undo = ibUndo ? `<div class="ibundo" role="status"><span>cleared “${esc(ibUndo.title)}”</span><button data-inbox-undo>undo</button></div>` : "";
-  return `<article><p class="meta">what nadya and the sessions posted for you (<code>ccx post</code>)${any ? ` · <button class="lk" data-inbox-clear="read">clear opened</button>` : ""}</p>${undo}<ul class="ibl">${ibShown().map((x) => {
+  return `<article><p class="meta">what nadya and the sessions posted for you (<code>ccx post</code>), and mocks changed in ~/web/&lt;project&gt;/mocks${any ? ` · <button class="lk" data-inbox-clear="read">clear opened</button>` : ""}</p>${undo}<ul class="ibl">${ibShown().map((x) => {
     const go = inboxGo(x.url);
     return `<li><a href="${go ? goHref(go) : esc(x.url)}" data-inbox="${esc(x.id)}"${go ? ` data-go="${esc(go)}"` : ""}>${x.read ? esc(x.title) : `<b>${esc(x.title)}</b>`}</a> <span class="meta">${esc(x.by)} · ${ago(x.at / 1000)}</span> <button class="ibx" data-inbox-clear="${esc(x.id)}" aria-label="clear" title="clear">×</button></li>`;
   }).join("") || "<li class=\"meta\">empty</li>"}</ul></article>`;
@@ -1489,20 +1465,10 @@ document.addEventListener("click", (e) => {
   S.inboxOpen = x?.id ?? null;
   draw(); drawView();
 }, true);
-document.addEventListener("click", (e) => {
-  const a = e.target.closest("[data-mock], [data-mocks]");
-  if (!a || !$("#view").contains(a)) return;
-  if (!plain(e)) { if (a.dataset.mock) { seeMock(a.dataset.mock); draw(); } return; }
-  e.preventDefault();
-  S.mockOpen = a.dataset.mock ?? null;
-  if (S.mockOpen) seeMock(S.mockOpen);
-  draw(); drawView();
-});
 addEventListener("auxclick", (e) => {
   if (e.button !== 1 || !$("#view").contains(e.target)) return;
-  const ib = e.target.closest("[data-inbox]")?.dataset.inbox, mk = e.target.closest("[data-mock]")?.dataset.mock;
+  const ib = e.target.closest("[data-inbox]")?.dataset.inbox;
   if (ib && S.inbox?.find((y) => y.id === ib && !y.read)) inboxDo("read", ib);
-  if (mk) { seeMock(mk); draw(); }
 });
 // a reminder's page, from its row in updates: the whole line and its buttons
 const remKey = (t) => `rem-${[...t.full].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0, 2166136261).toString(36)}`;
@@ -2238,13 +2204,13 @@ $("#left").addEventListener("pointercancel", () => { press = null; });  // a tou
 document.addEventListener("pointerup", (e) => {
   const p = press; press = null;
   if (!p?.id || p.pointer !== e.pointerId || !document.elementFromPoint(e.clientX, e.clientY)?.closest("#left")) return;
-  cur = items().find((x) => x.id === p.id)?.open ?? p.id; if (cur === "mocks") S.mockOpen = null; if (cur === "inbox") S.inboxOpen = null;
+  cur = items().find((x) => x.id === p.id)?.open ?? p.id; if (cur === "inbox") S.inboxOpen = null;
   push(); if (cur === "blog") localStorage.cc_blog_seen = Math.max(Date.now(), ...S.posts.map((x) => Date.parse(x.time) || 0)); open();
   if ((cur === "nadya" || cur.includes(".")) && matchMedia("(hover: hover) and (pointer: fine)").matches) $("#say").q.focus();
   eatClick = e.timeStamp;
 });
 // the click that follows that release: on a phone the page has replaced the list by then, so it went to whatever is
-// under the finger, the inbox's or new mocks' first entry (user, Oct 19th: "it kinda goes straight to the document")
+// under the finger, the inbox's first entry (user, Oct 19th: "it kinda goes straight to the document")
 let eatClick = -1e9;
 addEventListener("click", (e) => {
   if (e.timeStamp - eatClick > 800) return;
@@ -2434,8 +2400,8 @@ function open() {
 function saveSnap() {
   if (!S.listed || S.stale || Date.now() - (saveSnap.at ?? 0) < 5e3) return;
   saveSnap.at = Date.now();
-  const {rows, up, usage, series, posts, inbox, packages, mocks, reminders, away} = S;
-  try { localStorage.cc_snap = JSON.stringify({at: Date.now(), rows, up, usage, series, posts: posts.slice(0, 30), inbox, packages, mocks, reminders, away}); } catch {}
+  const {rows, up, usage, series, posts, inbox, packages, reminders, away} = S;
+  try { localStorage.cc_snap = JSON.stringify({at: Date.now(), rows, up, usage, series, posts: posts.slice(0, 30), inbox, packages, reminders, away}); } catch {}
 }
 const S0 = {...S};
 try {
@@ -2482,10 +2448,10 @@ checkVersion(true);
   if (localStorage.cc_screen !== sz) post("api/screen", {w: innerWidth, h: innerHeight, dpr: devicePixelRatio, coarse: matchMedia("(pointer: coarse)").matches, ua: navigator.userAgent}).then(() => localStorage.cc_screen = sz).catch(() => {});
 }
 listen();
-loadUsage(); loadBlog(); loadReminders(); loadPackages(); loadMocks(); loadInbox(); loadAway();
+loadUsage(); loadBlog(); loadReminders(); loadPackages(); loadInbox(); loadAway();
 // polls only while cc is on screen (proposal 9): the return reads everything again anyway
 const every = (f, ms) => setInterval(() => { if (!document.hidden) f(); }, ms);
-every(loadInbox, 30e3); every(loadAway, 30e3); every(loadUsage, 60e3); every(loadBlog, 60e3); every(loadReminders, 30e3); every(loadPackages, 5 * 60e3); every(loadMocks, 60e3); every(checkVersion, 60e3);
+every(loadInbox, 30e3); every(loadAway, 30e3); every(loadUsage, 60e3); every(loadBlog, 60e3); every(loadReminders, 30e3); every(loadPackages, 5 * 60e3); every(checkVersion, 60e3);
 // back on the tab or window (or the phone woke up): read everything again at once and reopen the streams.
 // focus, visibilitychange and pageshow often come together: one refresh per 2s
 let refreshed = Date.now();  // the load just read everything
@@ -2493,7 +2459,7 @@ function refresh() {
   if (document.visibilityState !== "visible" || Date.now() - refreshed < 2e3) return;
   refreshed = Date.now();
   listen(); if (stream) follow(stream.pid, true);  // a stream can sit open and dead after the phone slept
-  loadUsage(); loadBlog(); loadPackages(); loadMocks(); loadInbox(); loadAway(); if (isFiles(cur)) loadPath(cur.slice(6));
+  loadUsage(); loadBlog(); loadPackages(); loadInbox(); loadAway(); if (isFiles(cur)) loadPath(cur.slice(6));
 }
 document.addEventListener("visibilitychange", refresh);
 addEventListener("focus", refresh);

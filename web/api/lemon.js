@@ -3,8 +3,9 @@
 //   GET recent          the 10 files of ~/nadya changed last, the same ones left out: [{file, at (ms)}]
 //   GET docs?dir=~/ai/x   a project dir on this host: its docs (*.md, and what is under docs/, mocks/, research/), names only
 //   GET doc?path=         one of those, as text. Each takes host=marx: then over ssh
-//   GET inbox             the inbox, newest first: [{id, title, url, by, at (ms), read}]
-//   POST inbox {title, url, by?}   post one (a mock, a report): {id}. by defaults to the posting machine
+//   GET inbox             the inbox, newest first: [{id, title, url, by, at (ms), read, mock?}]; new mocks are added to it first
+//   POST inbox {title, url, by?}   post one (a mock, a report): {id}. by defaults to the posting machine. A url already
+//                                  there is that item again, unread and on top
 //   POST inbox/read {id} | inbox/clear {id}   mark one opened, or take it out (id "read": every opened one)
 //   POST screen {w, h, dpr, coarse, ua}   what a device's cc measured, once per size: ~/nadya/tmp/cc-screens.jsonl (50 kept)
 import Lemon from "lemon";
@@ -91,8 +92,8 @@ async function doc(host, path) {
   return new Response(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)), {headers: {"content-type": `${/\.html?$/.test(path) ? "text/html" : "text/plain"}; charset=utf-8`}});
 }
 
-// the sidebar's "new mocks" (user, Oct 18th, web/mocks/sidebar-rich-h.html): every ~/web/<x>/mocks/*.html changed in the
-// last 2 days, newest first: [{url, dir, name, at (ms)}]. ~/web/<x> is served at /<x>/ on this host
+// every ~/web/<x>/mocks/*.html changed in the last 2 days, newest first: [{url, dir, name, at (ms)}]. ~/web/<x> is served
+// at /<x>/ on this host. They go into the inbox (user, Oct 19th: "we probably want mocks and researchs together in inbox")
 async function mocks() {
   const ls = await sh(`find ~/web/*/mocks/ -maxdepth 1 -name '*.html' -mmin -2880 -printf '%T@ %p\\n' 2>/dev/null | sort -rn | head -n 40`);
   return ls.map((l) => {
@@ -106,18 +107,45 @@ async function mocks() {
 // url is a link, or a path the files tab opens (`research/x.md` in ~/nadya, `~/web/x/mocks/y.html`, `marx:~/web/...`)
 const INBOX = "~/nadya/tmp/inbox.jsonl";
 async function inboxRead() {
-  return (await sh(`cat ${INBOX} 2>/dev/null`)).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  return (await sh(`cat ${INBOX} 2>/dev/null`)).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)
+    .map((x) => ({...x, url: oneUrl(x.url)}));
+}
+// one form per place, so the same page posted twice is one item: this host's full URL as a path (/nadya/x.html), and an
+// .html under ~/web as the page it serves (nadya's /x/y.html, marx's https://marx.gum.ts.net/x/y.html)
+function oneUrl(u = "") {
+  return u.replace(/^https:\/\/nadya(\.gum\.ts\.net)?(?=\/)/, "")
+    .replace(/^(marx:)?(~|\/(home|Users)\/fserb)\/web(\/.*\.html?)$/, (_, m, _h, _u, p) => m ? `https://marx.gum.ts.net${p}` : p);
+}
+// a mock changed since the inbox last took it is an item: a new one, or its own again, unread and on top. inbox-mocks.json
+// keeps url -> the time taken, so a cleared mock stays out until it changes. The first run only notes what is there
+const MOCKS = "~/nadya/tmp/inbox-mocks.json";
+async function inboxMocks() {
+  const [ms, seen] = await Promise.all([mocks(), sh(`cat ${MOCKS} 2>/dev/null`).then((l) => JSON.parse(l.join("") || "null")).catch(() => null)]);
+  const fresh = ms.filter((m) => m.at > (seen?.[m.url] ?? 0));
+  if (seen && fresh.length) await inboxEdit((all) => {
+    for (const m of fresh.reverse()) {
+      const x = all.find((y) => y.url === m.url);
+      if (x && x.at >= m.at) continue;  // posted after its last change
+      if (x) all.splice(all.indexOf(x), 1);
+      all.push({...x ?? {id: newId(), title: m.name, by: `${m.dir} mocks`, mock: true}, url: m.url, at: m.at, read: false});
+    }
+  });
+  if (!seen || fresh.length) await write(MOCKS, JSON.stringify(Object.fromEntries(ms.map((m) => [m.url, m.at]))));
+}
+const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+async function write(f, text) {
+  const p = new Deno.Command("host", {args: [`cat > ${f}.tmp && mv ${f}.tmp ${f}`], stdin: "piped", stdout: "null", stderr: "null"}).spawn();
+  const w = p.stdin.getWriter();
+  await w.write(new TextEncoder().encode(text));
+  await w.close();
+  await p.status;
 }
 // writes go one at a time; the text goes on stdin, never into the shell string
 let inboxQ = Promise.resolve();
 function inboxEdit(f) {
   const run = inboxQ.then(async () => {
     const all = await inboxRead(), out = f(all);
-    const p = new Deno.Command("host", {args: [`cat > ${INBOX}.tmp && mv ${INBOX}.tmp ${INBOX}`], stdin: "piped", stdout: "null", stderr: "null"}).spawn();
-    const w = p.stdin.getWriter();
-    await w.write(new TextEncoder().encode(all.slice(-100).map((x) => `${JSON.stringify(x)}\n`).join("")));
-    await w.close();
-    await p.status;
+    await write(INBOX, all.slice(-100).map((x) => `${JSON.stringify(x)}\n`).join(""));
     return out;
   });
   inboxQ = run.catch(() => {});
@@ -126,12 +154,18 @@ function inboxEdit(f) {
 async function post(req) {
   const b = await req.json().catch(() => ({}));
   if (req.subpath === "/inbox") {
-    const title = `${b.title ?? ""}`.trim().slice(0, 200), url = `${b.url ?? ""}`.trim().slice(0, 1000);
+    const title = `${b.title ?? ""}`.trim().slice(0, 200), url = oneUrl(`${b.url ?? ""}`.trim().slice(0, 1000));
     if (!title && !url) return new Response("title or url", {status: 400});
     const by = `${b.by ?? ""}`.trim().slice(0, 40) || (await req.whois().catch(() => null))?.node?.split(".")[0] || "?";
-    const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-    await inboxEdit((all) => all.push({id, title: title || url.replace(/\/+$/, "").split("/").at(-1).replace(/\.(html?|md)$/, ""), url, by, at: Date.now(), read: false}));
-    return {id};
+    const name = title || url.replace(/\/+$/, "").split("/").at(-1).replace(/\.(html?|md)$/, "");
+    // the same url again (nadya publishing what a helper posted, a new round in place) is that item, not a second one
+    return await inboxEdit((all) => {
+      const x = url && all.find((y) => y.url === url);
+      if (x) all.splice(all.indexOf(x), 1);
+      const id = x?.id ?? newId();
+      all.push({id, title: name, url, by, at: Date.now(), read: false});
+      return {id};
+    });
   }
   // the phone's real viewport (nadya, Oct 19th: the Pixel 9 Pro XL's was computed from its screenshots, not measured)
   if (req.subpath === "/screen") {
@@ -156,9 +190,8 @@ async function post(req) {
 }
 
 async function get(req) {
-  if (req.subpath === "/inbox") return (await inboxRead()).reverse();
+  if (req.subpath === "/inbox") { await inboxMocks().catch(() => {}); return (await inboxRead()).reverse().sort((a, b) => b.at - a.at); }
   if (req.subpath === "/recent") return await recent();
-  if (req.subpath === "/mocks") return await mocks();
   const host = req.url.searchParams.get("host") === "marx" ? "marx" : "nadya";
   if (req.subpath === "/doc") return await doc(host, req.url.searchParams.get("path") ?? "");
   if (req.subpath === "/docs") {
