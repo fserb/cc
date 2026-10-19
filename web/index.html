@@ -52,8 +52,8 @@
   #pop .pl li.busy { opacity: 0.6; pointer-events: none; } #pop .pl li .err { grid-column: 1 / -1; }
   #pop .meta { margin: 0.3rem 1rem; }
   #pop .pbtn { margin-top: 0.3rem; padding: 0.3rem 6px 0; border-top: 1px solid rgb(0 0 0 / 0.06); }  /* the way to the whole list: a row, not the loudest thing in the pop-up (user) */
-  #pop .pbtn button { all: unset; cursor: pointer; display: flex; width: 100%; box-sizing: border-box; color: var(--accent); border-radius: 7px; padding: 0.35rem calc(1rem - 6px); }
-  #pop .pbtn button:hover { background: rgb(0 0 0 / 0.05); } #pop .pbtn button:active { background: rgb(0 0 0 / 0.09); } #pop .pbtn svg { display: none; } #pop .pbtn button::after { content: "›"; margin-left: auto; }
+  #pop .pbtn :is(button, a) { all: unset; cursor: pointer; display: flex; width: 100%; box-sizing: border-box; color: var(--accent); border-radius: 7px; padding: 0.35rem calc(1rem - 6px); }
+  #pop .pbtn :is(button, a):hover { background: rgb(0 0 0 / 0.05); } #pop .pbtn :is(button, a):active { background: rgb(0 0 0 / 0.09); } #pop .pbtn svg { display: none; } #pop .pbtn :is(button, a)::after { content: "›"; margin-left: auto; }
   body > header > b { font-size: 1.05rem; }
   body > header > b, #back { user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
   .sum { margin-left: auto; color: var(--muted); font-size: 1.05rem; white-space: nowrap; }  /* the title's size, so the two share a baseline (user, Oct 16th) */
@@ -70,7 +70,7 @@
   #left > * { flex-shrink: 0; }
   #left > .gone { position: absolute; left: 0; z-index: 1; background: var(--bg); pointer-events: none; }
   .sec { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 0.8rem 1.1rem 0.25rem; }
-  .it { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 0 0.7rem; padding: 0.35rem 1.1rem; cursor: pointer; align-items: baseline; }
+  .it { color: inherit; text-decoration: none; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 0 0.7rem; padding: 0.35rem 1.1rem; cursor: pointer; align-items: baseline; }
   .it:hover { background: var(--hover); } .it:active { background: var(--press); }
   @media (min-width: 761px) { #left { padding: 0.25rem 0; } .it { margin: 1px 6px; padding: 0.35rem calc(1.1rem - 6px); border-radius: 8px; } #left > .gone { margin: 0; } }  /* inset, as the tool buttons (user) */
   .it[aria-current=true] { background: var(--cur); }
@@ -108,6 +108,7 @@
   .awl .meta { margin: 0; font-size: 0.8rem; } .awl .meta a { color: var(--text); font-weight: 600; text-decoration: none; } .awl .meta a:hover { text-decoration: underline; } .awl .opts { color: var(--muted); font-size: 0.85rem; } .awl .rep { margin-top: 0.35rem; padding-left: 0.7rem; border-left: 2px solid var(--line); font-size: 0.9rem; }
   .awl .rep > :first-child { margin-top: 0; } .awl .rep > :last-child { margin-bottom: 0; } .awl li.new .q::before { content: "● "; color: var(--accent); }
   .ibl { list-style: none; padding: 0; } .ibl li { display: flex; gap: 0.5rem; align-items: baseline; padding: 0.3rem 0; } .ibl .meta { margin: 0; font-size: 0.8rem; }
+  a.ct.ct { display: contents; color: inherit; text-decoration: none; }  /* a whole row as a link, over .pj a and .doc a */ .lk { all: unset; color: var(--accent); cursor: pointer; } .lk:hover { text-decoration: underline; }
   .ibl .ibx { all: unset; margin-left: auto; padding: 0 0.4rem; color: var(--muted); cursor: pointer; border-radius: 4px; } .ibl .ibx:hover { background: var(--press); color: var(--text); }
   /* a line that changed, or a row that came, is lit for a moment; the delay carries it across redraws */
   .it .ch, .it.ch { animation: ch 1.6s ease-out; } @keyframes ch { from { background-color: var(--hot); color: var(--text); } }
@@ -371,6 +372,10 @@ const oldHash = (h) => h === "plan" ? "projects" : /^(idea|project)\/[\w.-]+\.md
 const hashCur = isDoc(oldHash(hash)) || isFiles(hash) ? oldHash(hash) : oldHash(hash.split("/")[0]);
 let cur = hashCur || (innerWidth > 760 ? "nadya" : null);
 const isPid = (c) => c?.includes(".") && !isDoc(c) && !isFiles(c);  // marx.1234
+// a link the browser opens itself on a modified or middle click (user, Oct 19th: "make them proper so I can choose where
+// to open them"); the page takes a plain click only
+const plain = (e) => !e.button && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey;
+const goHref = (go) => esc(`#${encodeURI(go).replace(/#/g, "%23")}`);
 function setHash() { if (cur) history.replaceState(history.state, "", `#${encodeURI(cur).replace(/#/g, "%23")}`); }
 const sent = new Map();  // item -> what was sent, for "✓" lines
 
@@ -917,7 +922,7 @@ function draw() {
     const below = i.bar !== undefined ? `<span class="bar"><i style="width:${(i.bar * 100).toFixed(1)}%"></i></span>`
       : i.list ? `<ul>${i.list.map(([a, b, e]) => `<li class="${e ? "e" : ""}" data-k="${esc(a)}"${v(b)}><span>${esc(a)}</span><span>${esc(b)}</span></li>`).join("")}${i.more ? `<li><span>${esc(i.more)}</span></li>` : ""}</ul>` : "";
     const on = i.id === (isDoc(cur) ? "projects" : isFiles(cur) ? "files" : cur) || (i.open && i.open === cur && !all.some((x) => x.id === cur));
-    html += `<div class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""} ${i.done ? "done" : ""}" data-id="${esc(i.id)}" aria-current="${on}"><span class="d ${i.d ?? ""}">${i.d === "q" ? "?" : ""}</span><span class="tx">${right === null ? `<div>${esc(i.title)}${i.tags ?? ""}</div>` : `<div class="t1"><b>${esc(i.title)}</b>${i.tags ?? ""}${right}</div>`}${up && !i.sub ? "" : `<small${v(i.sub)}>${esc(i.sub)}</small>`}${below}</span>${right === null ? `<time>${esc(i.t)}</time>` : ""}${up ? `<button class="hide" data-hide="${esc(i.id)}" aria-label="hide" title="hide">×</button>` : ""}</div>`;
+    html += `<a class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""} ${i.done ? "done" : ""}" href="${goHref(i.open ?? i.id)}" data-id="${esc(i.id)}" aria-current="${on}"><span class="d ${i.d ?? ""}">${i.d === "q" ? "?" : ""}</span><span class="tx">${right === null ? `<div>${esc(i.title)}${i.tags ?? ""}</div>` : `<div class="t1"><b>${esc(i.title)}</b>${i.tags ?? ""}${right}</div>`}${up && !i.sub ? "" : `<small${v(i.sub)}>${esc(i.sub)}</small>`}${below}</span>${right === null ? `<time>${esc(i.t)}</time>` : ""}${up ? `<button class="hide" data-hide="${esc(i.id)}" aria-label="hide" title="hide">×</button>` : ""}</a>`;
   }
   if (S.offline) html += `<p class="meta" style="padding:0 1.1rem">${esc(S.offline)}</p>`;
   const left = $("#left"), was = slid && places(left);
@@ -1403,21 +1408,21 @@ const PJF = {all: () => true, working: (p) => p.kind === "nadya" || p.state === 
 // new mocks: every mock of the last 2 days, the new ones in bold; one opens here, under a line back to the list
 function mocksView() {
   const m = S.mocks?.find((x) => x.url === S.mockOpen);
-  if (m) return `<article class="doc page"><div class="crumbs"><a href="#" data-mocks>new mocks</a> / ${esc(m.dir)} / ${esc(m.name)} · <a href="${esc(m.url)}" target="_blank" rel="noopener">open in a tab</a></div><iframe src="${esc(m.url)}" title="${esc(m.name)}"></iframe></article>`;
+  if (m) return `<article class="doc page"><div class="crumbs"><a href="#mocks" data-mocks>new mocks</a> / ${esc(m.dir)} / ${esc(m.name)} · <a href="${esc(m.url)}" target="_blank" rel="noopener">open in a tab</a></div><iframe src="${esc(m.url)}" title="${esc(m.name)}"></iframe></article>`;
   if (!S.mocks) return `<article><p class="meta">loading…</p></article>`;
   const nm = new Set(newMocks().map((x) => x.url));
   return `<article><p class="meta">mocks changed in the last 2 days, in ~/web/&lt;project&gt;/mocks</p><ul class="mkl">${S.mocks.map((x) => `<li><a href="${esc(x.url)}" data-mock="${esc(x.url)}">${nm.has(x.url) ? `<b>${esc(x.name)}</b>` : esc(x.name)}</a> <span class="meta">${esc(x.dir)} · ${ago(x.at / 1000)}</span></li>`).join("") || "<li class=\"meta\">none</li>"}</ul></article>`;
 }
 // the inbox: every post, the new ones in bold; a link opens here under a line back to the list, a path in the files tab
-const inboxGo = (u) => /^https?:\/\//.test(u) ? null : `files/${u}`;
+const inboxGo = (u) => /^(https?:\/\/|\/)/.test(u) ? null : `files/${u}`;  // a URL, or a path on this server (/cc/mocks/x.html)
 function inboxView() {
   const m = S.inbox?.find((x) => x.id === S.inboxOpen);
-  if (m) return `<article class="doc page"><div class="crumbs"><a href="#" data-inbox>inbox</a> / ${esc(m.title)} · <a href="${esc(m.url)}" target="_blank" rel="noopener">open in a tab</a></div><iframe src="${esc(m.url)}" title="${esc(m.title)}"></iframe></article>`;
+  if (m) return `<article class="doc page"><div class="crumbs"><a href="#inbox" data-inbox>inbox</a> / ${esc(m.title)} · <a href="${esc(m.url)}" target="_blank" rel="noopener">open in a tab</a></div><iframe src="${esc(m.url)}" title="${esc(m.title)}"></iframe></article>`;
   if (!S.inbox) return `<article><p class="meta">loading…</p></article>`;
   const any = S.inbox.some((x) => x.read);
-  return `<article><p class="meta">what nadya and the sessions posted for you (<code>ccx post</code>)${any ? ` · <a href="#" data-inbox-clear="read">clear opened</a>` : ""}</p><ul class="ibl">${S.inbox.map((x) => {
+  return `<article><p class="meta">what nadya and the sessions posted for you (<code>ccx post</code>)${any ? ` · <button class="lk" data-inbox-clear="read">clear opened</button>` : ""}</p><ul class="ibl">${S.inbox.map((x) => {
     const go = inboxGo(x.url);
-    return `<li><a href="#${esc(go ?? "inbox")}" data-inbox="${esc(x.id)}"${go ? ` data-go="${esc(go)}"` : ""}>${x.read ? esc(x.title) : `<b>${esc(x.title)}</b>`}</a> <span class="meta">${esc(x.by)} · ${ago(x.at / 1000)}</span> <button class="ibx" data-inbox-clear="${esc(x.id)}" aria-label="clear" title="clear">×</button></li>`;
+    return `<li><a href="${go ? goHref(go) : esc(x.url)}" data-inbox="${esc(x.id)}"${go ? ` data-go="${esc(go)}"` : ""}>${x.read ? esc(x.title) : `<b>${esc(x.title)}</b>`}</a> <span class="meta">${esc(x.by)} · ${ago(x.at / 1000)}</span> <button class="ibx" data-inbox-clear="${esc(x.id)}" aria-label="clear" title="clear">×</button></li>`;
   }).join("") || "<li class=\"meta\">empty</li>"}</ul></article>`;
 }
 document.addEventListener("click", (e) => {
@@ -1427,18 +1432,25 @@ document.addEventListener("click", (e) => {
   if (!a || !$("#view").contains(a)) return;
   const x = S.inbox?.find((y) => y.id === a.dataset.inbox);
   if (x && !x.read) inboxDo("read", x.id);
-  if (a.dataset.go) return;  // the files tab, by the data-go handler
-  e.preventDefault();
+  if (a.dataset.go || !plain(e)) return;  // the files tab, by the data-go handler
+  e.preventDefault(); e.stopPropagation();  // here, not in the files tab as filesLink would for a /nadya/ URL
   S.inboxOpen = x?.id ?? null;
   draw(); drawView();
 }, true);
 document.addEventListener("click", (e) => {
   const a = e.target.closest("[data-mock], [data-mocks]");
   if (!a || !$("#view").contains(a)) return;
+  if (!plain(e)) { if (a.dataset.mock) { seeMock(a.dataset.mock); draw(); } return; }
   e.preventDefault();
   S.mockOpen = a.dataset.mock ?? null;
   if (S.mockOpen) seeMock(S.mockOpen);
   draw(); drawView();
+});
+addEventListener("auxclick", (e) => {
+  if (e.button !== 1 || !$("#view").contains(e.target)) return;
+  const ib = e.target.closest("[data-inbox]")?.dataset.inbox, mk = e.target.closest("[data-mock]")?.dataset.mock;
+  if (ib && S.inbox?.find((y) => y.id === ib && !y.read)) inboxDo("read", ib);
+  if (mk) { seeMock(mk); draw(); }
 });
 // a reminder's page, from its row in updates: the whole line and its buttons
 const remKey = (t) => `rem-${[...t.full].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0, 2166136261).toString(36)}`;
@@ -1460,7 +1472,7 @@ function projectsView() {
   const us = todos.filter((t) => !t.done && t.how === "guess");
   const row = ({p, name, hits}) => {
     const lp = p.posts[0];
-    return `<li data-go="project/${esc(p.id)}"><span class="pdot ${p.state}"></span><b>${name}</b><span class="ln">${esc(lp?.text ?? p.sub)}</span>${pjSpark(p.days)}<time>${pjAge(p.last)}</time>${hits?.length ? `<div class="hits">${hits.slice(0, 2).map((h) => `<div>${h}</div>`).join("")}${hits.length > 2 ? `<div>+${hits.length - 2} more</div>` : ""}</div>` : ""}</li>`;
+    return `<li data-go="project/${esc(p.id)}"><a class="ct" href="${goHref(`project/${p.id}`)}"><span class="pdot ${p.state}"></span><b>${name}</b><span class="ln">${esc(lp?.text ?? p.sub)}</span>${pjSpark(p.days)}<time>${pjAge(p.last)}</time>${hits?.length ? `<div class="hits">${hits.slice(0, 2).map((h) => `<div>${h}</div>`).join("")}${hits.length > 2 ? `<div>+${hits.length - 2} more</div>` : ""}</div>` : ""}</a></li>`;
   };
   return `<article class="pj">${dueBox()}
     <div class="ptop"><label class="psearch"><input class="pjq" type="search" placeholder="search projects, posts and todos" value="${esc(s.q)}" autocomplete="off" enterkeyhint="go"></label><div class="pseg">${Object.keys(PJF).map((k) => `<button data-pjf="${k}" aria-pressed="${s.f === k}">${k}</button>`).join("")}</div></div>
@@ -1592,7 +1604,7 @@ function grepView() {
   // files whose name holds q first, then the most matching lines; lines drawn until 300, the files after that by name only
   const by = Map.groupBy(r.hits, (h) => h.file), fs = r.files.toSorted((a, b) => b.name - a.name || b.n - a.n || a.file.localeCompare(b.file));
   let left = 300;
-  return `<p class="meta">${fs.reduce((t, f) => t + f.n, 0)} lines in ${fs.length} files</p>${fs.map(({file, n}) => { const hs = (by.get(file) ?? []).slice(0, Math.max(0, left)); left -= hs.length; return `<section class="hits"><h3 class="go" data-go="files/${esc(file)}">${esc(file)}${n ? ` <small>${n}</small>` : ""}</h3><ul class="rows fl">${hs.map((h) => `<li class="go" data-go="files/${esc(file)}" data-line="${h.line}"><i class="ln">${h.line}</i><span>${hl(around(h.text.trim(), r.q), r.q)}</span></li>`).join("")}</ul></section>`; }).join("")}`;
+  return `<p class="meta">${fs.reduce((t, f) => t + f.n, 0)} lines in ${fs.length} files</p>${fs.map(({file, n}) => { const hs = (by.get(file) ?? []).slice(0, Math.max(0, left)); left -= hs.length; return `<section class="hits"><h3 class="go" data-go="files/${esc(file)}"><a class="ct" href="${goHref(`files/${file}`)}">${esc(file)}${n ? ` <small>${n}</small>` : ""}</a></h3><ul class="rows fl">${hs.map((h) => `<li class="go" data-go="files/${esc(file)}" data-line="${h.line}"><a class="ct" href="${goHref(`files/${file}`)}"><i class="ln">${h.line}</i><span>${hl(around(h.text.trim(), r.q), r.q)}</span></a></li>`).join("")}</ul></section>`; }).join("")}`;
 }
 // after a hit's file is drawn: scroll to the match on its line and mark it. The rendered text is not the raw one (markdown),
 // so it takes the query's k-th occurrence in the view, k being how many come before that line in the raw text
@@ -1630,7 +1642,7 @@ function filesView(path) {
   if (f.error) return `<article class="doc">${head}<p class="meta err">${esc(f.error)}</p></article>`;
   if (f.list) {
     const ls = [...f.list].sort((a, b) => b.is_dir - a.is_dir || a.name.localeCompare(b.name));
-    return `<article class="doc">${head}${search}<ul class="rows fl">${ls.map((x) => `<li class="go${x.is_dir ? " dir" : ""}" data-go="files/${esc(path + x.name)}"><span>${esc(x.name)}</span><small>${x.is_dir ? "" : `<i class="sz">${fsize(x.size)} · </i>`}${changed(x.mod_time)}</small></li>`).join("") || "<li><span class=meta>empty</span></li>"}</ul></article>`;
+    return `<article class="doc">${head}${search}<ul class="rows fl">${ls.map((x) => `<li class="go${x.is_dir ? " dir" : ""}" data-go="files/${esc(path + x.name)}"><a class="ct" href="${goHref(`files/${path + x.name}`)}"><span>${esc(x.name)}</span><small>${x.is_dir ? "" : `<i class="sz">${fsize(x.size)} · </i>`}${changed(x.mod_time)}</small></a></li>`).join("") || "<li><span class=meta>empty</span></li>"}</ul></article>`;
   }
   if (f.page) return `<article class="doc page">${head}<iframe src="${esc(f.page)}" title="${esc(parts.at(-1))}" onload="this.contentDocument?.addEventListener('click', (e) => window.filesLink(e))"></iframe></article>`;
   if (f.img) return `<article class="doc">${head}<img src="${esc(f.img)}" alt="${esc(parts.at(-1))}"></article>`;
@@ -1749,18 +1761,18 @@ function popBody() {
     return `<h4>tasks</h4>${!ts ? `<p class="meta">loading…</p>` : !ts.length ? `<p class="meta">no tasks in tasks.md</p>` : `<ul class="pl">${order.map((k) => { const t = ts[k]; return taskAsk === k
       ? `<li class="ask"><form class="task" data-task-form="${k}"><span>${esc(t.name)}</span><input name="v" placeholder="${esc(ask(t))}" autocomplete="off" autocapitalize="off"><button class="go">send</button></form>${t.err ? `<p class="err">${esc(t.err)}</p>` : ""}</li>`
       : `<li data-task="${k}" title="${esc(t.msg)}"><span>${esc(t.name)}${ask(t) ? "…" : ""}</span><time>${t.sent ? "sent ✓" : sent[t.name] ? ago2(sent[t.name]) : ""}</time>${t.err ? `<p class="err">${esc(t.err)}</p>` : ""}</li>`; }).join("")}</ul>`}
-      <div class="pbtn"><button type="button" data-go="files/tasks.md">${TOOLS.tasks[1]}all tasks</button></div>`;
+      <div class="pbtn"><a href="#files/tasks.md" data-go="files/tasks.md">${TOOLS.tasks[1]}all tasks</a></div>`;
   }
   if (popKind === "files") {
     const fs = S.recent;
-    return `<h4>recent files</h4>${!fs ? `<p class="meta">loading…</p>` : `<ul class="pl">${fs.map((f) => `<li data-go="files/${esc(f.file)}"><span>${esc(f.file)}</span><time>${ago2(f.at)}</time></li>`).join("")}</ul>`}
-      <div class="pbtn"><button type="button" data-go="files">${TOOLS.files[1]}all files</button></div>`;
+    return `<h4>recent files</h4>${!fs ? `<p class="meta">loading…</p>` : `<ul class="pl">${fs.map((f) => `<li data-go="files/${esc(f.file)}"><a class="ct" href="${goHref(`files/${f.file}`)}"><span>${esc(f.file)}</span><time>${ago2(f.at)}</time></a></li>`).join("")}</ul>`}
+      <div class="pbtn"><a href="#files" data-go="files">${TOOLS.files[1]}all files</a></div>`;
   }
   if (popKind === "away") {
     const as = S.away?.answered ?? [];
     return `<h4>away mode</h4>${awaySwitch()}<h4>answered while away</h4>${!S.away ? `<p class="meta">loading…</p>` : !as.length ? `<p class="meta">none in the last 2 weeks</p>`
-      : `<ul class="pl">${as.slice(0, 5).map((a) => `<li data-go="away"><span><b>${esc(a.name || a.pid)}</b><code>${esc(awayAt(a))}</code></span><time>${ago2(a.at)}</time><small>${esc(a.question)}</small></li>`).join("")}</ul>`}
-      <div class="pbtn"><button type="button" data-go="away">${TOOLS.away[1]}all answers</button></div>`;
+      : `<ul class="pl">${as.slice(0, 5).map((a) => `<li data-go="away"><a class="ct" href="#away"><span><b>${esc(a.name || a.pid)}</b><code>${esc(awayAt(a))}</code></span><time>${ago2(a.at)}</time><small>${esc(a.question)}</small></a></li>`).join("")}</ul>`}
+      <div class="pbtn"><a href="#away" data-go="away">${TOOLS.away[1]}all answers</a></div>`;
   }
   const cs = S.closed;  // the 8 newest; cchost sends up to 40 a host, the new pop-up's recent dirs read them all (user)
   return `<h4>restore session</h4>${!cs ? `<p class="meta">loading…</p>` : !cs.length ? `<p class="meta">none in the last week</p>` : `<ul class="pl">${cs.slice(0, 8).map((c, k) => `<li data-restore="${k}" title="restore"${c.busy ? ` class="busy"` : ""}><span><b>${esc(c.name || c.title || "unnamed")}</b><code>${esc(`${c.host === "nadya" ? "" : `${c.host}:`}${tilde(c.cwd).replace(/^~\/?/, "") || "~"}`)}</code></span><time>${c.busy ? "restoring…" : ago2(c.at)}</time><small>${esc(c.goal || (c.name ? c.title : "") || c.prompt || " ")}</small>${c.err ? `<p class="err">${esc(c.err)}</p>` : ""}</li>`).join("")}</ul>`}`;
@@ -2142,11 +2154,13 @@ const PEND_BAR = `<button class="x" aria-label="cancel, take back into the box">
 let press = null;
 $("#left").addEventListener("click", (e) => {
   const h = e.target.closest("[data-hide]");
-  if (!h) return;
+  // a row is opened by its pointerup; a modified click is the browser's, and Enter (detail 0) follows the hash
+  if (!h) { if (plain(e) && e.detail && e.target.closest("a.it")) e.preventDefault(); return; }
+  e.preventDefault();
   const u = updates().find((x) => x.id === h.dataset.hide);
   if (u) { upHidden[u.id] = u.ver; localStorage.cc_up_hidden = JSON.stringify(upHidden); draw(); }
 });
-$("#left").addEventListener("pointerdown", (e) => { const row = e.button === 0 && !e.target.closest(".hide") && e.target.closest(".it:not(.gone)"); press = row ? {id: aimed(e, row), pointer: e.pointerId} : null; });
+$("#left").addEventListener("pointerdown", (e) => { const row = plain(e) && !e.target.closest(".hide") && e.target.closest(".it:not(.gone)"); press = row ? {id: aimed(e, row), pointer: e.pointerId} : null; });
 $("#left").addEventListener("pointercancel", () => { press = null; });  // a touch that turned into a scroll
 // on the document and by the point: a touch is captured to the row it pressed, and a replaced row sends its up nowhere
 document.addEventListener("pointerup", (e) => {
@@ -2171,7 +2185,7 @@ document.addEventListener("click", async (e) => {
   const tool = e.target.closest("[data-tool]");
   if (tool) { if (popKind === tool.dataset.tool) closePop(); else openPop(tool.dataset.tool, tool); return; }
   if (e.target.closest("#shade")) { closePop(); return; }
-  if (popKind && (!e.target.closest("#pop") || e.target.closest("#pop [data-go]"))) closePop();
+  if (popKind && (!e.target.closest("#pop") || (e.target.closest("#pop [data-go]") && plain(e)))) closePop();
   const nk = e.target.closest("#pop [data-nk]"); if (nk) { newStep(nk.dataset.nk || null); return; }
   const np = e.target.closest("#pop [data-np]"); if (np) { newStep("project", np.dataset.np); return; }
   const rs = e.target.closest("#pop [data-restore]"); if (rs) { restore(S.closed[+rs.dataset.restore]); return; }
@@ -2189,7 +2203,7 @@ document.addEventListener("click", async (e) => {
   if (e.target.closest("#title") && narrow() && !document.body.classList.contains("view")) { cur = "nadya"; push(); open(); return; }
   if (e.target.closest("#back") || (narrow() && e.target.closest("#title"))) { if (history.state?.cc) history.back(); else document.body.classList.remove("view"); return; }
   if (filesLink(e)) return;
-  const go = e.target.closest("[data-go]"); if (go) { e.preventDefault(); S.jump = go.dataset.line ? {path: go.dataset.go.slice(6), line: +go.dataset.line, q: S.grep.res.q} : null; cur = go.dataset.go; push(isDoc(cur) || isFiles(cur)); open(); return; }
+  const go = e.target.closest("[data-go]"); if (go) { if (!plain(e)) return; e.preventDefault(); S.jump = go.dataset.line ? {path: go.dataset.go.slice(6), line: +go.dataset.line, q: S.grep.res.q} : null; cur = go.dataset.go; push(isDoc(cur) || isFiles(cur)); open(); return; }
   const tb = e.target.closest("[data-tabs] button");
   if (tb) {
     if (tb.getAttribute("aria-pressed") === "true") return;
