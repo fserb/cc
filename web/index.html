@@ -109,6 +109,12 @@
   .awl .rep > :first-child { margin-top: 0; } .awl .rep > :last-child { margin-bottom: 0; } .awl li.new .q::before { content: "● "; color: var(--accent); }
   .ibl { list-style: none; padding: 0; } .ibl li { display: flex; gap: 0.5rem; align-items: baseline; padding: 0.3rem 0; } .ibl .meta { margin: 0; font-size: 0.8rem; }
   a.ct.ct { display: contents; color: inherit; text-decoration: none; }  /* a whole row as a link, over .pj a and .doc a */ .lk { all: unset; color: var(--accent); cursor: pointer; } .lk:hover { text-decoration: underline; }
+  /* a line over the list: no connection (the last state, faded) or a newer cc (cc-phone.html, mocks/phone.html B, E) */
+  .band { display: flex; gap: 0.5rem; align-items: center; min-height: 32px; padding: 0.3rem 14px; font-size: 0.8rem; color: var(--muted); background: var(--track); border-bottom: 1px solid var(--line); }
+  .band b { color: var(--text); font-weight: 600; } .band.upd { background: var(--cur); color: #0b5c9e; justify-content: space-between; }
+  .band button { all: unset; cursor: pointer; color: var(--accent); font-weight: 600; padding: 0.4rem 0 0.4rem 0.8rem; margin: -0.4rem 0; } .band button:active { opacity: 0.6; }
+  #left.stale > .it, #left.stale > .sec, body.stale #qbtn { opacity: 0.55; }
+  .ibundo { display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0; font-size: 0.85rem; color: var(--muted); } .ibundo button { all: unset; cursor: pointer; color: var(--accent); font-weight: 600; padding: 0.5rem 0 0.5rem 1rem; }
   .ibl .ibx { all: unset; margin-left: auto; padding: 0 0.4rem; color: var(--muted); cursor: pointer; border-radius: 4px; } .ibl .ibx:hover { background: var(--press); color: var(--text); }
   /* a line that changed, or a row that came, is lit for a moment; the delay carries it across redraws */
   .it .ch, .it.ch { animation: ch 1.6s ease-out; } @keyframes ch { from { background-color: var(--hot); color: var(--text); } }
@@ -328,6 +334,12 @@
     .it { padding: 10px 14px; gap: 2px 10px; line-height: 1.4; min-height: 44px; } .it .tx div, .it .d { font-size: 17px; } .it .tx small { font-size: 15px; line-height: 1.25; } .it time { font-size: 14px; }
     .sec { font-size: 13px; padding: 1rem 14px 0.35rem; }
     .it ul { font-size: 14px; }
+    /* 44 px to tap (cc-phone.html proposal 8): back, send, >_, the tools, the inbox's × and clear opened */
+    #back { width: 44px; height: 44px; margin-left: -0.5rem; display: inline-grid; place-items: center; border-radius: 22px; padding: 0; transition: background-color 120ms ease; } #back:active { background: var(--press); }
+    #say .field > button { width: 44px; height: 44px; } #say textarea { min-height: 44px; padding: 0.65rem 0.5rem; }
+    .ptools .tool { height: 44px; }
+    .ibl li { align-items: center; padding: 0; gap: 0.6rem; } .ibl li > a { padding: 0.6rem 0; } .ibl li > .meta { flex: none; white-space: nowrap; } .ibl .ibx { flex: none; width: 44px; height: 44px; display: grid; place-items: center; margin-right: -0.6rem; font-size: 1.2rem; }
+    .lk[data-inbox-clear] { display: inline-block; padding: 0.7rem 0; margin: -0.7rem 0; }
     article { padding: 1rem; } .fl .sz { display: none; } #say { padding: 0.6rem 0.8rem calc(0.7rem + env(safe-area-inset-bottom)); } #say textarea, .free input, .fsq { font-size: 16px; }
   }
 </style>
@@ -482,17 +494,26 @@ function nadyaRow() {
 }
 
 // ---------- data
+// the % and pace as soon as they come, the graph when it does (one waited on the other: up to 20 s on a sleeping marx)
 async function loadUsage() {
-  const [u, s] = await Promise.all([json(`${CCX}/usage`).catch(() => null), json(`${CCX}/burn/series`).catch(() => null)]);
-  S.usage = u?.usage ?? S.usage; S.series = s?.w ? s : S.series; draw(); if (cur === "quota") loadBurn(); }
+  const series = json(`${CCX}/burn/series`).catch(() => null);
+  const u = await json(`${CCX}/usage`).catch(() => null);
+  S.usage = u?.usage ?? S.usage; draw();
+  const s = await series;
+  S.series = s?.w ? s : S.series; draw(); if (cur === "quota") loadBurn(); }
 async function loadBurn() {
   const [b, d] = await Promise.all([`${CCX}/burn`, `${CCX}/burn?hours=24`].map((u) => json(u).catch((e) => ({error: e.message}))));
   if (!b.error || !S.burn) S.burn = b;
   if (!d.error || !S.burn24) S.burn24 = d;
   drawView(true);
 }
+// asked with its ETag: an unchanged blog is a 304 with no body (it was 39 KB every minute for one line)
+let blogTag = "";
 async function loadBlog() {
-  const html = await fetch(BLOG, {cache: "no-cache"}).then((r) => r.text()).catch(() => "");
+  const r = await fetch(BLOG, {cache: "no-store", headers: blogTag ? {"if-none-match": blogTag} : {}}).catch(() => null);
+  if (!r?.ok) return;
+  const html = await r.text();
+  blogTag = r.headers.get("etag") ?? "";
   const doc = new DOMParser().parseFromString(html, "text/html");
   const posts = doc.querySelector("#posts");
   if (!posts) return;
@@ -572,6 +593,22 @@ async function loadInbox() {
   draw();
   if (cur === "inbox" && !S.inboxOpen) drawView(true);
 }
+// a post cleared with its ×: gone from the list at once, taken out after 5 s unless undone
+let ibUndo = null;
+function inboxClear(id) {
+  if (id === "read") return inboxDo("clear", id);
+  if (ibUndo) { clearTimeout(ibUndo.timer); ibUndo.go(); }
+  const x = S.inbox?.find((y) => y.id === id); if (!x) return;
+  const go = () => { if (ibUndo?.id === id) ibUndo = null; inboxDo("clear", id); };
+  ibUndo = {id, title: x.title, go, timer: setTimeout(go, 5e3)};
+  drawView(true); draw();
+}
+function inboxUndo() {
+  if (!ibUndo) return;
+  clearTimeout(ibUndo.timer); ibUndo = null;
+  drawView(true); draw();
+}
+const ibShown = () => (S.inbox ?? []).filter((x) => x.id !== ibUndo?.id);
 async function inboxDo(verb, id) {
   for (const x of S.inbox ?? []) if (x.id === id || (id === "read" && x.read)) { if (verb === "read") x.read = true; else x.gone = true; }
   S.inbox = S.inbox?.filter((x) => !x.gone);
@@ -649,12 +686,13 @@ function listen() {
     for (const r of rows) if (r.status) recorded.add(r.pid);
     for (const p of recorded) if (!rows.some((r) => r.pid === p)) recorded.delete(p);
     S.rows = rows.filter((r) => r.status || !recorded.has(r.pid)); S.offline = d.offline; S.listed = true;
+    const back = S.lost || S.stale; S.lost = false; S.stale = null; if (back) flushOutbox();
     // the open session ended (its host still answers): go to nadya, replacing the hash
     const up = S.up = d.up ?? [];
     if (had && !S.rows.some((r) => r.pid === cur) && up.includes(cur.split(".")[0])) { cur = "nadya"; if (history.state?.cc) history.replaceState({cc: cur}, ""); open(); return; }
     draw(); drawView(true);
   });
-  es.onerror = () => { S.offline = "events stream lost, retrying"; draw(); };
+  es.onerror = () => { S.offline = "events stream lost, retrying"; S.lost = true; draw(); };
 }
 // one session stream at a time: the open one (log for nadya, screen + dialog for all)
 let stream = null;
@@ -774,7 +812,7 @@ function items() {
   const n = nadyaRow();
   const nadyaHot = n && waitsOnYou(n);
   it.push({id: "nadya", d: nadyaHot ? "q" : n ? DOT[n.state] : "gray", hot: false, unread: unseen("nadya", n), title: "nadya",
-    ...(n ? {...sessionLine(n), sub: ""} : {sub: "not running", t: ""})});  // no goal line for nadya (user, 2026-10-14)
+    ...(n ? {...sessionLine(n), sub: ""} : {sub: S.lost && !S.listed ? "no connection" : "not running", t: ""})});  // no goal line for nadya (user, 2026-10-14)
   if (!localStorage.cc_blog_seen && S.posts.length) localStorage.cc_blog_seen = Date.now();
   const seen = +localStorage.cc_blog_seen || 0, top = S.posts[0];
   const fresh = S.posts.filter((x) => Date.parse(x.time) > seen).length;
@@ -924,11 +962,15 @@ function draw() {
     const on = i.id === (isDoc(cur) ? "projects" : isFiles(cur) ? "files" : cur) || (i.open && i.open === cur && !all.some((x) => x.id === cur));
     html += `<a class="it ${i.unread ? "unread" : ""} ${i.hot ? "hot " + i.d : ""} ${i.done ? "done" : ""}" href="${goHref(i.open ?? i.id)}" data-id="${esc(i.id)}" aria-current="${on}"><span class="d ${i.d ?? ""}">${i.d === "q" ? "?" : ""}</span><span class="tx">${right === null ? `<div>${esc(i.title)}${i.tags ?? ""}</div>` : `<div class="t1"><b>${esc(i.title)}</b>${i.tags ?? ""}${right}</div>`}${up && !i.sub ? "" : `<small${v(i.sub)}>${esc(i.sub)}</small>`}${below}</span>${right === null ? `<time>${esc(i.t)}</time>` : ""}${up ? `<button class="hide" data-hide="${esc(i.id)}" aria-label="hide" title="hide">×</button>` : ""}</a>`;
   }
-  if (S.offline) html += `<p class="meta" style="padding:0 1.1rem">${esc(S.offline)}</p>`;
+  const band = S.updated ? `<div class="band upd"><span>cc was updated ${ago(S.updated / 1000)} ago</span><button data-reload>reload</button></div>`
+    : S.stale && (S.lost || !navigator.onLine) ? `<div class="band"><b>no connection</b> · showing ${hhmm(S.stale / 1000)}, retrying</div>` : "";
+  if (S.offline && !band) html += `<p class="meta" style="padding:0 1.1rem">${esc(S.offline)}</p>`;
   const left = $("#left"), was = slid && places(left);
+  left.classList.toggle("stale", !!S.stale); document.body.classList.toggle("stale", !!S.stale);
+  saveSnap();
   const old = litOld(left);
   for (const c of [...left.children]) if (!c.classList.contains("gone")) c.remove();
-  left.insertAdjacentHTML("afterbegin", `<div class="ptools">${toolButtons(false)}</div>${html}`);
+  left.insertAdjacentHTML("afterbegin", `${band}<div class="ptools">${toolButtons(false)}</div>${html}`);
   litNew(left, old);
   if (was) slide(left, was);
   slid = !!S.listed && !matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1020,6 +1062,7 @@ function drawView(soft) {
   const vt = view.getBoundingClientRect().top, top = [...view.querySelectorAll(".m[data-at]")].find((m) => m.getBoundingClientRect().bottom > vt);
   const anchor = top && {at: top.dataset.at, off: top.getBoundingClientRect().top - vt};
   let html, ph = "Message nadya";
+  const later = () => S.lost || !navigator.onLine ? " · sent when back online" : "";
   if (cur === "quota") html = quotaView();
   else if (!cur || cur === "nadya") html = nadyaView();
   else if (cur === "blog") html = `<iframe src="${BLOG}" title="blog" onload="this.contentDocument?.addEventListener('click', (e) => window.filesLink(e))"></iframe>`;
@@ -1060,7 +1103,7 @@ function drawView(soft) {
     }
     dots = null;
   }
-  $("#say").q.placeholder = ph;
+  $("#say").q.placeholder = ph + later();
   $("#say").hidden = !(!cur || cur === "nadya" || i?.r);  // the prompt only where it talks to nadya or a session
   loadDraft();
   $("#center").classList.toggle("nadya", !cur || cur === "nadya");
@@ -1218,7 +1261,7 @@ function chat(r) {
   // sent from here, not in the log yet: kept below everything until the log shows it
   for (const p of pending.filter((x) => x.pid === r.pid)) {
     const stale = !p.err && Date.now() - p.at > 120e3;
-    const note = p.err ? `not sent: ${esc(p.err)}` : stale ? "not seen yet" : "";  // no "sending…": the faded bubble says it, and the line made it shrink when the log took it (user)
+    const note = p.wait ? "sent when back online" : p.err ? `not sent: ${esc(p.err)}` : stale ? "not seen yet" : "";  // no "sending…": the faded bubble says it, and the line made it shrink when the log took it (user)
     out.push(`<div class="pb ${p.err ? "fail" : stale ? "stale" : "pend"}" data-pend="${p.id}"><span class="bar">${PEND_BAR}</span><div class="m me">${thumbs((p.imgs ?? []).map((x) => x.url))}${esc(clip(p.text))}${note ? `<small>${note}</small>` : ""}</div></div>`);
   }
   // the state turns idle before the log has the reply: keep the dots up to 5 s until the reply shows, so it grows out of them
@@ -1419,15 +1462,17 @@ function inboxView() {
   const m = S.inbox?.find((x) => x.id === S.inboxOpen);
   if (m) return `<article class="doc page"><div class="crumbs"><a href="#inbox" data-inbox>inbox</a> / ${esc(m.title)} · <a href="${esc(m.url)}" target="_blank" rel="noopener">open in a tab</a></div><iframe src="${esc(m.url)}" title="${esc(m.title)}"></iframe></article>`;
   if (!S.inbox) return `<article><p class="meta">loading…</p></article>`;
-  const any = S.inbox.some((x) => x.read);
-  return `<article><p class="meta">what nadya and the sessions posted for you (<code>ccx post</code>)${any ? ` · <button class="lk" data-inbox-clear="read">clear opened</button>` : ""}</p><ul class="ibl">${S.inbox.map((x) => {
+  const any = ibShown().some((x) => x.read);
+  const undo = ibUndo ? `<div class="ibundo" role="status"><span>cleared “${esc(ibUndo.title)}”</span><button data-inbox-undo>undo</button></div>` : "";
+  return `<article><p class="meta">what nadya and the sessions posted for you (<code>ccx post</code>)${any ? ` · <button class="lk" data-inbox-clear="read">clear opened</button>` : ""}</p>${undo}<ul class="ibl">${ibShown().map((x) => {
     const go = inboxGo(x.url);
     return `<li><a href="${go ? goHref(go) : esc(x.url)}" data-inbox="${esc(x.id)}"${go ? ` data-go="${esc(go)}"` : ""}>${x.read ? esc(x.title) : `<b>${esc(x.title)}</b>`}</a> <span class="meta">${esc(x.by)} · ${ago(x.at / 1000)}</span> <button class="ibx" data-inbox-clear="${esc(x.id)}" aria-label="clear" title="clear">×</button></li>`;
   }).join("") || "<li class=\"meta\">empty</li>"}</ul></article>`;
 }
 document.addEventListener("click", (e) => {
   const c = e.target.closest("[data-inbox-clear]");
-  if (c && $("#view").contains(c)) { e.preventDefault(); inboxDo("clear", c.dataset.inboxClear); return; }
+  if (c && $("#view").contains(c)) { e.preventDefault(); inboxClear(c.dataset.inboxClear); return; }
+  if (e.target.closest("[data-inbox-undo]")) { inboxUndo(); return; }
   const a = e.target.closest("[data-inbox]");
   if (!a || !$("#view").contains(a)) return;
   const x = S.inbox?.find((y) => y.id === a.dataset.inbox);
@@ -2107,6 +2152,7 @@ $("#say").onsubmit = async (e) => {
   if (p.err) return;
   try { await post(`${CCX}/s/${to.pid}/type`, await typed(p)); }
   catch (err) {
+    if (err instanceof TypeError) { p.wait = true; saveOutbox(); drawView(true); return; }  // no connection: it goes when there is one
     p.err = err.message;
     if (!drafts[dk] && !attsOf(dk).length) { setDraft(dk, q); atts[dk] = imgs; if (draftKey === dk) { e.target.q.value = q; drawAtts(); fit(); } }
     drawView(true);
@@ -2116,7 +2162,7 @@ $("#say").onsubmit = async (e) => {
 // the queue); ✕ takes it back into the box (cchost's unqueue with {text} takes that one message out and answers
 // {kept}; an older cchost drops the whole queue and answers without it, so the other bubbles are typed again)
 const say = $("#say").q;
-const queued = (p) => !p.err;
+const queued = (p) => !p.err && !p.wait;
 async function typed(p) {
   if (!p.imgs?.length) return {text: p.text};
   await Promise.all(p.imgs.map((x) => x.ready));
@@ -2126,17 +2172,36 @@ async function sendNow(p) {
   try {
     if (!queued(p)) {
       if (hasDialog(S.rows.find((r) => r.pid === p.pid) ?? {})) return;  // the Enter would answer the dialog
-      p.err = null; p.at = Date.now(); drawView(true);
+      p.err = null; p.wait = false; p.at = Date.now(); drawView(true);
       if (say.value.trim() === p.q) { say.value = ""; setDraft(draftKey, ""); fit(); }
       if (p.imgs?.length && attsOf().every((x) => p.imgs.includes(x))) { atts[draftKey] = []; drawAtts(); fit(); }
       await post(`${CCX}/s/${p.pid}/type`, await typed(p));
     }
     drawView(true);
     await post(`${CCX}/s/${p.pid}/now`, {});
-  } catch (err) { p.err = err.message; drawView(true); }
+  } catch (err) { if (err instanceof TypeError) p.wait = true; else p.err = err.message; drawView(true); }
+  saveOutbox();
 }
+// the messages waiting for a connection, kept so one survives the app being closed (not their images)
+function saveOutbox() {
+  localStorage.cc_outbox = JSON.stringify(pending.filter((p) => p.wait).map(({pid, q, text, at}) => ({pid, q, text, at})));
+}
+let flushing = false;
+async function flushOutbox() {
+  if (flushing) return;
+  flushing = true;
+  for (const p of pending.filter((x) => x.wait)) {
+    p.wait = false; p.at = Date.now();
+    try { await post(`${CCX}/s/${p.pid}/type`, await typed(p)); }
+    catch (err) { if (err instanceof TypeError) { p.wait = true; break; } p.err = err.message; }
+  }
+  flushing = false;
+  saveOutbox(); drawView(true);
+}
+addEventListener("online", () => { draw(); flushOutbox(); });
+addEventListener("offline", () => { draw(); });
 async function unsend(p) {
-  pending = pending.filter((x) => x !== p);
+  pending = pending.filter((x) => x !== p); saveOutbox();
   if (!say.value.includes(p.q)) { say.value = say.value.trim() ? `${say.value.trimEnd()}\n${p.q}` : p.q; setDraft(draftKey, say.value); fit(); }
   if (p.imgs?.length) { atts[draftKey] = [...new Set([...attsOf(), ...p.imgs])]; drawAtts(); fit(); }
   drawView(true); say.focus();
@@ -2321,15 +2386,24 @@ function push(deeper) {
   if (history.state?.cc && !deeper) history.replaceState({cc: cur}, "");
   else history.pushState({cc: cur}, "");
 }
+// a back or forward also fires hashchange: that one is not a link to open. A new hash fires popstate too, so only the
+// Navigation API tells them apart (Chrome; the phone's app is a Chrome TWA)
+let popped = false;
+globalThis.navigation?.addEventListener("navigate", (e) => { popped = e.navigationType === "traverse"; });
 addEventListener("popstate", (e) => {
   if (e.state?.cc) { cur = e.state.cc; open(); }
   else document.body.classList.remove("view");
 });
-// a hash typed or pasted, or back on desktop to an entry with no state: open what it names (the phone's list has no state)
+// a hash typed or pasted, a link to cc#<pid> while cc is open (a push's tap), or back on desktop to an entry with no
+// state: open what it names. On a phone that entry becomes the item's, so back returns to where it came from; a back to
+// the phone's list (no state) is the popstate's, not a link
 addEventListener("hashchange", () => {
   const h = decodeURIComponent(location.hash.slice(1));
-  if (!h || h === cur || (narrow() && !history.state?.cc)) return;
-  cur = isDoc(oldHash(h)) || isFiles(h) ? oldHash(h) : oldHash(h.split("/")[0]); open();
+  if (!h || (narrow() && popped && !history.state?.cc)) return;
+  if (h === cur && document.body.classList.contains("view")) return;
+  cur = isDoc(oldHash(h)) || isFiles(h) ? oldHash(h) : oldHash(h.split("/")[0]);
+  if (narrow() && !history.state?.cc) history.replaceState({cc: cur}, "");
+  open();
 });
 function open() {
   document.body.classList.add("view");
@@ -2349,9 +2423,62 @@ function open() {
 }
 
 // ---------- start
+// the last list, updates and quota (cc-phone.html proposal 4): drawn faded at once, and kept if nothing answers
+function saveSnap() {
+  if (!S.listed || S.stale || Date.now() - (saveSnap.at ?? 0) < 5e3) return;
+  saveSnap.at = Date.now();
+  const {rows, up, usage, series, posts, inbox, packages, mocks, reminders, away} = S;
+  try { localStorage.cc_snap = JSON.stringify({at: Date.now(), rows, up, usage, series, posts: posts.slice(0, 30), inbox, packages, mocks, reminders, away}); } catch {}
+}
+const S0 = {...S};
+try {
+  const snap = JSON.parse(localStorage.cc_snap ?? "null");
+  if (snap) {
+    const {at, ...rest} = snap;
+    rest.reminders = rest.reminders?.map((x) => ({...x, due: x.due ? new Date(x.due) : x.due}));  // JSON keeps a Date as text
+    Object.assign(S, rest, {stale: at});
+  }
+  for (const o of JSON.parse(localStorage.cc_outbox ?? "[]")) pending.push({...o, id: ++pendId, imgs: [], wait: true});
+} catch {}
+// a snapshot this version cannot draw is dropped, never the page
+try { draw(); } catch (e) { console.error(e); delete localStorage.cc_snap; for (const k of Object.keys(S)) delete S[k]; Object.assign(S, S0); draw(); }
+// a newer index.html than this page (cc-phone.html proposal 7): the service worker answers from its cache, so a page
+// can be the version before. Checked on start (reloads at once), on each return (reloads if it was away for a minute,
+// else a line offers it) and every minute while shown
+const BUILT = Date.parse(document.lastModified);
+let hiddenAt = 0;
+async function checkVersion(auto) {
+  const r = await fetch(location.pathname, {method: "HEAD", cache: "no-store"}).catch(() => null);
+  const lm = Date.parse(r?.headers.get("last-modified") ?? "");
+  if (!(lm > BUILT + 1e3)) return;
+  if (auto) return update();
+  if (!S.updated) { S.updated = lm; draw(); }
+}
+async function update() {
+  // the new copy into the service worker's cache first, or the reload gets the old one again
+  const r = await fetch(location.pathname, {cache: "no-store"}).catch(() => null);
+  if (r?.ok && "caches" in self) {
+    const c = await caches.open("cc-v1");
+    await Promise.all([new URL("./", location), new URL("index.html", location)].map((u) => c.put(u.pathname, r.clone())));
+  }
+  location.reload();
+}
+document.addEventListener("click", (e) => { if (e.target.closest("[data-reload]")) update(); });
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  checkVersion(hiddenAt && Date.now() - hiddenAt > 60e3);
+});
+checkVersion(true);
+// this device's viewport, once per size (nadya, Oct 19th: the phone's was computed from screenshots, never measured)
+{
+  const sz = `${innerWidth}x${innerHeight}@${devicePixelRatio}`;
+  if (localStorage.cc_screen !== sz) post("api/screen", {w: innerWidth, h: innerHeight, dpr: devicePixelRatio, coarse: matchMedia("(pointer: coarse)").matches, ua: navigator.userAgent}).then(() => localStorage.cc_screen = sz).catch(() => {});
+}
 listen();
 loadUsage(); loadBlog(); loadReminders(); loadPackages(); loadMocks(); loadInbox(); loadAway();
-setInterval(loadInbox, 30e3); setInterval(loadAway, 30e3); setInterval(loadUsage, 60e3); setInterval(loadBlog, 60e3); setInterval(loadReminders, 30e3); setInterval(loadPackages, 5 * 60e3); setInterval(loadMocks, 60e3);
+// polls only while cc is on screen (proposal 9): the return reads everything again anyway
+const every = (f, ms) => setInterval(() => { if (!document.hidden) f(); }, ms);
+every(loadInbox, 30e3); every(loadAway, 30e3); every(loadUsage, 60e3); every(loadBlog, 60e3); every(loadReminders, 30e3); every(loadPackages, 5 * 60e3); every(loadMocks, 60e3); every(checkVersion, 60e3);
 // back on the tab or window (or the phone woke up): read everything again at once and reopen the streams.
 // focus, visibilitychange and pageshow often come together: one refresh per 2s
 let refreshed = Date.now();  // the load just read everything
