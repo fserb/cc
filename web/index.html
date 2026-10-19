@@ -97,6 +97,8 @@
   .it .hide { all: unset; position: absolute; top: 0.4rem; right: 0.4rem; display: none; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--muted); font-size: 0.85rem; line-height: 1; background: var(--bg); cursor: pointer; }
   .it .hide:hover { background: var(--press); color: var(--text); }
   @media (hover: hover) and (pointer: fine) { .it:hover .hide { display: grid; } .it:has(.hide):hover .t1 .at { visibility: hidden; } }
+  .ibl { list-style: none; padding: 0; } .ibl li { display: flex; gap: 0.5rem; align-items: baseline; padding: 0.3rem 0; } .ibl .meta { margin: 0; font-size: 0.8rem; }
+  .ibl .ibx { all: unset; margin-left: auto; padding: 0 0.4rem; color: var(--muted); cursor: pointer; border-radius: 4px; } .ibl .ibx:hover { background: var(--press); color: var(--text); }
   /* a line that changed, or a row that came, is lit for a moment; the delay carries it across redraws */
   .it .ch, .it.ch { animation: ch 1.6s ease-out; } @keyframes ch { from { background-color: var(--hot); color: var(--text); } }
   #center { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
@@ -511,6 +513,20 @@ function seeMock(url) {
   for (const k of Object.keys(mockSeen)) if (!S.mocks.some((x) => x.url === k)) delete mockSeen[k];
   localStorage.cc_mocks_seen = JSON.stringify(mockSeen);
 }
+// the inbox (user, Oct 19th: "like an inbox"): mocks and reports nadya and the sessions post (`ccx post`, web/api inbox,
+// ~/nadya/tmp/inbox.jsonl), newest first. One is new until opened here; the page's × takes it out, for every device
+async function loadInbox() {
+  S.inbox = await fetch("api/inbox", {cache: "no-cache"}).then((r) => r.ok ? r.json() : S.inbox).catch(() => S.inbox);
+  draw();
+  if (cur === "inbox" && !S.inboxOpen) drawView(true);
+}
+async function inboxDo(verb, id) {
+  for (const x of S.inbox ?? []) if (x.id === id || (id === "read" && x.read)) { if (verb === "read") x.read = true; else x.gone = true; }
+  S.inbox = S.inbox?.filter((x) => !x.gone);
+  draw(); if (cur === "inbox") drawView();
+  await fetch(`api/inbox/${verb}`, {method: "POST", body: JSON.stringify({id})}).catch(() => {});
+  loadInbox();
+}
 // an update hidden with its ×: id -> what it said then, so it comes back when that changes
 const upHidden = JSON.parse(localStorage.cc_up_hidden ?? "{}");
 async function loadList(file) {
@@ -741,6 +757,10 @@ function updates() {
   const today = new Date().toLocaleDateString("en-CA");
   for (const t of S.reminders.filter((t) => t.owner !== "nadya" && t.due && t.due <= now && !sent.has("todo:" + t.full)))
     up.push({id: remKey(t), title: t.text, r: t.date === today ? t.time ?? "" : t.date.slice(5), sub: now - t.due < 60e3 ? "due now" : `due ${ago(t.due / 1000)} ago`, hot: true, d: "blue"});
+  const ib = (S.inbox ?? []).filter((x) => !x.read);
+  if (ib.length || cur === "inbox")
+    up.push({id: "inbox", title: "inbox", tags: ib.length ? `<span class="tag">${ib.length} new</span>` : "", r: ib[0] ? ago(ib[0].at / 1000) : "", unread: ib.length, d: ib.length ? "green" : "", sub: "", ver: ib.map((x) => x.id).join(),
+      list: ib.slice(0, 3).map((x) => [x.title, x.by]), more: ib.length > 3 ? `${ib.length - 3} more` : ""});
   const nm = newMocks();
   if (nm.length) up.push({id: "mocks", title: "new mocks", tags: `<span class="tag">${esc([...new Set(nm.map((m) => m.dir))].join(", "))}</span>`, r: ago(nm[0].at / 1000),
     sub: `${nm.length} not opened yet`, list: nm.slice(0, 2).map((m) => [m.name, m.dir]), more: nm.length > 2 ? `${nm.length - 2} more` : ""});
@@ -752,7 +772,7 @@ function updates() {
       sub: "",  // the lines say it (user, Oct 18th: the subline repeated them); the front desk is a line of its own
       list: [...desk ? [["front desk", `${desk} waiting`]] : [], ...[...ps].sort((a, b) => (Date.parse(a.eta) || Infinity) - (Date.parse(b.eta) || Infinity)).slice(0, desk ? 2 : 3).map((x) => [`${carrier(x)}, ${shortLabel(x)}`, err(x) ? "tracking error" : x.eta ? weekday(x.eta) : x.status ?? "", err(x)])], more: ""});  // the 3 arriving soonest, no "N more": the count is beside the title (user)
   }
-  for (const u of up) { u.sec = "updates"; u.ver = `${u.sub}|${u.r}`; }
+  for (const u of up) { u.sec = "updates"; u.ver ??= `${u.sub}|${u.r}`; }
   for (const k of Object.keys(upHidden)) if (!up.some((u) => u.id === k)) delete upHidden[k];
   return up.filter((u) => upHidden[u.id] !== u.ver);
 }
@@ -816,7 +836,7 @@ function litOld(left) {
   return m;
 }
 function litNew(left, old) {
-  const t = performance.now(), ready = S.packages && S.mocks;
+  const t = performance.now(), ready = S.packages && S.mocks && S.inbox;
   for (const e of ready ? left.querySelectorAll(".it:has(.hide)") : []) {
     if (litNew.ready && !litSeen.has(e.dataset.id)) lit.set(`${e.dataset.id}\u0001row`, t);
     litSeen.add(e.dataset.id);
@@ -947,6 +967,7 @@ function drawView(soft) {
   else if (cur === "blog") html = `<iframe src="${BLOG}" title="blog" onload="this.contentDocument?.addEventListener('click', (e) => window.filesLink(e))"></iframe>`;
   else if (cur === "packages") html = `<iframe src="${PACKAGES}" title="packages"></iframe>`;
   else if (cur === "mocks") html = mocksView();
+  else if (cur === "inbox") html = inboxView();
   else if (cur?.startsWith("rem-")) html = reminderView(cur);
   else if (cur === "projects") html = projectsView();
   else if (isDoc(cur)) html = projectView(cur.slice(8));
@@ -954,7 +975,7 @@ function drawView(soft) {
   else if (i?.r) { html = sessionView(i.r); ph = `Message ${i.r.name}`; }
   else html = `<article><p class="meta">gone</p></article>`;
   if (soft && html === lastView) return;
-  if (soft && (cur === "blog" || cur === "packages" || (cur === "mocks" && S.mockOpen))) return;  // don't rebuild an iframe under the reader
+  if (soft && (cur === "blog" || cur === "packages" || (cur === "mocks" && S.mockOpen) || (cur === "inbox" && S.inboxOpen))) return;  // don't rebuild an iframe under the reader
   lastView = html;
   const t = same && view.querySelector(".msgs > .typing");
   if (t) dots = {cur, at: Date.now(), rect: t.getBoundingClientRect()};
@@ -1333,6 +1354,30 @@ function mocksView() {
   const nm = new Set(newMocks().map((x) => x.url));
   return `<article><p class="meta">mocks changed in the last 2 days, in ~/web/&lt;project&gt;/mocks</p><ul class="mkl">${S.mocks.map((x) => `<li><a href="${esc(x.url)}" data-mock="${esc(x.url)}">${nm.has(x.url) ? `<b>${esc(x.name)}</b>` : esc(x.name)}</a> <span class="meta">${esc(x.dir)} · ${ago(x.at / 1000)}</span></li>`).join("") || "<li class=\"meta\">none</li>"}</ul></article>`;
 }
+// the inbox: every post, the new ones in bold; a link opens here under a line back to the list, a path in the files tab
+const inboxGo = (u) => /^https?:\/\//.test(u) ? null : `files/${u}`;
+function inboxView() {
+  const m = S.inbox?.find((x) => x.id === S.inboxOpen);
+  if (m) return `<article class="doc page"><div class="crumbs"><a href="#" data-inbox>inbox</a> / ${esc(m.title)} · <a href="${esc(m.url)}" target="_blank" rel="noopener">open in a tab</a></div><iframe src="${esc(m.url)}" title="${esc(m.title)}"></iframe></article>`;
+  if (!S.inbox) return `<article><p class="meta">loading…</p></article>`;
+  const any = S.inbox.some((x) => x.read);
+  return `<article><p class="meta">what nadya and the sessions posted for you (<code>ccx post</code>)${any ? ` · <a href="#" data-inbox-clear="read">clear opened</a>` : ""}</p><ul class="ibl">${S.inbox.map((x) => {
+    const go = inboxGo(x.url);
+    return `<li><a href="#${esc(go ?? "inbox")}" data-inbox="${esc(x.id)}"${go ? ` data-go="${esc(go)}"` : ""}>${x.read ? esc(x.title) : `<b>${esc(x.title)}</b>`}</a> <span class="meta">${esc(x.by)} · ${ago(x.at / 1000)}</span> <button class="ibx" data-inbox-clear="${esc(x.id)}" aria-label="clear" title="clear">×</button></li>`;
+  }).join("") || "<li class=\"meta\">empty</li>"}</ul></article>`;
+}
+document.addEventListener("click", (e) => {
+  const c = e.target.closest("[data-inbox-clear]");
+  if (c && $("#view").contains(c)) { e.preventDefault(); inboxDo("clear", c.dataset.inboxClear); return; }
+  const a = e.target.closest("[data-inbox]");
+  if (!a || !$("#view").contains(a)) return;
+  const x = S.inbox?.find((y) => y.id === a.dataset.inbox);
+  if (x && !x.read) inboxDo("read", x.id);
+  if (a.dataset.go) return;  // the files tab, by the data-go handler
+  e.preventDefault();
+  S.inboxOpen = x?.id ?? null;
+  draw(); drawView();
+}, true);
 document.addEventListener("click", (e) => {
   const a = e.target.closest("[data-mock], [data-mocks]");
   if (!a || !$("#view").contains(a)) return;
@@ -2045,7 +2090,7 @@ $("#left").addEventListener("pointercancel", () => { press = null; });  // a tou
 document.addEventListener("pointerup", (e) => {
   const p = press; press = null;
   if (!p?.id || p.pointer !== e.pointerId || !document.elementFromPoint(e.clientX, e.clientY)?.closest("#left")) return;
-  cur = items().find((x) => x.id === p.id)?.open ?? p.id; if (cur === "mocks") S.mockOpen = null;
+  cur = items().find((x) => x.id === p.id)?.open ?? p.id; if (cur === "mocks") S.mockOpen = null; if (cur === "inbox") S.inboxOpen = null;
   push(); if (cur === "blog") localStorage.cc_blog_seen = Math.max(Date.now(), ...S.posts.map((x) => Date.parse(x.time) || 0)); open();
   if ((cur === "nadya" || cur.includes(".")) && matchMedia("(hover: hover) and (pointer: fine)").matches) $("#say").q.focus();
 });
@@ -2218,8 +2263,8 @@ function open() {
 
 // ---------- start
 listen();
-loadUsage(); loadBlog(); loadReminders(); loadPackages(); loadMocks();
-setInterval(loadUsage, 60e3); setInterval(loadBlog, 60e3); setInterval(loadReminders, 30e3); setInterval(loadPackages, 5 * 60e3); setInterval(loadMocks, 60e3);
+loadUsage(); loadBlog(); loadReminders(); loadPackages(); loadMocks(); loadInbox();
+setInterval(loadInbox, 30e3); setInterval(loadUsage, 60e3); setInterval(loadBlog, 60e3); setInterval(loadReminders, 30e3); setInterval(loadPackages, 5 * 60e3); setInterval(loadMocks, 60e3);
 // back on the tab or window (or the phone woke up): read everything again at once and reopen the streams.
 // focus, visibilitychange and pageshow often come together: one refresh per 2s
 let refreshed = Date.now();  // the load just read everything
@@ -2227,7 +2272,7 @@ function refresh() {
   if (document.visibilityState !== "visible" || Date.now() - refreshed < 2e3) return;
   refreshed = Date.now();
   listen(); if (stream) follow(stream.pid, true);  // a stream can sit open and dead after the phone slept
-  loadUsage(); loadBlog(); loadPackages(); loadMocks(); if (isFiles(cur)) loadPath(cur.slice(6));
+  loadUsage(); loadBlog(); loadPackages(); loadMocks(); loadInbox(); if (isFiles(cur)) loadPath(cur.slice(6));
 }
 document.addEventListener("visibilitychange", refresh);
 addEventListener("focus", refresh);

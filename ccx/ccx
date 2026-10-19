@@ -1384,6 +1384,29 @@ async function cmdGoal(spec, ...words) {
     (await api(`/api/s/${i.id}/goal`, {goal}))[1])));
 }
 
+// ccx post <url|path> [title...]
+// Into cc's inbox (UPDATES): a mock or a report for the user to look at. Not cchost's: cc's web/api box on nadya keeps
+// it (~/nadya/tmp/inbox.jsonl), so this is the one command that talks to something else. A path is made absolute and
+// named on this host (`marx:~/web/x/mocks/a.html`; on nadya `~/nadya/` is left off, as the files tab names it)
+async function cmdPost(where, ...words) {
+  if (!where) usage();
+  let url = where;
+  if (!/^https?:\/\//.test(where)) {
+    const home = Deno.env.get("HOME") ?? "";
+    let p = where.startsWith("~/") ? where : where.startsWith("/") ? where : `${Deno.cwd()}/${where}`;
+    p = p.replace(/\/\.\//g, "/");
+    if (home && (p === home || p.startsWith(`${home}/`))) p = `~${p.slice(home.length)}`;
+    url = SELF === "nadya" ? p.replace(/^~\/nadya\//, "") : `${SELF}:${p}`;
+  }
+  const self = selfPid();
+  const by = (self && (await listing()).find((i) => !i.host && i.pid === self)?.name) || SELF;
+  const inbox = Deno.env.get("CC_INBOX") ?? "https://nadya.gum.ts.net/cc/api/inbox";
+  const r = await fetch(inbox, {method: "POST", body: JSON.stringify({url, title: words.join(" "), by}), signal: AbortSignal.timeout(10_000)})
+    .catch((e) => ({ok: false, status: 0, text: () => e.message}));
+  if (!r.ok) { console.error(`ccx: post: ${r.status} ${await r.text()}`); Deno.exit(1); }
+  console.log(`posted ${url}`);
+}
+
 // ccx chat [--no-follow] [--here]
 // What the agents in this directory said to each other, out of the transcripts of every
 // host (the same path under each one's home) or with --here this host's: cchost's api/chat,
@@ -1548,6 +1571,7 @@ const COMMANDS = {
   send: [cmdSend, -1],               // -1: its own validation, since the message is the rest
   user: [cmdUser, -1],
   goal: [cmdGoal, -1],
+  post: [cmdPost, -1],
   chat: [cmdChat, -1],
   notify: [cmdNotify, -1],
   subs: [cmdSubs, 0],
@@ -1583,6 +1607,7 @@ const HELP = [
   ["", "refused while it shows a dialog, which the Enter would answer, unless --force"],
   ["    --as <who>", "who cc names as having typed it (default: the calling session, else ccx)"],
   ["  goal <target> <text...>", "set what cc shows under its name, in place of Claude's summary"],
+  ["  post <url|path> [title...]", "into cc's inbox (UPDATES), for the user to open: a mock, a report"],
   ["  chat [--no-follow] [--here]", "what the agents in this dir have said to each other, on every"],
   ["", "host (the same path under its home); --here this host's only"],
   ["  notify <who> when <target>", "message who (`me` inside a claude) from `ccx` when target's"],

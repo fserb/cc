@@ -3,6 +3,9 @@
 //   GET recent          the 10 files of ~/nadya changed last, the same ones left out: [{file, at (ms)}]
 //   GET docs?dir=~/ai/x   a project dir on this host: its docs (*.md, and what is under docs/, mocks/, research/), names only
 //   GET doc?path=         one of those, as text. Each takes host=marx: then over ssh
+//   GET inbox             the inbox, newest first: [{id, title, url, by, at (ms), read}]
+//   POST inbox {title, url, by?}   post one (a mock, a report): {id}. by defaults to the posting machine
+//   POST inbox/read {id} | inbox/clear {id}   mark one opened, or take it out (id "read": every opened one)
 import Lemon from "lemon";
 
 const PER = 10;  // matching lines kept per file
@@ -97,7 +100,49 @@ async function mocks() {
   });
 }
 
+// the inbox (user, Oct 19th: "update section that contained posted mocks/researches links", "like an inbox"): what nadya
+// and the sessions post for the user to look at, in ~/nadya/tmp/inbox.jsonl, one JSON object a line, oldest first, 100 kept.
+// url is a link, or a path the files tab opens (`research/x.md` in ~/nadya, `~/web/x/mocks/y.html`, `marx:~/web/...`)
+const INBOX = "~/nadya/tmp/inbox.jsonl";
+async function inboxRead() {
+  return (await sh(`cat ${INBOX} 2>/dev/null`)).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+}
+// writes go one at a time; the text goes on stdin, never into the shell string
+let inboxQ = Promise.resolve();
+function inboxEdit(f) {
+  const run = inboxQ.then(async () => {
+    const all = await inboxRead(), out = f(all);
+    const p = new Deno.Command("host", {args: [`cat > ${INBOX}.tmp && mv ${INBOX}.tmp ${INBOX}`], stdin: "piped", stdout: "null", stderr: "null"}).spawn();
+    const w = p.stdin.getWriter();
+    await w.write(new TextEncoder().encode(all.slice(-100).map((x) => `${JSON.stringify(x)}\n`).join("")));
+    await w.close();
+    await p.status;
+    return out;
+  });
+  inboxQ = run.catch(() => {});
+  return run;
+}
+async function post(req) {
+  const b = await req.json().catch(() => ({}));
+  if (req.subpath === "/inbox") {
+    const title = `${b.title ?? ""}`.trim().slice(0, 200), url = `${b.url ?? ""}`.trim().slice(0, 1000);
+    if (!title && !url) return new Response("title or url", {status: 400});
+    const by = `${b.by ?? ""}`.trim().slice(0, 40) || (await req.whois().catch(() => null))?.node?.split(".")[0] || "?";
+    const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    await inboxEdit((all) => all.push({id, title: title || url.replace(/\/+$/, "").split("/").at(-1).replace(/\.(html?|md)$/, ""), url, by, at: Date.now(), read: false}));
+    return {id};
+  }
+  if (req.subpath === "/inbox/read") return await inboxEdit((all) => { for (const x of all) if (x.id === b.id) x.read = true; return {ok: true}; });
+  if (req.subpath === "/inbox/clear") return await inboxEdit((all) => {
+    const keep = all.filter((x) => b.id === "read" ? !x.read : x.id !== b.id);
+    all.splice(0, all.length, ...keep);
+    return {ok: true};
+  });
+  return Response.HTTP_NOT_FOUND;
+}
+
 async function get(req) {
+  if (req.subpath === "/inbox") return (await inboxRead()).reverse();
   if (req.subpath === "/recent") return await recent();
   if (req.subpath === "/mocks") return await mocks();
   const host = req.url.searchParams.get("host") === "marx" ? "marx" : "nadya";
@@ -114,4 +159,4 @@ async function get(req) {
   return await grep(q);
 }
 
-await Lemon(get);
+await Lemon(get, post);
