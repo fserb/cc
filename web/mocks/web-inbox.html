@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc mock: an inbox you can answer</title>
+<style>
+  :root { --bg: #fff; --text: #212529; --muted: #6c757d; --line: #e9ecef; --hover: #f3f4f6; --accent: #0b7bd3; --cur: #e7f1fb; --green: #2f9e44;
+    --press: #e9ecef; --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --purple: #7950f2;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 var(--font); color: var(--text); background: #fafafa; }
+  header.top { padding: 1rem 1.4rem 0; } header.top h1 { font-size: 1.15rem; margin: 0; }
+  header.top p { color: var(--muted); font-size: 0.88rem; margin: 0.2rem 0 0; max-width: 62rem; }
+  main { padding: 1rem 1.4rem 3rem; display: flex; flex-direction: column; gap: 1.6rem; max-width: 80rem; }
+  h2 { font-size: 0.95rem; margin: 0 0 0.5rem; }
+  .note { color: var(--muted); font-size: 0.85rem; margin: 0.4rem 0 0; max-width: 62rem; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; align-items: start; }
+  .card { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.2rem; }
+  .card > h3 { font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; margin: 0 0 0.6rem; }
+  /* today */
+  .old li { margin: 0.35rem 0; list-style: none; display: flex; gap: 0.5rem; align-items: baseline; }
+  .old ul { padding: 0; margin: 0; } .old a { color: #00e; font-weight: 700; } .old small { color: var(--muted); } .old .x { margin-left: auto; color: var(--muted); }
+  /* proposed */
+  .grp { font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); margin: 0.9rem 0 0.2rem; }
+  .grp:first-of-type { margin-top: 0; }
+  .it { display: grid; grid-template-columns: 8px 1fr auto; gap: 0 0.7rem; padding: 0.5rem 0.6rem; margin: 0 -0.6rem; border-radius: 8px; cursor: pointer; transition: background-color 120ms ease; }
+  .it:hover { background: var(--hover); } .it:active { background: var(--press); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); margin-top: 0.55rem; } .dot.r { background: transparent; }
+  .it b { font-weight: 600; } .it.r b { font-weight: 400; }
+  .it .who { font-size: 0.78rem; color: var(--muted); text-align: right; white-space: nowrap; }
+  .it .q { grid-column: 2 / 4; font-size: 0.84rem; color: var(--muted); }
+  .it .q em { font-style: normal; color: var(--purple); }
+  .opts { grid-column: 2 / 4; display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.35rem; }
+  .chip { all: unset; cursor: pointer; font-size: 0.8rem; border: 1px solid var(--line); border-radius: 99px; padding: 0.1rem 0.65rem; background: #fff; transition: transform 120ms var(--ease-out), border-color 120ms; }
+  .chip:hover { border-color: var(--accent); color: var(--accent); } .chip:active { transform: scale(0.96); }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .sent { grid-column: 2 / 4; font-size: 0.8rem; color: var(--green); margin-top: 0.2rem; }
+  /* the open item */
+  .frame { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
+  .fbar { display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.9rem; border-bottom: 1px solid var(--line); font-size: 0.88rem; }
+  .fbar b { font-weight: 600; } .fbar small { color: var(--muted); } .fbar .sp { flex: 1; }
+  .fbar a { color: var(--accent); text-decoration: none; font-size: 0.82rem; }
+  .shot { height: 250px; background: repeating-linear-gradient(0deg, #f7f8f9 0 22px, #fff 22px 44px); display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 14px; }
+  .shot div { background: #fff; border: 1px solid var(--line); border-radius: 8px; display: grid; place-items: center; color: var(--muted); font-size: 0.85rem; }
+  .ans { border-top: 1px solid var(--line); padding: 0.7rem 0.9rem; }
+  .ans .lbl { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.35rem; }
+  .ans .box { display: flex; gap: 0.5rem; align-items: center; border: 1px solid var(--line); border-radius: 22px; padding: 0.35rem 0.4rem 0.35rem 0.9rem; margin-top: 0.5rem; color: var(--muted); font-size: 0.88rem; }
+  .ans .box .sp { flex: 1; } .send { width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 0.9rem; }
+  .open { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem 1rem; font-size: 0.85rem; }
+  .open li { margin: 0.2rem 0; }
+  code { font: 0.82em var(--mono); }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>An inbox you can answer</h1>
+  <p>All 14 posts in the inbox on Oct 19th are mocks or reports, and most end with a choice for the user ("Choosing one waits on you"). Today a pick means opening nadya's chat and retyping the title. Proposed: each post says what it waits for, and the answer is typed right there and sent to nadya as <code>[cc inbox] &lt;title&gt;: &lt;answer&gt;</code>. cc-c, Oct 19th; report: <a href="https://nadya.gum.ts.net/nadya/research/cc-web.html">research/cc-web.html</a> (proposal 2).</p>
+</header>
+<main>
+
+<section class="pair">
+  <div class="card old">
+    <h3>Today (#inbox, Oct 19th, 11:50)</h3>
+    <ul>
+      <li><a>page-watch round 2</a><small>nadya-d · 1min</small><span class="x">×</span></li>
+      <li><a>cc tooling: mocks</a><small>cc-b · 3min</small><span class="x">×</span></li>
+      <li><a>cc tooling: 6 proposals (report)</a><small>cc-b · 3min</small><span class="x">×</span></li>
+      <li><a>techtree round 2</a><small>nadya-a · 3min</small><span class="x">×</span></li>
+      <li><a>--help</a><small>nadya-d · 7min</small><span class="x">×</span></li>
+      <li><a>home page for Katrina (mock)</a><small>dream · 8min</small><span class="x">×</span></li>
+      <li><a>hallway: offsite notes page</a><small>dream · 8min</small><span class="x">×</span></li>
+      <li><a>craftbox v3 shell (picked)</a><small>nadya-c · 8min</small><span class="x">×</span></li>
+      <li><a>calculator v2 mock</a><small>nadya-d · 8min</small><span class="x">×</span></li>
+      <li><a>shelf round 2 mocks</a><small>nadya-f · 8min</small><span class="x">×</span></li>
+      <li><a>…4 more</a></li>
+    </ul>
+    <p class="note">Browser-default blue links (the only view the design pass did not reach), no project, no hint of which ones want an answer, and a junk <code>--help</code> post from a CLI typo.</p>
+  </div>
+
+  <div class="card">
+    <h3>Proposed</h3>
+    <div class="grp">Waits on your pick · 3</div>
+    <div class="it"><span class="dot"></span><b>page-watch round 2</b><span class="who">nadya-d · 1 min</span>
+      <div class="q">3 ways to watch a page. <em>Pick one:</em></div>
+      <div class="opts"><button class="chip">A. nadya checks on a timer</button><button class="chip">B. Atom feed in yarr</button><button class="chip on">C. pick the part in cc</button><button class="chip">other…</button></div>
+      <div class="sent">✓ sent to nadya: "page-watch round 2: C. pick the part in cc"</div></div>
+    <div class="it"><span class="dot"></span><b>techtree round 2</b><span class="who">nadya-a · 3 min</span>
+      <div class="q">3 ways to keep a tree of things to learn. <em>Pick one:</em></div>
+      <div class="opts"><button class="chip">file in zk</button><button class="chip">goals with steps</button><button class="chip">tell nadya in chat</button><button class="chip">other…</button></div></div>
+    <div class="it"><span class="dot"></span><b>cc tooling: 6 proposals</b><span class="who">cc-b · 3 min</span>
+      <div class="q">6 ranked fixes, 4 questions at the end. <em>Which to build?</em></div>
+      <div class="opts"><button class="chip">1-4</button><button class="chip">all</button><button class="chip">none yet</button><button class="chip">other…</button></div></div>
+    <div class="grp">To look at · 3</div>
+    <div class="it"><span class="dot"></span><b>home page for Katrina</b><span class="who">dream · 8 min</span></div>
+    <div class="it"><span class="dot"></span><b>hallway: offsite notes page</b><span class="who">dream · 8 min</span></div>
+    <div class="it r"><span class="dot r"></span><b>craftbox v3 shell</b><span class="who">nadya-c · picked</span></div>
+    <div class="grp">Answered · 1 (an example answer)</div>
+    <div class="it r"><span class="dot r"></span><b>calculator v2 mock</b><span class="who">"B, with history" · 10:05</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>Opening a post: the page with the answer box under it</h2>
+  <div class="frame">
+    <div class="fbar"><b>page-watch round 2</b><small>nadya-d · project page-watch · 1 min</small><span class="sp"></span><a href="#">open in a tab ↗</a><a href="#">nadya-d's last reply</a></div>
+    <div class="shot"><div>A. nadya checks on a timer</div><div>B. Atom feed in yarr</div><div>C. pick the part in cc</div></div>
+    <div class="ans">
+      <div class="lbl">nadya-d asks: which one, and which pages to watch first?</div>
+      <div class="opts" style="margin:0"><button class="chip">A</button><button class="chip">B</button><button class="chip">C</button></div>
+      <div class="box">C, start with the Arc release notes and the STM page<span class="sp"></span><span class="send">↑</span></div>
+    </div>
+  </div>
+  <p class="note">The post frame and "open in a tab" are what #inbox does today. New: the question line and the answer box under it. A sent answer marks the post answered, so it leaves the "waits on your pick" group on every device.</p>
+</section>
+
+<section class="pair">
+  <div class="open">
+    <b>What it needs</b>
+    <ul>
+      <li><code>ccx post</code> takes <code>--ask "&lt;question&gt;"</code> and <code>--option</code> (repeatable); inbox.jsonl keeps them, plus the poster's sessionId and project (from its cwd, as burn.js names projects).</li>
+      <li>cc: group by ask / no ask / answered; chips send with <code>toNadya()</code>, the same call the tasks pop-up uses.</li>
+      <li><code>ccx post</code> refuses a title starting with <code>-</code> (the <code>--help</code> post).</li>
+    </ul>
+  </div>
+  <div class="open">
+    <b>Open points</b>
+    <ul>
+      <li>Answer to nadya always, or to the posting session when it still runs? nadya closes helpers within minutes, so nadya is the one that is there.</li>
+      <li>The blog row shows the same result again ("page-watch round 2" is in blog, inbox, nadya's chat and nadya-d's chat). Should an inbox post mark its blog note as seen?</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+</body>
+</html>

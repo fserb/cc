@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc mock: a session's page says what it is and what you can do</title>
+<style>
+  :root { --bg: #fff; --text: #212529; --muted: #6c757d; --line: #e9ecef; --hover: #f3f4f6; --accent: #0b7bd3; --cur: #e7f1fb; --green: #2f9e44;
+    --orange: #e8590c; --red: #d63939; --bubble: #f3f4f6; --press: #e9ecef; --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 var(--font); color: var(--text); background: #fafafa; }
+  header.top { padding: 1rem 1.4rem 0; } header.top h1 { font-size: 1.15rem; margin: 0; }
+  header.top p { color: var(--muted); font-size: 0.88rem; margin: 0.2rem 0 0; max-width: 62rem; }
+  main { padding: 1rem 1.4rem 3rem; display: flex; flex-direction: column; gap: 1.8rem; max-width: 82rem; }
+  h2 { font-size: 0.95rem; margin: 0 0 0.5rem; }
+  .note { color: var(--muted); font-size: 0.85rem; margin: 0.4rem 0 0; max-width: 62rem; }
+  code { font: 0.82em var(--mono); }
+  .lab { font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.4rem; }
+  /* desktop main pane */
+  .pane { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .hd { height: 48px; display: flex; align-items: center; gap: 1rem; padding: 0 1.2rem; border-bottom: 1px solid var(--line); }
+  .hd b { font-size: 1rem; } .hd .sp { flex: 1; } .hd .q { color: var(--red); font-size: 0.9rem; } .hd .q i { font-style: normal; color: var(--text); font-weight: 600; }
+  .strip { display: flex; align-items: center; gap: 0.9rem; padding: 0.5rem 1.2rem; border-bottom: 1px solid var(--line); font-size: 0.84rem; color: var(--muted); }
+  .strip .st { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--text); }
+  .strip .st::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--orange); }
+  .strip .st.wait::before { background: var(--green); }
+  .strip .goal { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .strip .ctx { color: var(--orange); } .strip .sp { flex: 1; }
+  .act { all: unset; cursor: pointer; font-size: 0.8rem; padding: 0.15rem 0.6rem; border-radius: 7px; color: var(--text); border: 1px solid var(--line); background: #fff; white-space: nowrap; transition: transform 120ms var(--ease-out), background-color 120ms; }
+  .act:hover { background: var(--hover); } .act:active { transform: scale(0.96); background: var(--press); }
+  .act.warn { color: var(--red); }
+  .menu { position: relative; }
+  .menu .m { position: absolute; right: 0; top: 1.9rem; width: 280px; background: rgb(255 255 255 / 0.94); backdrop-filter: blur(20px) saturate(180%); border: 1px solid rgb(0 0 0 / 0.06); border-radius: 12px; box-shadow: 0 12px 32px rgb(0 0 0 / 0.14); padding: 0.3rem 0; z-index: 3; color: var(--text); }
+  .m div { padding: 0.45rem 0.9rem; font-size: 0.86rem; cursor: pointer; } .m div:hover { background: var(--hover); }
+  .m small { display: block; color: var(--muted); font-size: 0.76rem; }
+  .chat { max-width: 36rem; margin: 0 auto; padding: 1rem 1rem 1.6rem; display: flex; flex-direction: column; gap: 4px; min-height: 280px; }
+  .b { background: var(--bubble); border-radius: 14px; padding: 0.55rem 0.8rem; max-width: 92%; font-size: 0.92rem; }
+  .sq { align-self: flex-end; max-width: 88%; border-right: 3px solid var(--red); padding-right: 0.7rem; font-size: 0.9rem; color: var(--muted); }
+  .sq small { display: block; text-align: right; color: var(--red); font-size: 0.75rem; }
+  .sq p { margin: 0; text-align: left; }
+  .more { all: unset; cursor: pointer; color: var(--accent); font-size: 0.8rem; }
+  .comp { margin: 0 1rem 1rem; border: 1px solid var(--line); border-radius: 22px; padding: 0.55rem 0.9rem; color: var(--muted); font-size: 0.9rem; }
+  /* phones */
+  .phones { display: flex; gap: 1.6rem; flex-wrap: wrap; align-items: flex-start; }
+  .phone { width: 340px; height: 680px; background: var(--bg); border: 1px solid var(--line); border-radius: 26px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 1px 3px rgb(0 0 0 / 0.05); }
+  .phone .hd { height: 50px; padding: 0 0.9rem; gap: 0.6rem; } .phone .hd .bk { color: var(--muted); }
+  .phone .strip { flex-wrap: wrap; gap: 0.3rem 0.7rem; padding: 0.45rem 0.9rem 0.55rem; }
+  .phone .strip .goal { flex-basis: 100%; white-space: normal; }
+  .phone .chat { padding: 0.8rem 0.8rem; flex: 1; overflow: hidden; min-height: 0; }
+  .phone .comp { margin: 0 0.7rem 0.8rem; }
+  .acts { display: flex; gap: 0.4rem; }
+  /* switcher */
+  .sw { width: 520px; background: rgb(255 255 255 / 0.95); border: 1px solid rgb(0 0 0 / 0.06); border-radius: 14px; box-shadow: 0 16px 40px rgb(0 0 0 / 0.16); overflow: hidden; }
+  .sw .in { padding: 0.8rem 1rem; border-bottom: 1px solid var(--line); font-size: 1rem; }
+  .sw .in span { color: var(--muted); }
+  .sw .r { display: grid; grid-template-columns: 1fr auto; padding: 0.45rem 1rem; font-size: 0.9rem; }
+  .sw .r small { color: var(--muted); font-size: 0.8rem; } .sw .r.on { background: var(--cur); }
+  .sw .r .k { color: var(--muted); font: 0.75rem var(--mono); }
+  .sw .ft { border-top: 1px solid var(--line); padding: 0.4rem 1rem; color: var(--muted); font-size: 0.76rem; display: flex; gap: 1.2rem; }
+  kbd { font: 0.75rem var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 0.3rem; background: #fff; }
+  .open { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem 1rem; font-size: 0.85rem; max-width: 62rem; }
+  .open li { margin: 0.2rem 0; }
+  .two { display: grid; grid-template-columns: auto 1fr; gap: 1.6rem; align-items: start; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>A session's page says what it is and what you can do</h1>
+  <p>Today a session's page is its name and the chat. Its goal, state, host, context size and age are only on the sidebar row (desktop) or not visible at all once you open it (phone), and there is no button to stop or close it: the user typed "close cc-b", "stop boxer-a", "close launcher-a" to nadya instead. cc-c, Oct 19th; report: <a href="https://nadya.gum.ts.net/nadya/research/cc-web.html">research/cc-web.html</a> (proposals 3, 4, 6).</p>
+</header>
+<main>
+
+<section>
+  <h2>A. Desktop: one line under the title, three actions</h2>
+  <div class="pane">
+    <div class="hd"><b>nadya-b</b><span class="sp"></span><span class="q">Mon 10am</span> <span class="q"><i>86%</i></span></div>
+    <div class="strip">
+      <span class="st">busy 4 min</span>
+      <span class="goal">free cycles: habit-tracking idea</span>
+      <span class="ctx">182k</span><span>nadya:~/nadya</span><span>started 06:09</span>
+      <span class="sp"></span>
+      <button class="act">terminal</button>
+      <button class="act">ask to wrap up</button>
+      <span class="menu"><button class="act">close ▾</button>
+        <div class="m">
+          <div>close when this turn ends<small>same checks as ccx close: nothing typed, no dialog, no background work</small></div>
+          <div>close now<small>stops the turn; its work stays as it is on disk</small></div>
+          <div style="color:var(--red)">delete<small>SIGTERM, then its tmux pane</small></div>
+        </div></span>
+    </div>
+    <div class="chat">
+      <div class="sq"><small>nadya · 06:09</small><p>You are nadya-b, a free-cycles helper nadya started in ~/nadya. The user's ask (Oct 19th): research and mock every idea; yours is habit-tracking, round 2. Read ideas/habit-tracking.md, the first mock… <button class="more">all 31 lines</button></p></div>
+      <div class="b">I've read the idea, the first mock and the research. Next I'll read the design skills, then build the round 2 mocks.</div>
+      <div class="b">Important find: a dream note says the user already built <code>if</code> (an intermittent-fasting tracker). Reading it.</div>
+      <div class="b">Loop research done. Now writing the round 2 mock page.</div>
+    </div>
+    <div class="comp">Message nadya-b</div>
+  </div>
+  <p class="note">"ask to wrap up" types <code>[cc] finish your current step, commit your files, write a handover, then stop</code>: the text nadya sends when the user says "stop soccer". "close when this turn ends" is cc-b's tooling proposal 3 (<code>whenIdle</code>); until that exists, the menu has "close now" with the same refusals <code>api/s/&lt;pid&gt;/close {ifUntouched}</code> gives today.</p>
+</section>
+
+<section>
+  <h2>B. Phone: the same line, and a brief folded to three lines</h2>
+  <div class="phones">
+    <div>
+      <p class="lab">today (412 px wide, Oct 19th)</p>
+      <div class="phone">
+        <div class="hd"><span class="bk">‹</span><b>nadya-b</b><span class="sp"></span><span class="q"><i>86%</i></span></div>
+        <div class="chat" style="text-align:right">
+          <div class="sq" style="max-width:96%"><p style="text-align:right">points go on the mock page. Light background, desktop layout, plain literal language, no em dashes. About an hour. Record what you made in ideas/habit-tracking.md, commit only your files (git add -f where needed), check the pages in a headless Chrome, `tabreload nadya.gum.ts.net/research/ideas` (a failed reload is fine, just say so). Write a blog note in ~/nadya/tmp/blog/ (format ~/web/blog/inbox/README.md, with a screenshot) and post the page to cc's inbox …</p></div>
+        </div>
+        <div class="comp">Message nadya-b</div>
+      </div>
+      <p class="note" style="width:340px">The brief fills the first screen, right-aligned, and nothing says what the session is for or what state it is in.</p>
+    </div>
+    <div>
+      <p class="lab">proposed</p>
+      <div class="phone">
+        <div class="hd"><span class="bk">‹</span><b>nadya-b</b><span class="sp"></span><span class="q"><i>86%</i></span></div>
+        <div class="strip">
+          <span class="goal">free cycles: habit-tracking idea</span>
+          <span class="st">busy 4 min</span><span class="ctx">182k</span><span>nadya</span>
+        </div>
+        <div class="chat">
+          <div class="sq"><small>nadya · 06:09</small><p>You are nadya-b, a free-cycles helper nadya started in ~/nadya. The user's ask (Oct 19th): research and mock every idea… <button class="more">all 31 lines</button></p></div>
+          <div class="b">I've read the idea, the first mock and the research. Next I'll read the design skills, then build the round 2 mocks.</div>
+          <div class="b">Important find: a dream note says the user already built <code>if</code>. Reading it.</div>
+          <div class="b">Loop research done. Now writing the round 2 mock page.</div>
+        </div>
+        <div style="display:flex;gap:0.4rem;padding:0 0.7rem 0.4rem"><button class="act">terminal</button><button class="act">wrap up</button><button class="act">close ▾</button></div>
+        <div class="comp">Message nadya-b</div>
+      </div>
+      <p class="note" style="width:340px">A side quote over 4 lines folds; its text is left-aligned so long lines read normally. The actions sit over the composer, where a thumb reaches.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>C. Desktop keys: a switcher, and the next session that waits on you</h2>
+  <div class="two">
+    <div class="sw">
+      <div class="in">arc<span>|</span></div>
+      <div class="r on"><span>arcade-lbp-h <small>· LBP capture-replay, level 3</small></span><span class="k">marx</span></div>
+      <div class="r"><span>project arcade</span><span class="k">page</span></div>
+      <div class="r"><span>arcade-switch-c <small>· closed 7 h ago</small></span><span class="k">read</span></div>
+      <div class="r"><span>marx:~/web/arcade/docs/lbp.md</span><span class="k">file</span></div>
+      <div class="ft"><span><kbd>↵</kbd> open</span><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>esc</kbd> close</span></div>
+    </div>
+    <div class="open">
+      <b>Keys</b>
+      <ul>
+        <li><kbd>ctrl</kbd> <kbd>k</kbd>: the switcher over sessions, closed sessions, projects and recent files (the same fuzzy match the projects search uses).</li>
+        <li><kbd>alt</kbd> <kbd>↓</kbd> / <kbd>alt</kbd> <kbd>↑</kbd>: next / previous row of the sidebar.</li>
+        <li><kbd>alt</kbd> <kbd>w</kbd>: the next session that waits on you (a dialog or a question), the rows cc draws with ?.</li>
+        <li><kbd>esc</kbd> in the composer of a session: back to nadya.</li>
+      </ul>
+      <p class="note">Today the sidebar rows are not buttons or links (no tabindex anywhere in index.html; the accessibility tree lists them as plain text), so a keyboard user cannot reach them at all. Making each row a <code>&lt;a href="#pid"&gt;</code> fixes that on its own, before any shortcut.</p>
+    </div>
+  </div>
+</section>
+
+<section class="open">
+  <b>Open points</b>
+  <ul>
+    <li>Should "ask to wrap up" go to the session directly (as here) or through nadya, so nadya's helper table stays right? nadya learns of the close from trig either way.</li>
+    <li>The strip repeats the sidebar row on desktop. Alternative: show it only on a phone, where the sidebar is hidden while a session is open.</li>
+  </ul>
+</section>
+
+</main>
+</body>
+</html>

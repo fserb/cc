@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc mock: stop a project from the quota page</title>
+<style>
+  :root { --bg: #fff; --text: #212529; --muted: #6c757d; --line: #e9ecef; --hover: #f3f4f6; --accent: #0b7bd3; --cur: #e7f1fb; --green: #2f9e44;
+    --red: #d63939; --track: #f7f8f9; --press: #e9ecef; --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 var(--font); color: var(--text); background: #fafafa; }
+  header.top { padding: 1rem 1.4rem 0; } header.top h1 { font-size: 1.15rem; margin: 0; }
+  header.top p { color: var(--muted); font-size: 0.88rem; margin: 0.2rem 0 0; max-width: 62rem; }
+  main { padding: 1rem 1.4rem 3rem; display: flex; flex-direction: column; gap: 1.6rem; max-width: 70rem; }
+  h2 { font-size: 0.95rem; margin: 0 0 0.5rem; }
+  .note { color: var(--muted); font-size: 0.85rem; margin: 0.4rem 0 0; }
+  code { font: 0.82em var(--mono); }
+  .pane { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 1.2rem 1.6rem 1.4rem; }
+  .big { font-size: 2rem; color: var(--red); font-weight: 600; margin: 0; line-height: 1.2; }
+  .bar { height: 8px; background: var(--track); border-radius: 4px; margin: 0.4rem 0 0.2rem; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 86%; background: var(--red); border-radius: 4px; }
+  .meta { color: var(--muted); font-size: 0.86rem; } .meta b { color: var(--red); }
+  .sh { display: flex; align-items: baseline; gap: 0.8rem; margin: 1.4rem 0 0.4rem; }
+  .sh h3 { font-size: 0.8rem; margin: 0; } .sh .seg { margin-left: auto; display: flex; gap: 2px; background: var(--track); border-radius: 8px; padding: 2px; font-size: 0.78rem; }
+  .seg span { padding: 0.05rem 0.6rem; border-radius: 6px; color: var(--muted); } .seg .on { background: #fff; color: var(--text); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+  .pj { display: grid; grid-template-columns: 9rem 1fr 3.5rem 7rem; gap: 0.8rem; align-items: center; padding: 0.4rem 0.5rem; margin: 0 -0.5rem; border-radius: 8px; }
+  .pj:hover { background: var(--hover); }
+  .pj b { font-weight: 500; } .pj small { display: block; color: var(--muted); font-size: 0.76rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pj .t { height: 6px; background: var(--track); border-radius: 3px; overflow: hidden; } .pj .t i { display: block; height: 100%; border-radius: 3px; }
+  .pj .n { text-align: right; font-variant-numeric: tabular-nums; font-size: 0.88rem; }
+  .pj .a { text-align: right; visibility: hidden; } .pj:hover .a, .pj.hov .a { visibility: visible; }
+  .act { all: unset; cursor: pointer; font-size: 0.78rem; padding: 0.1rem 0.55rem; border-radius: 7px; border: 1px solid var(--line); background: #fff; transition: transform 120ms var(--ease-out), background-color 120ms; }
+  .act:hover { background: var(--hover); } .act:active { transform: scale(0.96); }
+  .whatif { margin-top: 0.8rem; background: var(--cur); border-radius: 10px; padding: 0.6rem 0.9rem; font-size: 0.86rem; display: flex; gap: 0.8rem; align-items: center; }
+  .whatif .sp { flex: 1; } .whatif .go { all: unset; cursor: pointer; background: var(--accent); color: #fff; padding: 0.2rem 0.8rem; border-radius: 8px; font-size: 0.82rem; }
+  .whatif .go:active { transform: scale(0.96); }
+  .open { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem 1rem; font-size: 0.85rem; }
+  .open li { margin: 0.25rem 0; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Stop a project from the quota page</h1>
+  <p>When the quota runs ahead, the user opens nadya's chat and types "stop soccer", "stop LBP too", "pause bb completely": 10 such lines in nadya-log.md, Oct 12th-18th, most of them about the quota. The quota page already knows who used what (api/burn), but only by day and with no action. Proposed: a "now" list over the last hour with a wrap-up button per project. Numbers below are api/burn?hours=3 at 11:56, Oct 19th. cc-c; report: <a href="https://nadya.gum.ts.net/nadya/research/cc-web.html">research/cc-web.html</a> (proposal 5).</p>
+</header>
+<main>
+
+<section class="pane">
+  <p class="meta">1.4x (5m), 1.8x (15m) the pace that lasts to the reset · <b>runs out Mon 10am</b> · reset Mon 1pm</p>
+  <p class="big">86%</p>
+  <div class="bar"><i></i></div>
+  <p class="meta">(the week's graph and the last week | this week | last 24h tabs stay as they are, below)</p>
+
+  <div class="sh"><h3>Using it now</h3><span class="meta">share of the weighted tokens, and its % of the week</span>
+    <div class="seg"><span>15 min</span><span>1 h</span><span class="on">3 h</span></div></div>
+
+  <div class="pj"><div><b>nadya</b><small>dream, nadya, nadya-b, nadya-a, nadya-d, nightly, nadya-c</small></div><div class="t"><i style="width:62%;background:#4e79a7"></i></div><div class="n">62%</div><div class="a"><button class="act">wrap up 5</button></div></div>
+  <div class="pj hov"><div><b>cc</b><small>cc-c, cc-b, cc-a</small></div><div class="t"><i style="width:22%;background:#f28e2b"></i></div><div class="n">22%</div><div class="a"><button class="act">wrap up 1</button></div></div>
+  <div class="pj"><div><b>research</b><small>1 session, closed</small></div><div class="t"><i style="width:7%;background:#59a14f"></i></div><div class="n">7%</div><div class="a"></div></div>
+  <div class="pj"><div><b>skills</b><small>closed</small></div><div class="t"><i style="width:5%;background:#76b7b2"></i></div><div class="n">5%</div><div class="a"></div></div>
+  <div class="pj"><div><b>tmp</b><small>closed</small></div><div class="t"><i style="width:4%;background:#bab0ac"></i></div><div class="n">4%</div><div class="a"></div></div>
+
+  <div class="whatif"><span>Wrap up <b>cc</b> (cc-c, running): without its share of the last 3 h, the pace would be 1.4x instead of 1.8x; still runs out before the reset.</span><span class="sp"></span><button class="go">send to nadya</button></div>
+  <p class="note">"wrap up N" counts the project's running sessions. The button sends <code>[cc quota] wrap up cc: finish, commit, hand over, stop (cc-c)</code> to nadya, who already knows how to do this for every project, coordinators included. The 15 min / 1 h / 3 h choice is the same window the header's pace uses.</p>
+</section>
+
+<section class="open">
+  <b>Open points</b>
+  <ul>
+    <li>nadya, dream and nightly are nadya's own runs: should they have the button at all, or only project sessions?</li>
+    <li>Today at 11:56 the header said "runs out Mon 10am" (token pace over 5 and 15 min: 1.4x, 1.8x) while the usage log over 1 h and 3 h said 0.5x and 0.2x, ending near 88-93%. The 5 min window is the user's pick (Oct 17th); a "wrap up" button driven by it would ask to stop work that the 3 h trend says is fine. Show the 3 h line next to the what-if?</li>
+    <li>A "hold new sessions" switch (nadya starts no free-cycles helpers until the reset) would cover the hard-queue starts, which also come from quota talk.</li>
+  </ul>
+</section>
+
+</main>
+</body>
+</html>

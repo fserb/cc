@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc mock: read a closed session without restoring it</title>
+<style>
+  :root { --bg: #fff; --text: #212529; --muted: #6c757d; --line: #e9ecef; --hover: #f3f4f6; --accent: #0b7bd3; --cur: #e7f1fb;
+    --bubble: #f3f4f6; --press: #e9ecef; --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 var(--font); color: var(--text); background: #fafafa; }
+  header.top { padding: 1rem 1.4rem 0; max-width: 80rem; } header.top h1 { font-size: 1.15rem; margin: 0; }
+  header.top p { color: var(--muted); font-size: 0.88rem; margin: 0.2rem 0 0; max-width: 60rem; }
+  main { padding: 1rem 1.4rem 3rem; display: flex; flex-direction: column; gap: 1.6rem; max-width: 80rem; }
+  h2 { font-size: 0.95rem; margin: 0 0 0.5rem; }
+  .note { color: var(--muted); font-size: 0.85rem; margin: 0.4rem 0 0; max-width: 60rem; }
+  /* a cc window, desktop */
+  .win { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: grid; grid-template-columns: 300px 1fr; height: 600px; box-shadow: 0 1px 3px rgb(0 0 0 / 0.05); }
+  .side { border-right: 1px solid var(--line); position: relative; }
+  .tools { height: 44px; display: flex; align-items: center; gap: 2px; padding: 0 0.6rem; border-bottom: 1px solid var(--line); }
+  .tools span { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); font-size: 0.9rem; }
+  .tools .sp { flex: 1; width: auto; } .tools .on { background: var(--cur); color: var(--accent); }
+  .pop { position: absolute; top: 46px; left: 8px; right: -60px; background: rgb(255 255 255 / 0.92); backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgb(0 0 0 / 0.06); border-radius: 12px; box-shadow: 0 12px 32px rgb(0 0 0 / 0.14), 0 1px 2px rgb(0 0 0 / 0.06); padding: 0.3rem 0 0.4rem; z-index: 2; }
+  .pop h3 { font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; margin: 0.4rem 1rem 0.3rem; }
+  .pr { display: grid; grid-template-columns: 1fr auto; gap: 0 0.6rem; padding: 0.45rem 1rem; cursor: pointer; transition: background-color 120ms ease; }
+  .pr:hover, .pr.hov { background: var(--hover); }
+  .pr b { font-weight: 500; } .pr code { font: 0.75rem var(--mono); color: var(--muted); margin-left: 0.4rem; }
+  .pr .age { font-size: 0.78rem; color: var(--muted); text-align: right; }
+  .pr .sub { grid-column: 1; color: var(--muted); font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pr .acts { grid-column: 2; display: flex; gap: 0.3rem; justify-content: end; visibility: hidden; }
+  .pr:hover .acts, .pr.hov .acts { visibility: visible; }
+  .btn { all: unset; cursor: pointer; font-size: 0.78rem; padding: 0.1rem 0.5rem; border-radius: 6px; color: var(--accent); transition: transform 120ms var(--ease-out), background-color 120ms; }
+  .btn:hover { background: var(--cur); } .btn:active { transform: scale(0.96); background: var(--press); }
+  .btn.solid { background: var(--accent); color: #fff; } .btn.solid:hover { background: #0a6dbb; }
+  .list { padding: 0.4rem 0.4rem; opacity: 0.35; }
+  .row { padding: 0.4rem 0.7rem; } .row b { font-weight: 400; } .row small { display: block; color: var(--muted); font-size: 0.82rem; }
+  .ttl { height: 44px; display: flex; align-items: center; gap: 0.6rem; padding: 0 1.2rem; border-bottom: 1px solid var(--line); }
+  .ttl b { font-size: 1rem; } .ttl .tag { font-size: 0.75rem; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 0 0.5rem; }
+  .ttl .sp { flex: 1; }
+  .view { overflow: auto; height: calc(600px - 44px); }
+  .chat { max-width: 36rem; margin: 0 auto; padding: 1rem 1rem 2rem; display: flex; flex-direction: column; gap: 4px; }
+  .b { background: var(--bubble); border-radius: 14px; padding: 0.55rem 0.8rem; max-width: 92%; font-size: 0.92rem; }
+  .b.me { align-self: flex-end; background: var(--cur); }
+  .b p { margin: 0 0 0.35rem; } .b p:last-child { margin: 0; }
+  .b a { color: var(--accent); }
+  .side-quote { align-self: flex-end; border-right: 3px solid #d63939; padding: 0 0.7rem 0 0; max-width: 92%; font-size: 0.9rem; color: var(--muted); text-align: right; }
+  .side-quote small { display: block; font-size: 0.75rem; color: #d63939; }
+  .fold { all: unset; cursor: pointer; color: var(--accent); font-size: 0.8rem; }
+  .final { border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 0.8rem 1rem; margin: 0 0 0.8rem; }
+  .final h4 { margin: 0 0 0.3rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 500; }
+  .final .links { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+  .final .links a { font-size: 0.8rem; text-decoration: none; color: var(--accent); background: var(--cur); padding: 0.1rem 0.55rem; border-radius: 99px; }
+  .sep { text-align: center; color: var(--muted); font-size: 0.75rem; margin: 0.6rem 0; }
+  .ended { text-align: center; color: var(--muted); font-size: 0.8rem; padding: 0.8rem 0 0; border-top: 1px solid var(--line); margin-top: 0.8rem; }
+  .compose { border-top: 1px solid var(--line); padding: 0.7rem 1rem; display: flex; gap: 0.6rem; align-items: center; color: var(--muted); font-size: 0.88rem; }
+  .compose .sp { flex: 1; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .open { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem 1rem; font-size: 0.85rem; }
+  .open li { margin: 0.2rem 0; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Read a closed session without restoring it</h1>
+  <p>Today a row in the restore pop-up has one action: a click restarts that claude (<code>claude --resume</code>), which costs a session start and its context, only to read what it said. Proposed: the click opens the session read-only; "bring back" is a separate button. cc-c, Oct 19th; report: <a href="https://nadya.gum.ts.net/nadya/research/cc-web.html">research/cc-web.html</a> (proposal 1).</p>
+</header>
+<main>
+
+<section>
+  <h2>A. The restore pop-up: read by default, bring back on purpose</h2>
+  <div class="win">
+    <div class="side">
+      <div class="tools"><span>＋</span><span>▷</span><span>▢</span><span class="sp"></span><span class="on">↺</span></div>
+      <div class="pop">
+        <h3>Closed sessions</h3>
+        <div class="pr hov"><div><b>cc-b</b><code>ai/cc/web</code></div><span class="age">1 min</span><div class="sub">free cycles: cc tooling proposals</div><div class="acts"><button class="btn">read</button><button class="btn">bring back</button></div></div>
+        <div class="pr"><div><b>cc-a</b><code>ai/cc/web</code></div><span class="age">7 min</span><div class="sub">cc: post mocks/research to UPDATES</div><div class="acts"><button class="btn">read</button><button class="btn">bring back</button></div></div>
+        <div class="pr"><div><b>nadya-c</b><code>nadya</code></div><span class="age">7 min</span><div class="sub">free cycles: search idea</div><div class="acts"><button class="btn">read</button><button class="btn">bring back</button></div></div>
+        <div class="pr"><div><b>nightly</b><code>nadya</code></div><span class="age">19 min</span><div class="sub">day digest</div><div class="acts"><button class="btn">read</button><button class="btn">bring back</button></div></div>
+        <div class="pr"><div><b>arcade-lbp-h</b><code>marx:web/arcade</code></div><span class="age">7 h</span><div class="sub">hard queue: LBP</div><div class="acts"><button class="btn">read</button><button class="btn">bring back</button></div></div>
+      </div>
+      <div class="list">
+        <div class="row"><b>nadya</b></div><div class="row"><b>blog</b><small>page-watch round 2</small></div><div class="row"><b>projects</b></div>
+        <div class="row"><b>cc-c</b><small>free cycles: cc web UI proposals</small></div><div class="row"><b>nadya-b</b><small>habit-tracking idea</small></div>
+      </div>
+    </div>
+    <div>
+      <div class="ttl"><b>nadya</b></div>
+    </div>
+  </div>
+  <p class="note">A click on the row is "read". The two buttons show on hover (desktop) and always on a phone, where there is no hover.</p>
+</section>
+
+<section>
+  <h2>B. The closed session, read-only</h2>
+  <div class="win" style="grid-template-columns: 300px 1fr">
+    <div class="side"><div class="tools"><span>＋</span><span>▷</span><span>▢</span><span class="sp"></span><span>↺</span></div>
+      <div class="list" style="opacity:1"><div class="row"><b>nadya</b></div><div class="row"><b>blog</b><small>page-watch round 2</small></div><div class="row"><b>projects</b></div>
+        <div class="row" style="background:var(--cur);border-radius:8px"><b>cc-b</b> <span style="font-size:0.75rem;color:var(--muted)">closed 1 min ago</span><small>free cycles: cc tooling proposals</small></div>
+        <div class="row"><b>cc-c</b><small>free cycles: cc web UI proposals</small></div></div></div>
+    <div style="display:flex;flex-direction:column">
+      <div class="ttl"><b>cc-b</b><span class="tag">closed 11:41</span><span class="sp"></span><button class="btn">bring back</button></div>
+      <div class="view" style="flex:1;height:auto">
+        <div class="chat">
+          <div class="final">
+            <h4>Last reply</h4>
+            <p style="margin:0;font-size:0.92rem">Report and mocks are done. The context size reads 0 one time in five; trig gets ~10x too many context events. Six proposals, ranked; questions for you at the end of the report.</p>
+            <div class="links"><a href="#">research/cc-tooling.html</a><a href="#">mocks/tooling.html</a><a href="#">blog note</a></div>
+          </div>
+          <div class="sep">the conversation, oldest first</div>
+          <div class="side-quote"><small>nadya</small>You are cc-b, a free-cycles helper nadya started in nadya:~/web/cc … <button class="fold">whole brief (2,140 characters)</button></div>
+          <div class="b"><p>I've read the brief, the tooling code and the last week of trig's log. Next: replaying readTitle over two logs.</p></div>
+          <div class="b"><p>Found it: a tool result with screenshots fills the log's last 256KB, so the size reads 0 until the next reply.</p></div>
+          <div class="b"><p>Report written, mocks posted to the inbox, blog note sent.</p></div>
+          <div class="ended">ended 11:41 by nadya (ccx close) · session 3f2c…e1 · 182k context</div>
+        </div>
+      </div>
+      <div class="compose"><span>Read-only. To ask cc-b something, bring it back.</span><span class="sp"></span><button class="btn solid">bring back and ask</button></div>
+    </div>
+  </div>
+  <p class="note">The links under "Last reply" are the paths and URLs in that reply, and the inbox posts with the same session id. Nothing starts until "bring back".</p>
+</section>
+
+<section class="pair">
+  <div class="open">
+    <b>What it needs</b>
+    <ul>
+      <li>cchost: <code>GET api/closed/&lt;sessionId&gt;/log?before=</code>, the same pages <code>api/s/&lt;pid&gt;/log</code> serves, read from the transcript path closed.js already has (cwd + sessionId).</li>
+      <li>cc: the session view with no stream and no composer; restore() stays as the button.</li>
+    </ul>
+  </div>
+  <div class="open">
+    <b>Open points</b>
+    <ul>
+      <li>Should a closed session stay in the sessions list for a while (greyed, "closed 1 min ago"), or only in the pop-up?</li>
+      <li>Links from the inbox need <code>ccx post</code> to store the poster's session id, not only its name: nadya-d posted two items from two different runs today.</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+</body>
+</html>
