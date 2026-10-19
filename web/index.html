@@ -1197,8 +1197,8 @@ const PJ_HOSTLESS = /^~\/ai\//;  // ~/ai is the same on both hosts (mutagen); re
 async function loadPosts() {
   // every post, index.html then archive/<day>.html; a day once read stays (only index.html changes during the day)
   const read = (html) => [...new DOMParser().parseFromString(html, "text/html").querySelectorAll("#posts article")].map((a) => {
-    const meta = a.querySelector(".meta"), img = a.querySelector("img[src], video[poster]");
-    const src = img?.getAttribute("src") ?? img?.getAttribute("poster");
+    const meta = a.querySelector(".meta");
+    const src = a.querySelector("img[src]")?.getAttribute("src") ?? a.querySelector("video[poster]")?.getAttribute("poster");
     return {tag: a.dataset.project ?? "", dir: a.dataset.dir ?? "", time: meta?.querySelector("time")?.textContent.trim() ?? "",
       agent: meta?.textContent.split("·").pop().trim() ?? "", text: [...a.querySelectorAll("h2, p:not(.meta)")].map((p) => p.textContent.trim()).join(" "),
       img: src ? `${BLOG}media/${src.split("/").pop()}` : ""};
