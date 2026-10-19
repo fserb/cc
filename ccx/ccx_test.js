@@ -1051,6 +1051,23 @@ Deno.test("help: asking for it is stdout and 0, a bad argument list is stderr an
     eq(await ccx(), asked, "`ccx` alone is `ccx help`");
   });
 
+Deno.test("help: `ccx <command> --help` is that command's lines and runs nothing", async () => {
+  // nadya-d's `ccx post --help` posted "--help" into cc's inbox (2026-10-19)
+  for (const args of [["post", "--help"], ["post", "a.html", "-h"], ["send", "--help"],
+    ["send", "x", "--help"], ["user", "-h"], ["goal", "--help"], ["delete", "--help"]]) {
+    const r = await ccx(...args);
+    eq(r.code, 0, `ccx ${args.join(" ")} should exit 0`);
+    ok(r.out.startsWith(`usage: ccx ${args[0]}\n  ${args[0]} `), `ccx ${args.join(" ")}: ${r.out}`);
+  }
+  for (const args of [["post"], ["post", "-x"], ["post", "a.html", "--title"], ["send", "-x", "hi"],
+    ["user", "--force", "-q", "hi"], ["goal", "--x", "y"]]) {
+    const r = await ccx(...args);
+    eq(r.code, 2, `ccx ${args.join(" ")} should exit 2`);
+    ok(r.err.startsWith(`ccx ${args[0]}: `), `ccx ${args.join(" ")}: ${r.err}`);
+    eq(r.out, "", `ccx ${args.join(" ")} should print nothing on stdout`);
+  }
+});
+
 Deno.test("validation: a bad argument list is never a traceback", async () => {
   for (const args of BAD) {
     const {err} = await ccx(...args);

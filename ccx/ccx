@@ -1323,6 +1323,8 @@ const sendLine = (verb, who, where, what) =>
 // that is not there has to be caught first or `ccx send ccx-ef` goes looking for ccx-ef.
 // Exits on usage; returns what `spec` named and what it did not
 async function targets(cmd, spec, text) {
+  if (["-h", "--help"].includes(text.trim())) commandHelp(cmd);
+  if (spec?.startsWith("-")) badOption(cmd, spec);
   if (!spec || !text.trim()) usage();
   const rows = await listing();
   const {found, missed} = resolveTargets(rows, spec, selfPid());
@@ -1389,7 +1391,11 @@ async function cmdGoal(spec, ...words) {
 // it (~/nadya/tmp/inbox.jsonl), so this is the one command that talks to something else. A path is made absolute and
 // named on this host (`marx:~/web/x/mocks/a.html`; on nadya `~/nadya/` is left off, as the files tab names it)
 async function cmdPost(where, ...words) {
-  if (!where) usage();
+  for (const a of [where, ...words]) {
+    if (a === "-h" || a === "--help") commandHelp("post");
+    if (/^-./.test(a ?? "")) badOption("post", a);
+  }
+  if (!where) badOption("post", "", "a url or a path to post");
   let url = where;
   if (!/^https?:\/\//.test(where)) {
     const home = Deno.env.get("HOME") ?? "";
@@ -1618,6 +1624,7 @@ const HELP = [
   ["  subs", "every host's subscriptions"],
   ["  unsub <host:id>", "drop one"],
   ["  help", "this, which is also what `ccx` alone prints"],
+  ["  <command> --help", "that command's lines of this; -h too"],
   "",
   ["  <target>", "a pid, a session name, `all`, or part of either; `host:` before it"],
   ["", "picks that host's instances only"],
@@ -1648,8 +1655,31 @@ function usage() {
   Deno.exit(2);
 }
 
+// `ccx <command> --help`: that command's lines of HELP, on stdout, and nothing run
+function commandHelp(name) {
+  const out = [];
+  let mine = false;
+  for (const line of HELP) {
+    if (!Array.isArray(line)) { mine = false; continue; }
+    const [key] = line;
+    if (/^  \S/.test(key) && !key.startsWith("  [")) mine = key.trim().split(" ")[0] === name;
+    if (mine) out.push(line);
+  }
+  if (/<target>/.test(out.map(([k]) => k).join(" "))) out.push(...HELP.slice(HELP.findIndex((l) => l[0] === "  <target>")));
+  const pad = Math.max(...out.map(([k]) => k.length)) + 2;
+  console.log([`usage: ccx ${name}`, ...out.map(([k, w]) => k + " ".repeat(pad - k.length) + w)].join("\n"));
+  Deno.exit(0);
+}
+
+// a flag the command does not take: one line on stderr and exit 2, like any bad argument list
+function badOption(name, arg, missing) {
+  console.error(`ccx ${name}: ${missing ? `needs ${missing}` : `unknown option ${arg}`} (ccx ${name} --help)`);
+  Deno.exit(2);
+}
+
 const [name = "help", ...rest] = Deno.args;
 const cmd = COMMANDS[name];
+if (cmd && cmd[0] !== cmdHelp && ["-h", "--help"].includes(rest[0])) commandHelp(name);
 if (!cmd || (cmd[1] >= 0 && rest.length !== cmd[1])) usage();
 await cmd[0](...rest);
 // an open follow() stream or a probe timer would otherwise keep the process alive
