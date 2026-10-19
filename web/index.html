@@ -97,6 +97,16 @@
   .it .hide { all: unset; position: absolute; top: 0.4rem; right: 0.4rem; display: none; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--muted); font-size: 0.85rem; line-height: 1; background: var(--bg); cursor: pointer; }
   .it .hide:hover { background: var(--press); color: var(--text); }
   @media (hover: hover) and (pointer: fine) { .it:hover .hide { display: grid; } .it:has(.hide):hover .t1 .at { visibility: hidden; } }
+  /* away mode (user, Oct 19th): the moon lit while on; a switch in its pop-up and on #away */
+  .tool[data-on] { color: var(--accent); } .tool[data-on] svg { fill: currentColor; fill-opacity: 0.18; }
+  .sw { display: flex; gap: 0.8rem; align-items: flex-start; margin: 0.2rem 6px; padding: 0.45rem calc(1rem - 6px); border-radius: 7px; cursor: pointer; } .sw:hover { background: rgb(0 0 0 / 0.04); }
+  .sw input { appearance: none; flex: none; margin: 0.1rem 0 0; width: 34px; height: 20px; border-radius: 10px; background: rgb(0 0 0 / 0.16); position: relative; cursor: pointer; transition: background-color 160ms var(--ease-out); }
+  .sw input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 0.25); transition: transform 160ms var(--ease-out); }
+  .sw input:checked { background: var(--accent); } .sw input:checked::after { transform: translateX(14px); } .sw input:active::after { width: 19px; } .sw input:checked:active::after { transform: translateX(11px); }
+  .sw small { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 0.15rem; line-height: 1.35; }
+  .awl { list-style: none; padding: 0; } .awl > li { padding: 0.7rem 0; border-top: 1px solid var(--line); } .awl .q { margin: 0.25rem 0; font-weight: 600; }
+  .awl .meta { margin: 0; font-size: 0.8rem; } .awl .meta a { color: var(--text); font-weight: 600; text-decoration: none; } .awl .meta a:hover { text-decoration: underline; } .awl .opts { color: var(--muted); font-size: 0.85rem; } .awl .rep { margin-top: 0.35rem; padding-left: 0.7rem; border-left: 2px solid var(--line); font-size: 0.9rem; }
+  .awl .rep > :first-child { margin-top: 0; } .awl .rep > :last-child { margin-bottom: 0; } .awl li.new .q::before { content: "● "; color: var(--accent); }
   .ibl { list-style: none; padding: 0; } .ibl li { display: flex; gap: 0.5rem; align-items: baseline; padding: 0.3rem 0; } .ibl .meta { margin: 0; font-size: 0.8rem; }
   .ibl .ibx { all: unset; margin-left: auto; padding: 0 0.4rem; color: var(--muted); cursor: pointer; border-radius: 4px; } .ibl .ibx:hover { background: var(--press); color: var(--text); }
   /* a line that changed, or a row that came, is lit for a moment; the delay carries it across redraws */
@@ -513,6 +523,43 @@ function seeMock(url) {
   for (const k of Object.keys(mockSeen)) if (!S.mocks.some((x) => x.url === k)) delete mockSeen[k];
   localStorage.cc_mocks_seen = JSON.stringify(mockSeen);
 }
+// away mode (user, Oct 19th: "auto answer questions ... when I'm offline, so work doesn't get stuck on me"): each cchost
+// answers its sessions' question boxes left 5 min (host/away.js). On is every host that answers being on; the answers
+// are new until #away is opened (cc_away_seen)
+async function loadAway() {
+  const x = await json(`${CCX}/away?all=1`).catch(() => null);
+  if (x) setAway(x);
+}
+function setAway(x) {
+  const up = x.hosts.filter((h) => !h.down);
+  S.away = {...x, on: up.length > 0 && up.every((h) => h.on)};
+  for (const b of document.querySelectorAll('[data-tool="away"]')) b.toggleAttribute("data-on", S.away.on);
+  draw();
+  if (popKind === "away") { $("#pop").hidden = true; drawPop(); }
+  if (cur === "away") { drawView(true); awaySeen(); }
+}
+async function setAwayOn(on) {
+  S.away = {...S.away, on, err: ""};
+  try { setAway(await post(`${CCX}/away?all=1`, {on})); } catch (err) { S.away.err = err.message; loadAway(); }
+}
+const awaySince = () => +localStorage.cc_away_seen || 0;
+function awaySeen() { const t = S.away?.answered[0]?.at; if (t > awaySince()) { localStorage.cc_away_seen = t; draw(); } }
+const awayAt = (a) => `${a.host === "nadya" ? "" : `${a.host}:`}${tilde(a.cwd).replace(/^~\/?/, "") || "~"}`;
+function awaySwitch() {
+  const down = S.away?.hosts.filter((h) => h.down).map((h) => h.host) ?? [];
+  return `<label class="sw"><input type="checkbox" role="switch" data-away${S.away?.on ? " checked" : ""}${S.away ? "" : " disabled"}><span>answer question boxes for me<small>after 5 min unanswered, the session picks the option it recommends, says why, and goes on; it stops when the choice can't be undone. Never permissions or other dialogs.${down.length ? ` ${esc(down.join(", "))} is down: not set there.` : ""}</small>${S.away?.err ? `<p class="err">${esc(S.away.err)}</p>` : ""}</span></label>`;
+}
+function awayView() {
+  if (!S.away) return `<article><p class="meta">loading…</p></article>`;
+  const seen = awaySince(), as = S.away.answered;
+  return `<article>${awaySwitch()}<ul class="awl">${as.map((a) => {
+    const live = S.rows.some((r) => r.pid === `${a.host}.${a.pid}`);
+    return `<li${a.at > seen ? ` class="new"` : ""}><p class="meta">${live ? `<a href="#${a.host}.${a.pid}" data-go="${a.host}.${a.pid}">${esc(a.name || a.pid)}</a>` : esc(a.name || a.pid)} · ${esc(awayAt(a))} · ${ago2(a.at)} ago${a.how === "chat" ? " · by a prompt" : ""}</p>
+      <p class="q">${esc(a.question)}</p>${a.options?.length ? `<p class="opts">${a.options.map(esc).join(" · ")}</p>` : ""}<div class="rep">${a.reply ? md(a.reply.length > 1500 ? `${a.reply.slice(0, 1500)}…` : a.reply) : `<p class="meta">no reply yet</p>`}</div></li>`;
+  }).join("") || `<li class="meta">nothing answered in the last 2 weeks</li>`}</ul></article>`;
+}
+document.addEventListener("change", (e) => { if (e.target.matches("[data-away]")) setAwayOn(e.target.checked); });
+
 // the inbox (user, Oct 19th: "like an inbox"): mocks and reports nadya and the sessions post (`ccx post`, web/api inbox,
 // ~/nadya/tmp/inbox.jsonl), newest first. One is new until opened here; the page's × takes it out, for every device
 async function loadInbox() {
@@ -761,6 +808,11 @@ function updates() {
   if (ib.length || cur === "inbox")
     up.push({id: "inbox", title: "inbox", tags: ib.length ? `<span class="tag">${ib.length} new</span>` : "", r: ib[0] ? ago(ib[0].at / 1000) : "", unread: ib.length, d: ib.length ? "green" : "", sub: "", ver: ib.map((x) => x.id).join(),
       list: ib.slice(0, 3).map((x) => [x.title, x.by]), more: ib.length > 3 ? `${ib.length - 3} more` : ""});
+  const aw = S.away?.answered.filter((a) => a.at > awaySince()) ?? [];
+  if (S.away?.on || aw.length || cur === "away")
+    up.push({id: "away", title: "away mode", tags: S.away?.on ? `<span class="tag">on</span>` : "", r: aw[0] ? ago(aw[0].at / 1000) : "", unread: aw.length, d: aw.length ? "green" : "",
+      sub: aw.length ? `${aw.length} answered while away` : S.away?.on ? "answering question boxes after 5 min" : "", ver: `${S.away?.on}|${aw.map((a) => a.at).join()}`,
+      list: aw.slice(0, 3).map((a) => [a.question, a.name]), more: aw.length > 3 ? `${aw.length - 3} more` : ""});
   const nm = newMocks();
   if (nm.length) up.push({id: "mocks", title: "new mocks", tags: `<span class="tag">${esc([...new Set(nm.map((m) => m.dir))].join(", "))}</span>`, r: ago(nm[0].at / 1000),
     sub: `${nm.length} not opened yet`, list: nm.slice(0, 2).map((m) => [m.name, m.dir]), more: nm.length > 2 ? `${nm.length - 2} more` : ""});
@@ -944,6 +996,7 @@ function viewTitle(i) {
   if (isDoc(cur)) return cur.slice(8);
   if (cur.startsWith("rem-")) return "reminder";
   if (isFiles(cur)) return cur.slice(6).split("/").filter(Boolean).at(-1) ?? "files";
+  if (cur === "away") return "away mode";
   return cur;
 }
 function drawView(soft) {
@@ -968,6 +1021,7 @@ function drawView(soft) {
   else if (cur === "packages") html = `<iframe src="${PACKAGES}" title="packages"></iframe>`;
   else if (cur === "mocks") html = mocksView();
   else if (cur === "inbox") html = inboxView();
+  else if (cur === "away") html = awayView();
   else if (cur?.startsWith("rem-")) html = reminderView(cur);
   else if (cur === "projects") html = projectsView();
   else if (isDoc(cur)) html = projectView(cur.slice(8));
@@ -1604,6 +1658,7 @@ const TOOLS = {
   new: ["new session", `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M10 4v12M4 10h12"/></svg>`],
   tasks: ["tasks", `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M6 4.2v11.6L15.5 10z"/></svg>`],
   files: ["files", `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2.5 5.5a1 1 0 0 1 1-1h4l1.6 1.8h7.4a1 1 0 0 1 1 1v8.2a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1z"/></svg>`],
+  away: ["away mode", `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M15.8 12.6A6.5 6.5 0 0 1 7.4 4.2a6.5 6.5 0 1 0 8.4 8.4z"/></svg>`],
   restore: ["restore session", `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10a6.5 6.5 0 1 0 1.9-4.6M3.5 3.5v3h3"/><path d="M10 6.5V10l2.5 1.5"/></svg>`],
 };
 let popKind = null, popAt = null, taskAsk = null;
@@ -1663,8 +1718,8 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && e.target.name === "pq") { e.preventDefault(); const li = $("#newpl [data-np]"); if (li) newStep("project", li.dataset.np); }
 });
 function toolButtons(spread) {
-  const b = (k) => `<button type="button" class="tool" data-tool="${k}" aria-pressed="${popKind === k}" aria-label="${TOOLS[k][0]}" title="${TOOLS[k][0]}">${TOOLS[k][1]}</button>`;
-  return `${b("new")}${b("tasks")}${b("files")}${spread ? `<span class="sp"></span>` : ""}${b("restore")}`;
+  const b = (k) => `<button type="button" class="tool" data-tool="${k}" aria-pressed="${popKind === k}" aria-label="${TOOLS[k][0]}" title="${TOOLS[k][0]}"${k === "away" && S.away?.on ? " data-on" : ""}>${TOOLS[k][1]}</button>`;
+  return `${b("new")}${b("tasks")}${b("files")}${spread ? `<span class="sp"></span>` : ""}${b("away")}${b("restore")}`;
 }
 $("#tools").innerHTML = toolButtons(true);
 const ago2 = (ms) => ago(ms / 1000);
@@ -1701,6 +1756,12 @@ function popBody() {
     return `<h4>recent files</h4>${!fs ? `<p class="meta">loading…</p>` : `<ul class="pl">${fs.map((f) => `<li data-go="files/${esc(f.file)}"><span>${esc(f.file)}</span><time>${ago2(f.at)}</time></li>`).join("")}</ul>`}
       <div class="pbtn"><button type="button" data-go="files">${TOOLS.files[1]}all files</button></div>`;
   }
+  if (popKind === "away") {
+    const as = S.away?.answered ?? [];
+    return `<h4>away mode</h4>${awaySwitch()}<h4>answered while away</h4>${!S.away ? `<p class="meta">loading…</p>` : !as.length ? `<p class="meta">none in the last 2 weeks</p>`
+      : `<ul class="pl">${as.slice(0, 5).map((a) => `<li data-go="away"><span><b>${esc(a.name || a.pid)}</b><code>${esc(awayAt(a))}</code></span><time>${ago2(a.at)}</time><small>${esc(a.question)}</small></li>`).join("")}</ul>`}
+      <div class="pbtn"><button type="button" data-go="away">${TOOLS.away[1]}all answers</button></div>`;
+  }
   const cs = S.closed;  // the 8 newest; cchost sends up to 40 a host, the new pop-up's recent dirs read them all (user)
   return `<h4>restore session</h4>${!cs ? `<p class="meta">loading…</p>` : !cs.length ? `<p class="meta">none in the last week</p>` : `<ul class="pl">${cs.slice(0, 8).map((c, k) => `<li data-restore="${k}" title="restore"${c.busy ? ` class="busy"` : ""}><span><b>${esc(c.name || c.title || "unnamed")}</b><code>${esc(`${c.host === "nadya" ? "" : `${c.host}:`}${tilde(c.cwd).replace(/^~\/?/, "") || "~"}`)}</code></span><time>${c.busy ? "restoring…" : ago2(c.at)}</time><small>${esc(c.goal || (c.name ? c.title : "") || c.prompt || " ")}</small>${c.err ? `<p class="err">${esc(c.err)}</p>` : ""}</li>`).join("")}</ul>`}`;
 }
@@ -1724,6 +1785,7 @@ function openPop(kind, btn) {
   if (kind === "files") json("api/recent").then((x) => { S.recent = x; if (popKind === "files") { $("#pop").hidden = true; drawPop(); } }).catch(() => {});
   if (kind === "restore") loadClosed();
   if (kind === "tasks") loadTasks();
+  if (kind === "away") loadAway();
 }
 // ~/nadya/tasks.md: `- <name>: <what is said to nadya>` (user, Oct 18th: a task is always something we tell nadya)
 async function loadTasks() {
@@ -2252,6 +2314,7 @@ function open() {
   const pid = cur === "nadya" || cur === null ? nadyaRow()?.pid : isPid(cur) ? cur : null;
   follow(pid);
   if (isFiles(cur)) loadPath(cur.slice(6));
+  if (cur === "away") loadAway();
   // todo.md, ideas/ and projects/ are read only when a tab showing them is opened (user, 2026-10-16: ~70 files every 30s)
   if (cur === "projects" || isDoc(cur)) {
     // a project's page opens on its overview; its dir's docs are read again
@@ -2263,8 +2326,8 @@ function open() {
 
 // ---------- start
 listen();
-loadUsage(); loadBlog(); loadReminders(); loadPackages(); loadMocks(); loadInbox();
-setInterval(loadInbox, 30e3); setInterval(loadUsage, 60e3); setInterval(loadBlog, 60e3); setInterval(loadReminders, 30e3); setInterval(loadPackages, 5 * 60e3); setInterval(loadMocks, 60e3);
+loadUsage(); loadBlog(); loadReminders(); loadPackages(); loadMocks(); loadInbox(); loadAway();
+setInterval(loadInbox, 30e3); setInterval(loadAway, 30e3); setInterval(loadUsage, 60e3); setInterval(loadBlog, 60e3); setInterval(loadReminders, 30e3); setInterval(loadPackages, 5 * 60e3); setInterval(loadMocks, 60e3);
 // back on the tab or window (or the phone woke up): read everything again at once and reopen the streams.
 // focus, visibilitychange and pageshow often come together: one refresh per 2s
 let refreshed = Date.now();  // the load just read everything
@@ -2272,7 +2335,7 @@ function refresh() {
   if (document.visibilityState !== "visible" || Date.now() - refreshed < 2e3) return;
   refreshed = Date.now();
   listen(); if (stream) follow(stream.pid, true);  // a stream can sit open and dead after the phone slept
-  loadUsage(); loadBlog(); loadPackages(); loadMocks(); loadInbox(); if (isFiles(cur)) loadPath(cur.slice(6));
+  loadUsage(); loadBlog(); loadPackages(); loadMocks(); loadInbox(); loadAway(); if (isFiles(cur)) loadPath(cur.slice(6));
 }
 document.addEventListener("visibilitychange", refresh);
 addEventListener("focus", refresh);
