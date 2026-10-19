@@ -2155,7 +2155,17 @@ document.addEventListener("pointerup", (e) => {
   cur = items().find((x) => x.id === p.id)?.open ?? p.id; if (cur === "mocks") S.mockOpen = null; if (cur === "inbox") S.inboxOpen = null;
   push(); if (cur === "blog") localStorage.cc_blog_seen = Math.max(Date.now(), ...S.posts.map((x) => Date.parse(x.time) || 0)); open();
   if ((cur === "nadya" || cur.includes(".")) && matchMedia("(hover: hover) and (pointer: fine)").matches) $("#say").q.focus();
+  eatClick = e.timeStamp;
 });
+// the click that follows that release: on a phone the page has replaced the list by then, so it went to whatever is
+// under the finger, the inbox's or new mocks' first entry (user, Oct 19th: "it kinda goes straight to the document")
+let eatClick = -1e9;
+addEventListener("click", (e) => {
+  if (e.timeStamp - eatClick > 800) return;
+  eatClick = -1e9;
+  if (e.target.closest("#left")) return;
+  e.preventDefault(); e.stopPropagation();
+}, true);
 // a bubble's thumbnail opens full size; a click anywhere or Escape closes it
 document.addEventListener("click", async (e) => {
   const tool = e.target.closest("[data-tool]");
