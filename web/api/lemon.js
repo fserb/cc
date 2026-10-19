@@ -2,7 +2,7 @@
 //   GET grep?q=<text>   live grep over ~/nadya, as the files tab shows it: no dotfiles, no tmp/; {q, files: [{file, n, name}], hits}
 //   GET recent          the 10 files of ~/nadya changed last, the same ones left out: [{file, at (ms)}]
 //   GET docs?dir=~/ai/x   a project dir on this host: its docs (*.md, and what is under docs/, mocks/, research/), names only
-//   GET doc?path=         one of those, as text; log?dir= the dir's last 60 commits. Each takes host=marx: then over ssh
+//   GET doc?path=         one of those, as text. Each takes host=marx: then over ssh
 import Lemon from "lemon";
 
 const PER = 10;  // matching lines kept per file
@@ -86,11 +86,6 @@ async function doc(host, path) {
   const b64 = (await sh(on(host, host === "marx" ? `[ $(stat -f %z ${path}) -lt 2000000 ] && base64 -i ${path}` : `[ $(stat -c %s ${path}) -lt 2000000 ] && base64 ${path}`))).join("");
   return new Response(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)), {headers: {"content-type": `${/\.html?$/.test(path) ? "text/html" : "text/plain"}; charset=utf-8`}});
 }
-// its last 60 commits, if it is a git repo: [{h, at (ms), s}]
-async function log(host, dir) {
-  const ls = await sh(on(host, `git -C ${dir} log -60 --format="%h%x09%ct%x09%s" 2>/dev/null`));
-  return ls.map((l) => { const [h, at, ...s] = l.split("\t"); return {h, at: +at * 1000, s: s.join("\t")}; });
-}
 
 // the sidebar's "new mocks" (user, Oct 18th, web/mocks/sidebar-rich-h.html): every ~/web/<x>/mocks/*.html changed in the
 // last 2 days, newest first: [{url, dir, name, at (ms)}]. ~/web/<x> is served at /<x>/ on this host
@@ -107,10 +102,10 @@ async function get(req) {
   if (req.subpath === "/mocks") return await mocks();
   const host = req.url.searchParams.get("host") === "marx" ? "marx" : "nadya";
   if (req.subpath === "/doc") return await doc(host, req.url.searchParams.get("path") ?? "");
-  if (req.subpath === "/docs" || req.subpath === "/log") {
+  if (req.subpath === "/docs") {
     const dir = req.url.searchParams.get("dir") ?? "";
     if (!DIR.test(dir) || dir.includes("..")) return new Response("bad dir", {status: 400});
-    return req.subpath === "/docs" ? await docs(host, dir) : await log(host, dir);
+    return await docs(host, dir);
   }
 
   if (req.subpath !== "/grep") return Response.HTTP_NOT_FOUND;

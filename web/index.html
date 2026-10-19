@@ -271,8 +271,8 @@
   .phd { display: flex; align-items: baseline; gap: 1rem; } .phd h1 { font-size: 1.9rem; line-height: 1.1; letter-spacing: -0.02em; margin: 0; } .pacts { margin-left: auto; display: flex; gap: 0.3rem; }
   .pghost { all: unset; cursor: pointer; font-size: 0.85rem; color: var(--accent); padding: 0.25rem 0.6rem; border-radius: 7px; transition: transform 120ms var(--ease-out), background-color 120ms ease; } .pghost:hover { background: var(--cur); } .pghost:active { transform: scale(0.97); }
   .psub { margin: 0.35rem 0 0; color: var(--muted); font-size: 0.92rem; } .psub code { font: 0.82rem var(--mono); }
-  .pparts, .pkinds { display: flex; gap: 1rem; margin: 0.9rem 0 0; font-size: 0.88rem; flex-wrap: wrap; } .pkinds { margin-top: 1.2rem; font-size: 0.85rem; }
-  .pparts button, .pkinds button { all: unset; cursor: pointer; color: var(--muted); } .pparts button:hover, .pkinds button:hover { color: var(--text); } .pparts button[aria-pressed=true], .pkinds button[aria-pressed=true] { color: var(--text); font-weight: 600; }
+  .pparts { display: flex; gap: 1rem; margin: 0.9rem 0 0; font-size: 0.88rem; flex-wrap: wrap; }
+  .pparts button { all: unset; cursor: pointer; color: var(--muted); } .pparts button:hover { color: var(--text); } .pparts button[aria-pressed=true] { color: var(--text); font-weight: 600; }
   .ptabs { display: flex; gap: 1.4rem; border-bottom: 1px solid var(--line); margin: 1.2rem 0 0; overflow-x: auto; scrollbar-width: none; }
   .ptabs button { all: unset; cursor: pointer; padding: 0.5rem 0; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; } .ptabs button:hover { color: var(--text); } .ptabs button[aria-pressed=true] { color: var(--text); border-color: var(--text); } .ptabs small { color: var(--muted); font-size: 0.78rem; margin-left: 0.15rem; }
   .psh { display: flex; align-items: baseline; margin: 2rem 0 0.5rem; } .psh h2 { font-size: 0.8rem; font-weight: 600; margin: 0; } .psh button { all: unset; cursor: pointer; margin-left: auto; font-size: 0.82rem; color: var(--muted); } .psh button:hover { color: var(--accent); }
@@ -287,7 +287,7 @@
   .pbig { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.6rem 1.2rem; margin-top: 1.4rem; } .pbig figure { margin: 0; } .pbig img, .pbig .ph { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 10px; display: block; background: var(--track); margin: 0; } .pbig figcaption { font-size: 0.88rem; margin-top: 0.45rem; line-height: 1.4; } .pbig small { display: block; color: var(--muted); font-size: 0.78rem; margin-top: 0.15rem; }
   .pday { font-size: 0.8rem; font-weight: 600; margin: 1.6rem 0 0.2rem; }
   .pev { display: grid; grid-template-columns: 3rem minmax(0, 1fr); gap: 0 0.8rem; padding: 0.35rem 0; align-items: baseline; font-size: 0.92rem; } .pev time { font-size: 0.78rem; color: var(--muted); font-variant-numeric: tabular-nums; } .pev > div { min-width: 0; overflow-wrap: anywhere; }
-  .pev img { display: block; width: 280px; max-width: 100%; border-radius: 8px; margin: 0.4rem 0 0.15rem; } .pev.quiet > div { color: var(--muted); font-size: 0.86rem; }
+  .pev img { display: block; width: 280px; max-width: 100%; border-radius: 8px; margin: 0.4rem 0 0.15rem; }
   @media (max-width: 760px) {
     .ptop { flex-direction: column; align-items: stretch; } .psearch input { font-size: 16px; }
     .pcards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem 0.8rem; } .pcard .tx { display: none; }
@@ -1191,8 +1191,8 @@ function sessionView(r) {
 // one project x with parts (arcade-ps2, -ps3, -switch). nadya is one too: its own posts and every todo naming no project.
 // Its posts are the blog's (data-project, else data-dir), its todos the lines of todo.md, reminders.md and plan.md
 // that start with its name (`keeper: ...`); a line naming none is nadya's guess, shown as one, which the user confirms or
-// changes by telling nadya to write the name in. Files and commits come from api/files and api/log, for dirs on nadya only
-S.pj = {f: "all", q: "", unsure: false, tab: "overview", part: "", kind: "all", dirs: {}, add: null, change: null};
+// changes by telling nadya to write the name in. Its dir's docs come from api/docs. No commits (user, Oct 18th)
+S.pj = {f: "all", q: "", unsure: false, tab: "overview", part: "", dirs: {}, add: null, change: null};
 const PJ_HOSTLESS = /^~\/ai\//;  // ~/ai is the same on both hosts (mutagen); read on nadya
 async function loadPosts() {
   // every post, index.html then archive/<day>.html; a day once read stays (only index.html changes during the day)
@@ -1376,16 +1376,16 @@ async function pjAssign(k, p) {
   catch (err) { sent.set("pj:" + k, err.message); }
   S.pj.change = null; drawView(true);
 }
-// the docs found in a project's dir and its commits, read when its page opens (marx's over ssh, by web/api)
+// the docs found in a project's dir, read when its page opens (marx's over ssh, by web/api)
 const pjDirKey = (w) => `${w.host === "nadya" ? "" : `${w.host}:`}${w.path}`;
 async function pjLoadDir(p) {
   const w = p?.where; if (!w || !["nadya", "marx"].includes(w.host)) return;
   const k = pjDirKey(w), d = S.pj.dirs[k];
   if (d && Date.now() - d.at < 60e3) return;
-  S.pj.dirs[k] = {at: Date.now(), docs: d?.docs, log: d?.log};
+  S.pj.dirs[k] = {at: Date.now(), docs: d?.docs};
   const q = `host=${w.host}&dir=${encodeURIComponent(w.path)}`;
-  const [docs, log] = await Promise.all([json(`api/docs?${q}`).catch(() => []), json(`api/log?${q}`).catch(() => [])]);
-  S.pj.dirs[k] = {at: Date.now(), docs, log}; drawView(true);
+  const docs = await json(`api/docs?${q}`).catch(() => []);
+  S.pj.dirs[k] = {at: Date.now(), docs}; drawView(true);
 }
 // a file's link: it opens in the files tab, a path in ~/nadya, else [marx:]~/...
 const pjFileLink = (path) => ({go: `files/${path.startsWith("~/nadya/") ? path.slice(8) : path}`});
@@ -1414,29 +1414,26 @@ function projectView(id) {
   if (!p) return `<article class="pj"><p class="meta">no project ${esc(id)}</p></article>`;
   const s = S.pj, inPart = (x) => !s.part || x.part === s.part;
   const open = p.open.filter(inPart), done = p.todos.filter((t) => t.done && inPart(t)), posts = p.posts.filter(inPart);
-  const dir = p.where && S.pj.dirs[pjDirKey(p.where)], log = dir?.log ?? [], docs = pjDocs(p);
+  const dir = p.where && S.pj.dirs[pjDirKey(p.where)], docs = pjDocs(p);
   // the docs, trackers and mocks in its dir (user, Oct 18th: "I don't care about a list of all files"), less the notes' own links
   const seen = new Set(docs.map((d) => d.go)), found = (dir?.docs ?? []).map((f) => ({...f, ...pjFileLink(`${pjDirKey(p.where)}/${f.file}`)})).filter((f) => !seen.has(f.go));
-  // history is the posts and the commits in one (user, Oct 18th: "history/posts are supposed to be the same thing")
-  const evs = [...posts.map((x) => ({k: "post", t: x.time, x})), ...(s.part ? [] : log.map((c) => ({k: "commit", t: new Date(c.at).toLocaleString("sv").slice(0, 16), x: c})))].sort((a, b) => b.t.localeCompare(a.t));
-  const evText = (e) => e.k === "post" ? esc(e.x.text) : `<code>${esc(e.x.h)}</code> ${esc(e.x.s)}`;
-  const T = [["overview", ""], ["todo", open.length], ["history", posts.length + (s.part ? 0 : log.length)], ["docs", docs.length + found.length]];
+  // history is the posts, no commits (user, Oct 18th: "project page should not show commits (not even on history)")
+  const T = [["overview", ""], ["todo", open.length], ["history", posts.length], ["docs", docs.length + found.length]];
   let body = "";
   if (s.tab === "overview") {
     const hero = posts.find((x) => x.img);
     body = `${hero ? `<figure class="phero"><img src="${esc(hero.img)}" alt=""><figcaption>${esc(hero.text)}<small>${pjAge(hero.time)} ago · ${esc(hero.agent)}</small></figcaption></figure>` : ""}
-      <div class="psh"><h2>Recently</h2><button data-pjt="history">history →</button></div><ul class="pplain">${evs.filter((e) => e.x !== hero).slice(0, 5).map((e) => `<li><span class="one">${evText(e)}</span><time>${pjAge(e.t)}</time></li>`).join("") || `<li class="none">nothing yet</li>`}</ul>
+      <div class="psh"><h2>Recently</h2><button data-pjt="history">history →</button></div><ul class="pplain">${posts.filter((x) => x !== hero).slice(0, 5).map((x) => `<li><span class="one">${esc(x.text)}</span><time>${pjAge(x.time)}</time></li>`).join("") || `<li class="none">nothing yet</li>`}</ul>
       ${docs.length + found.length ? `<div class="psh"><h2>Docs</h2>${found.length ? `<button data-pjt="docs">all ${docs.length + found.length} →</button>` : ""}</div><div class="pdocs">${[...docs, ...found.slice(0, 4).map((f) => ({...f, title: f.file}))].map((d) => pjA(d, esc(d.title))).join("")}</div>` : ""}`;
   }
   if (s.tab === "todo") body = `<ul class="pplain pgap">${open.map(pjTodoRow).join("")}${S.pj.add === p.id ? `<li><input type="checkbox" disabled><form class="padd tx"><input name="t" placeholder="a todo for ${esc(p.id)}, sent to nadya" autocomplete="off"></form></li>` : `<li class="none"><input type="checkbox" disabled><button class="plink" data-pjadd="${esc(p.id)}">add a todo</button></li>`}</ul>${done.length ? `<div class="psh"><h2>Done</h2></div><ul class="pplain">${done.map(pjTodoRow).join("")}</ul>` : ""}`;
   if (s.tab === "history") {
-    const xs = evs.filter((e) => s.kind === "all" || e.k === s.kind);
     let tl = "", last = "";
-    for (const e of xs.slice(0, 150)) {
-      const d = pjDay(e.t); if (d !== last) { tl += `<div class="pday">${new Date(`${d}T12:00`).toLocaleDateString("en-US", {weekday: "short", month: "short", day: "numeric"})}</div>`; last = d; }
-      tl += e.k === "post" ? `<div class="pev"><time>${e.t.slice(11)}</time><div>${esc(e.x.text)}${e.x.img ? `<img src="${esc(e.x.img)}" alt="" loading="lazy">` : ""}</div></div>` : `<div class="pev quiet"><time>${e.t.slice(11)}</time><div>${evText(e)}</div></div>`;
+    for (const x of posts.slice(0, 150)) {
+      const d = pjDay(x.time); if (d !== last) { tl += `<div class="pday">${new Date(`${d}T12:00`).toLocaleDateString("en-US", {weekday: "short", month: "short", day: "numeric"})}</div>`; last = d; }
+      tl += `<div class="pev"><time>${x.time.slice(11)}</time><div>${esc(x.text)}${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy">` : ""}</div></div>`;
     }
-    body = `${posts.length && log.length && !s.part ? `<div class="pkinds">${[["all", "everything"], ["post", "posts"], ["commit", "commits"]].map(([k, l]) => `<button data-pjk="${k}" aria-pressed="${s.kind === k}">${l}</button>`).join("")}</div>` : ""}${tl || `<p class="meta">nothing yet</p>`}`;
+    body = tl || `<p class="meta">nothing yet</p>`;
   }
   if (s.tab === "docs") body = `<ul class="pplain pgap">${docs.map((d) => `<li><span class="one">${pjA(d, esc(d.title))}</span><small>${d.kind ?? (d.go ? "nadya" : "link")}</small></li>`).join("")}</ul>
     ${["nadya", "marx"].includes(p.where?.host) ? `<div class="psh"><h2>In <code>${esc(pjDirKey(p.where))}</code></h2></div><ul class="pplain">${found.map((f) => { const k = f.file.lastIndexOf("/"); return `<li><span class="one pfp">${pjA(f, `<span class="dir">${esc(f.file.slice(0, k + 1))}</span>${esc(f.file.slice(k + 1))}`)}</span><time>${pjAge(new Date(f.at).toLocaleString("sv"))}</time></li>`; }).join("") || `<li class="none">${dir?.docs ? "no docs" : "loading…"}</li>`}</ul>`
@@ -2068,7 +2065,7 @@ function filesLink(e) {
 }
 // the projects page and a project's: filters, tabs, todos (every change is a message to nadya, who edits the files)
 document.addEventListener("click", async (e) => {
-  const t = e.target.closest("[data-pjf], [data-pju], [data-pjok], [data-pjch], [data-pjt], [data-pjp], [data-pjk], [data-pjadd], [data-pjnew]");
+  const t = e.target.closest("[data-pjf], [data-pju], [data-pjok], [data-pjch], [data-pjt], [data-pjp], [data-pjadd], [data-pjnew]");
   if (!t) return;
   const d = t.dataset, s = S.pj;
   if (d.pjf) s.f = d.pjf;
@@ -2077,7 +2074,6 @@ document.addEventListener("click", async (e) => {
   else if (d.pjch) s.change = d.pjch;
   else if (d.pjt) { s.tab = d.pjt; $("#view").scrollTop = 0; }
   else if (d.pjp != null) s.part = d.pjp;
-  else if (d.pjk) s.kind = d.pjk;
   else if (d.pjadd) { s.add = d.pjadd; drawView(true); $("#view .padd input")?.focus(); return; }
   else if (d.pjnew) {
     // a session in its dir, named <project>-<the first free letter>
@@ -2140,8 +2136,8 @@ function open() {
   if (isFiles(cur)) loadPath(cur.slice(6));
   // todo.md, ideas/ and projects/ are read only when a tab showing them is opened (user, 2026-10-16: ~70 files every 30s)
   if (cur === "projects" || isDoc(cur)) {
-    // a project's page opens on its overview; its dir's files and commits are read again
-    if (isDoc(cur) && S.pj.cur !== cur) Object.assign(S.pj, {cur, tab: "overview", part: "", kind: "all", add: null, change: null});
+    // a project's page opens on its overview; its dir's docs are read again
+    if (isDoc(cur) && S.pj.cur !== cur) Object.assign(S.pj, {cur, tab: "overview", part: "", add: null, change: null});
     loadProjects();
   }
   draw(); drawView(); fit();  // a draft restored while the view was hidden had no height to measure
