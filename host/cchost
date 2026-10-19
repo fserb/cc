@@ -20,6 +20,7 @@ import {sendPeer} from "./peer.js";
 import {settle} from "./burn.js";
 import {Changes} from "./changes.js";
 import {Away} from "./away.js";
+import {pusher} from "./waitpush.js";
 
 function usage() {
   console.error("usage: cchost [serve] [--port N]");
@@ -105,6 +106,14 @@ async function serve(args) {
   server = r.server;
   // away mode: a question box left DELAY is answered (away.js); a look every 10s
   setInterval(() => away.check(instances, (pid) => server.draft(pid)).catch((e) => console.error(`away: ${e.message}`)), 10_000);
+  // a session waiting on the user for 2 min: one push to the phone (waitpush.js), on nadya
+  const waitPush = pusher(() => server.mergedBody());
+  let pushing = false;
+  if (waitPush) setInterval(() => {
+    if (pushing) return;
+    pushing = true;
+    waitPush().catch((e) => console.error(`waitpush: ${e.message}`)).finally(() => pushing = false);
+  }, 15_000);
   // each other host's list stream feeds the relay's stand-ins and the merged list
   // (api/list?all=1) both
   const stops = remote.others().map((h) => remote.follow(h, (rows, body, why) => {
