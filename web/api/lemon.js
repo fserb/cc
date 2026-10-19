@@ -6,6 +6,7 @@
 //   GET inbox             the inbox, newest first: [{id, title, url, by, at (ms), read}]
 //   POST inbox {title, url, by?}   post one (a mock, a report): {id}. by defaults to the posting machine
 //   POST inbox/read {id} | inbox/clear {id}   mark one opened, or take it out (id "read": every opened one)
+//   POST screen {w, h, dpr, coarse, ua}   what a device's cc measured, once per size: ~/nadya/tmp/cc-screens.jsonl (50 kept)
 import Lemon from "lemon";
 
 const PER = 10;  // matching lines kept per file
@@ -131,6 +132,19 @@ async function post(req) {
     const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     await inboxEdit((all) => all.push({id, title: title || url.replace(/\/+$/, "").split("/").at(-1).replace(/\.(html?|md)$/, ""), url, by, at: Date.now(), read: false}));
     return {id};
+  }
+  // the phone's real viewport (nadya, Oct 19th: the Pixel 9 Pro XL's was computed from its screenshots, not measured)
+  if (req.subpath === "/screen") {
+    const n = (v) => Number.isFinite(+v) ? +v : null;
+    const line = {at: Date.now(), node: (await req.whois().catch(() => null))?.node?.split(".")[0] ?? "?", w: n(b.w), h: n(b.h),
+      dpr: n(b.dpr), coarse: !!b.coarse, ua: `${b.ua ?? ""}`.slice(0, 300)};
+    const f = "~/nadya/tmp/cc-screens.jsonl";
+    const p = new Deno.Command("host", {args: [`{ tail -n 49 ${f} 2>/dev/null; cat; } > ${f}.tmp && mv ${f}.tmp ${f}`], stdin: "piped", stdout: "null", stderr: "null"}).spawn();
+    const w = p.stdin.getWriter();
+    await w.write(new TextEncoder().encode(`${JSON.stringify(line)}\n`));
+    await w.close();
+    await p.status;
+    return {ok: true};
   }
   if (req.subpath === "/inbox/read") return await inboxEdit((all) => { for (const x of all) if (x.id === b.id) x.read = true; return {ok: true}; });
   if (req.subpath === "/inbox/clear") return await inboxEdit((all) => {
