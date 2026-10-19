@@ -227,6 +227,13 @@
   .rows li.x span { text-decoration: line-through; color: var(--muted); }
   #addf { display: grid; gap: 0.6rem; padding: 0.2rem 1rem 0; }
   #addf .q { position: relative; }
+  #pop h4.nk { display: flex; align-items: center; gap: 0.3rem; margin-left: 0.4rem; } #pop h4.nk button { all: unset; cursor: pointer; font-size: 1.1rem; line-height: 1; padding: 0 0.4rem 0.1rem; border-radius: 5px; color: var(--accent); } #pop h4.nk button:hover { background: rgb(0 0 0 / 0.05); }
+  #newf { display: grid; gap: 0.6rem; padding: 0.2rem 1rem 0; } #newf.pj { padding-bottom: 0.4rem; }
+  #newf textarea, #newf input { box-sizing: border-box; width: 100%; font: inherit; font-size: 0.9rem; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 0.4rem 0.6rem; outline: 0; resize: vertical; user-select: text; -webkit-user-select: text; }
+  #newf textarea:focus, #newf input:focus { border-color: var(--accent); }
+  #newf .row { display: flex; align-items: center; gap: 1rem; } #newf label.check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; cursor: pointer; } #newf .check input { margin: 0; width: auto; accent-color: var(--accent); }
+  #newf button.go { all: unset; cursor: pointer; margin-left: auto; background: var(--accent); color: var(--on-accent); border-radius: 6px; padding: 0.35rem 1.2rem; } #newf :disabled { opacity: 0.5; cursor: default; } #newf p { margin: 0; font-size: 0.8rem; }
+  #pop .pl li.meta { cursor: default; color: var(--muted); } #pop .pl li.meta:hover { background: none; }
   #addf input:not([type=checkbox]) { box-sizing: border-box; width: 100%; font: inherit; font-size: 0.9rem; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 0.4rem 0.6rem; outline: 0; user-select: text; -webkit-user-select: text; }
   #addf input:focus { border-color: var(--accent); } #addf input[name=q] { font-family: var(--mono); }
   #addf .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
@@ -1536,13 +1543,14 @@ const HOSTS = ["nadya", "marx"];
 // starts a claude and opens it once its row is in the list
 async function spawn(dir, name, focus, more = {}) {
   // a detached tmux session; with focus, a tmux window beside a claude already in dir, else a kitty window.
-  // more: {goal}, {resume: sessionId}
+  // more: {resume: sessionId, goal}
   const r = await post(`${CCX}/spawn`, {dir, name, beside: true, focus, ...more});
   if (!r.pid) throw new Error(r.error ?? "no pid");
   const was = cur;
   for (let end = Date.now() + 15e3; !S.rows.some((x) => x.pid === r.pid) && Date.now() < end;) await new Promise((ok) => setTimeout(ok, 300));
-  if (cur !== was) return;  // the user opened something else meanwhile: that stays
+  if (cur !== was) return r.pid;  // the user opened something else meanwhile: that stays
   cur = r.pid; push(); open();
+  return r.pid;
 }
 
 // ---------- the tools: buttons over the list (desktop: in the header; phone: on top of the list), each a pop-up
@@ -1554,6 +1562,61 @@ const TOOLS = {
   restore: ["restore session", `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10a6.5 6.5 0 1 0 1.9-4.6M3.5 3.5v3h3"/><path d="M10 6.5V10l2.5 1.5"/></svg>`],
 };
 let popKind = null, popAt = null, taskAsk = null;
+// the new-session pop-up starts with agent types (user, Oct 18th: "a list of types of agents (one per line)"), then a
+// plain session in a path. A type starts <name>-<first free letter> in its dir, types its first prompt, and tells nadya,
+// who looks after it like its own helpers (user: "Nadya controls all agents"). No goal: Claude's title is the second line
+const NEWT = {
+  idea: {label: "discuss a new idea", name: "idea", ph: "the idea, in a few words (optional)",
+    say: (x) => `The user wants to discuss a new idea${x ? `: ${x}` : "; ask them what it is"}. Use the brainstorming skill, one question at a time. When it is settled, write or update ~/nadya/ideas/<x>.md.`},
+  ask: {label: "ask a question", name: "ask", ph: "the question (optional)", say: (x) => x ? `The user asks: ${x}` : "The user has a question; ask them what it is."},
+  research: {label: "research something", name: "research", ph: "what to research (optional)",
+    say: (x) => `Research: ${x || "ask the user what to research"}. Write the result with its sources to ~/nadya/research/<x>.md, then answer here in a few lines.`},
+  project: {label: "work on a project", ph: "what to do (optional)", say: (x, p) => `Work on ${p}: ${x || "ask the user what to do"}.`},
+  shopping: {label: "an errand or shopping", name: "shopping", dir: "nadya:~/nadya/agents/shopping", ph: "the errand (optional)",
+    say: (x) => `Read ~/ai/roles/shopping-agent.md, then: ${x || "ask the user what the errand is"}.`},
+};
+let newKind = null, newProj = null;
+function newProjects() {
+  if (!S.projects?.length || !S.allPosts) return `<li class="meta">loading…</li>`;
+  const q = $("#newf")?.pq.value.trim().toLowerCase() ?? "";
+  const ps = pjModel().all.filter((p) => p.where && p.id.includes(q) && (q || p.state !== "done")).slice(0, 12);
+  return ps.map((p) => `<li data-np="${esc(p.id)}"><span><b>${esc(p.id)}</b><code>${esc(`${p.where.host === "nadya" ? "" : `${p.where.host}:`}${p.where.path.replace(/^~\/?/, "")}`)}</code></span><time>${pjAge(p.last)}</time></li>`).join("") || `<li class="meta">no project named so</li>`;
+}
+function newStep(kind, proj = null) {
+  newKind = kind; newProj = proj; $("#pop").hidden = true; drawPop();
+  if (kind === "project" && !proj && !(S.projects?.length && S.allPosts)) Promise.all([loadTodo(), loadPosts()]).then(() => { if (newKind === "project" && !newProj) $("#newpl").innerHTML = newProjects(); });
+  if (!narrow()) $("#addf")?.q.focus() ?? $("#newf")?.querySelector("input, textarea")?.focus();
+}
+async function startAgent(f) {
+  const msg = $("#newmsg"), t = NEWT[newKind], x = f.t.value.trim();
+  const p = newProj && pjModel().by.get(newProj), dir = p ? `${p.where.host}:${p.where.path}` : t.dir ?? "nadya:~/nadya";
+  const pre = p ? p.id : t.name, taken = new Set(S.rows.map((r) => r.name));
+  const name = `${pre}-${[..."abcdefghijklmnopqrstuvwxyz"].find((l) => !taken.has(`${pre}-${l}`)) ?? "z"}`;
+  const say = (s, cls = "meta") => { msg.hidden = false; msg.className = cls; msg.textContent = s; };
+  f.querySelector(".go").disabled = f.t.disabled = true;
+  try {
+    say(`starting ${name} in ${dir}…`);
+    const pid = await spawn(dir, name, !!f.focus?.checked);
+    say(`typing ${name}'s first prompt…`);
+    const text = `You are ${name}, a session the user started from cc's new-session menu ("${t.label}${p ? `: ${p.id}` : ""}"). nadya looks after you like one of its helpers: commit only your own files, ask the user with the question box when they must choose, and when you are done, SendMessage nadya "${name} done: <what you did>".\n\n${t.say(x, p?.id)}`;
+    for (let end = Date.now() + 30e3; ; await new Promise((ok) => setTimeout(ok, 700))) {
+      const r = S.rows.find((r) => r.pid === pid);
+      if (r && (r.state === "free" || r.state === "wait") && !r.asking) {
+        try { await post(`${CCX}/s/${pid}/type`, {text}); break; } catch (err) { if (Date.now() > end) throw err; }
+      } else if (Date.now() > end) throw new Error(`${name} started, but did not get ready to type in 30s`);
+    }
+    await toNadya(`[cc new] the user started ${name} (${pid}) in ${dir} for "${t.label}"${x ? `: ${x}` : ""}. Look after it as one of your helpers (helpers.md, its trig rules); its first prompt tells it to report to you when done.`)
+      .catch((err) => { throw new Error(`${name} started, but nadya was not told: ${err.message}`); });
+    closePop();
+  } catch (err) { say(err.message, "err"); f.querySelector(".go").disabled = f.t.disabled = false; }
+}
+document.addEventListener("submit", (e) => { if (e.target.id !== "newf") return; e.preventDefault(); if (e.target.t) startAgent(e.target); });
+document.addEventListener("input", (e) => { if (e.target.name === "pq" && e.target.form?.id === "newf") $("#newpl").innerHTML = newProjects(); });
+document.addEventListener("keydown", (e) => {
+  const f = e.target.form; if (f?.id !== "newf") return;
+  if (e.key === "Enter" && e.target.name === "t" && !e.shiftKey && !e.isComposing) { e.preventDefault(); f.requestSubmit(); }
+  if (e.key === "Enter" && e.target.name === "pq") { e.preventDefault(); const li = $("#newpl [data-np]"); if (li) newStep("project", li.dataset.np); }
+});
 function toolButtons(spread) {
   const b = (k) => `<button type="button" class="tool" data-tool="${k}" aria-pressed="${popKind === k}" aria-label="${TOOLS[k][0]}" title="${TOOLS[k][0]}">${TOOLS[k][1]}</button>`;
   return `${b("new")}${b("tasks")}${b("files")}${spread ? `<span class="sp"></span>` : ""}${b("restore")}`;
@@ -1563,12 +1626,20 @@ const ago2 = (ms) => ago(ms / 1000);
 const tilde = (p) => p.replace(/^\/(home|Users)\/[^/]+(?=\/|$)/, "~");
 function popBody() {
   if (popKind === "new") {
-    // recent places: the open sessions' dirs, then the closed ones'
-    const dirs = [...new Set([...S.rows.map((r) => `${r.pid.split(".")[0]}:${r.path.slice(r.path.indexOf(":") + 1).replace(/^~\/?/, "")}`), ...(S.closed ?? []).map((c) => `${c.host}:${tilde(c.cwd).replace(/^~\/?/, "")}`)].map((d) => d.replace(/:$/, ":~")))].slice(0, 8);
-    return `<h4>new session</h4><form id="addf"><div class="q"><input name="q" placeholder="host:dir" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"><ul id="addh" hidden></ul></div>
-      <div class="chips">${dirs.map((d) => `<button type="button" data-dir="${esc(d)}">${esc(d)}</button>`).join("")}</div>
-      <input name="goal" placeholder="goal: a few words on what it is for" autocomplete="off">
-      <div class="row">${narrow() ? "" : `<label class="check"><input type="checkbox" name="focus"> focus in kitty</label>`}<button class="go">start</button></div><p class="err" id="addmsg" hidden></p></form>`;
+    const back = (label) => `<h4 class="nk"><button type="button" data-nk="" aria-label="back">‹</button>${esc(label)}</h4>`;
+    if (!newKind) return `<h4>new session</h4><ul class="pl">${Object.entries(NEWT).map(([k, t]) => `<li data-nk="${k}"><span>${esc(t.label)}</span><time>›</time></li>`).join("")}<li data-nk="path"><span>plain session in a path</span><time>›</time></li></ul>`;
+    const focus = narrow() ? "" : `<label class="check"><input type="checkbox" name="focus"> focus in kitty</label>`;
+    if (newKind === "path") {
+      // recent places: the open sessions' dirs, then the closed ones'
+      const dirs = [...new Set([...S.rows.map((r) => `${r.pid.split(".")[0]}:${r.path.slice(r.path.indexOf(":") + 1).replace(/^~\/?/, "")}`), ...(S.closed ?? []).map((c) => `${c.host}:${tilde(c.cwd).replace(/^~\/?/, "")}`)].map((d) => d.replace(/:$/, ":~")))].slice(0, 8);
+      return `${back("plain session in a path")}<form id="addf"><div class="q"><input name="q" placeholder="host:dir" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"><ul id="addh" hidden></ul></div>
+        <div class="chips">${dirs.map((d) => `<button type="button" data-dir="${esc(d)}">${esc(d)}</button>`).join("")}</div>
+        <div class="row">${focus}<button class="go">start</button></div><p class="err" id="addmsg" hidden></p></form>`;
+    }
+    if (newKind === "project" && !newProj) return `${back(NEWT.project.label)}<form id="newf" class="pj"><input name="pq" type="search" placeholder="search projects" autocomplete="off" autocapitalize="off" spellcheck="false"></form><ul class="pl" id="newpl">${newProjects()}</ul>`;
+    const t = NEWT[newKind];
+    return `${back(newProj ? `work on ${newProj}` : t.label)}<form id="newf"><textarea name="t" rows="3" placeholder="${esc(t.ph)}" autocomplete="off"></textarea>
+      <div class="row">${focus}<button class="go">start</button></div><p class="err" id="newmsg" hidden></p></form>`;
   }
   if (popKind === "tasks") {
     // the tasks sent last first, then the file's order; a click sends it, one with a <...> asks for that first
@@ -1593,7 +1664,7 @@ function drawPop() {
   for (const b of document.querySelectorAll("[data-tool]")) b.setAttribute("aria-pressed", popKind === b.dataset.tool);
   $("#shade").hidden = !popKind || !narrow();
   if (!popKind) { pop.hidden = true; return; }
-  if (popKind === "new" && !pop.hidden && $("#addf")) return;  // keeps what is typed
+  if (popKind === "new" && !pop.hidden && ($("#addf") || $("#newf"))) return;  // keeps what is typed
   pop.innerHTML = popBody(); pop.hidden = false;
   if (!popAt.isConnected) popAt = $(`${narrow() ? ".ptools" : "#tools"} [data-tool="${popKind}"]`);  // the phone's row is redrawn with the list
   const r = popAt.getBoundingClientRect();
@@ -1604,7 +1675,7 @@ function drawPop() {
 }
 function openPop(kind, btn) {
   popKind = kind; popAt = btn; $("#pop").hidden = true; drawPop();
-  if (kind === "new") { if (!narrow()) $("#addf").q.focus(); if (!S.closed) loadClosed(); }
+  if (kind === "new") { newKind = newProj = null; if (!S.closed) loadClosed(); }
   if (kind === "files") json("api/recent").then((x) => { S.recent = x; if (popKind === "files") { $("#pop").hidden = true; drawPop(); } }).catch(() => {});
   if (kind === "restore") loadClosed();
   if (kind === "tasks") loadTasks();
@@ -1640,7 +1711,7 @@ async function loadClosed() {
   S.closed = x.closed;
   if (popKind === "restore") { $("#pop").hidden = true; drawPop(); }
 }
-function closePop() { popKind = null; taskAsk = null; drawPop(); }
+function closePop() { popKind = null; taskAsk = null; newKind = newProj = null; drawPop(); }
 const closeAdd = closePop;
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && popKind && !e.target.closest?.("#addf")) closePop(); });
 addEventListener("resize", () => { if (popKind && !narrow()) closePop(); });
@@ -1696,7 +1767,7 @@ document.addEventListener("submit", async (e) => {
   $("#addh").hidden = true;
   msg.hidden = false; msg.className = "meta"; msg.textContent = `starting a claude on ${v.slice(0, i)} in ${dir}…`;
   try {
-    await spawn(`${v.slice(0, i)}:${dir}`, "", !!f.focus?.checked, {goal: f.goal.value.trim() || undefined});
+    await spawn(`${v.slice(0, i)}:${dir}`, "", !!f.focus?.checked);
     closePop();
   } catch (err) {
     msg.className = "err"; msg.textContent = err.message;
@@ -1984,6 +2055,8 @@ document.addEventListener("click", async (e) => {
   if (tool) { if (popKind === tool.dataset.tool) closePop(); else openPop(tool.dataset.tool, tool); return; }
   if (e.target.closest("#shade")) { closePop(); return; }
   if (popKind && (!e.target.closest("#pop") || e.target.closest("#pop [data-go]"))) closePop();
+  const nk = e.target.closest("#pop [data-nk]"); if (nk) { newStep(nk.dataset.nk || null); return; }
+  const np = e.target.closest("#pop [data-np]"); if (np) { newStep("project", np.dataset.np); return; }
   const rs = e.target.closest("#pop [data-restore]"); if (rs) { restore(S.closed[+rs.dataset.restore]); return; }
   const tk = e.target.closest("#pop [data-task]");
   if (tk) { const k = +tk.dataset.task; if (/<[^>]*>/.test(S.tasks[k].msg)) { taskAsk = k; $("#pop").hidden = true; drawPop(); $("#pop form.task input").focus(); } else runTask(k); return; }
