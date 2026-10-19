@@ -149,6 +149,10 @@ All JSON, all under `api/`.
                                    dir field, and whether prefix itself is one. Here and
                                    in spawn a dir not starting with ~ or / is under ~
                                    (`ai/c` is `~/ai/c`; 2026-10-13, user)
+    GET  api/away[?all=1]          away mode (away.js): {on, since, delay, answered}; with
+                                   all, {hosts: [{host, on, since, delay} | {host, down}],
+                                   answered: [... each with host], newest first}
+    POST api/away[?all=1] {on}     turn it on or off, here or on every host that answers
 
 ### Rows
 
@@ -266,6 +270,23 @@ findings are at the top of `dialog.js`; the ones that changed the design:
 - a wrapped label continues at the column a description uses, so both land in `detail`
 - `pick` re-captures and refuses with "the dialog changed" unless the labels are the ones
   the client drew. Live: a stale list was refused, then `No` declined a Bash command
+
+## Away mode (away.js, 2026-10-19)
+
+User: "auto answer questions ... when I'm offline, so work doesn't get stuck on me". Off by
+default; while on, each cchost answers its own sessions' question boxes (AskUserQuestion
+only, told apart by `Chat about this`) after 5 minutes on one with nothing in cc's box for
+it. A single-select gets a typed answer in its free-text field: "The user is away
+(auto-answer). Pick the option you'd recommend, note the pick and why in your reply, and
+continue. If the choice can't be undone (...), don't pick: stop and leave the question for
+the user." A multi-select or a preview layout gets `Chat about this`, then the same words as
+an `[auto-answer]` prompt once idle; several tabs go one by one, then `Submit answers`.
+
+Tried on 2.1.303, 2026-10-19, on a throwaway session: `Chat about this` alone ("talk about
+it") left the agent asking "What would you like to clarify?", still waiting; the typed answer
+got a pick with its reason, and the work went on. Each answer goes to
+`~/.claude/ccx-away.jsonl` (14 days) with the question, its options, how, the text, and the
+log's size then, from which `answered` reads the agent's reply.
 
 ## Taking a queued message back (queue.js, 2026-10-12)
 

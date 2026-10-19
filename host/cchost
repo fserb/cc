@@ -19,6 +19,7 @@ import {HOME} from "./sh.js";
 import {sendPeer} from "./peer.js";
 import {settle} from "./burn.js";
 import {Changes} from "./changes.js";
+import {Away} from "./away.js";
 
 function usage() {
   console.error("usage: cchost [serve] [--port N]");
@@ -94,13 +95,16 @@ async function serve(args) {
   clearStandIns(remote.SELF);
   const relay = new Relay(remote.SELF, async (host, body) =>
     (await remote.call(host, "/api/relay", body))[1]);
+  const away = new Away();
   const r = runServer({source: () => ({instances, net}), port, hostname: "0.0.0.0", relay,
-    subs, goals, typed: new Typed(), changes});
+    subs, goals, typed: new Typed(), changes, away});
   if (r.error) {
     console.error(`cchost: ${r.error}`);
     Deno.exit(1);
   }
   server = r.server;
+  // away mode: a question box left DELAY is answered (away.js); a look every 10s
+  setInterval(() => away.check(instances, (pid) => server.draft(pid)).catch((e) => console.error(`away: ${e.message}`)), 10_000);
   // each other host's list stream feeds the relay's stand-ins and the merged list
   // (api/list?all=1) both
   const stops = remote.others().map((h) => remote.follow(h, (rows, body, why) => {

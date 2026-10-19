@@ -259,6 +259,7 @@ export class Server {
     this.subs = subs;                     // a Subs, under `cchost`
     this.goals = null;                    // a Goals, under `cchost`
     this.typed = null;                    // a Typed, under `cchost`
+    this.away = null;                     // an Away, under `cchost`
     this.drafts = new Map();              // pid -> {text, at}: cc's chat box for it, api/s/<pid>/draft
     this.lists = new Set();               // api/events clients
     this.allLists = new Set();            // api/events?all=1 clients
@@ -724,6 +725,29 @@ export class Server {
     return {closed: got.flat().sort((a, b) => b.at - a.at)};
   }
 
+  // api/away: away mode (away.js), this host's or with `all` every host's: {hosts: [{host,
+  // on, since, delay} or {host, down}], answered: [...each with `host`, newest first]}. A
+  // POST {on} sets it, on every host that answers with `all`
+  async awayRoute(req, all) {
+    const here = () => this.away ? {...this.away.state(), answered: this.away.answered()}
+      : {error: "no away mode here; it runs under cchost"};
+    let on;
+    if (req.method === "POST") {
+      on = (await req.json().catch(() => ({}))).on;
+      if (typeof on !== "boolean") return json({error: "on is true or false"}, 400);
+      if (!this.away) return json(here(), 409);
+      this.away.set(on);
+    }
+    if (!all) return json(here(), this.away ? 200 : 409);
+    const got = await Promise.all(this.allHosts().map(async (h) => {
+      if (h === this.self) return [h, here()];
+      const [body, err] = await call(h, "/api/away", on === undefined ? undefined : {on});
+      return [h, body ?? {error: err}];
+    }));
+    return json({hosts: got.map(([host, b]) => b.error ? {host, down: b.error} : {host, on: b.on, since: b.since, delay: b.delay}),
+      answered: got.flatMap(([host, b]) => (b.answered ?? []).map((a) => ({...a, host}))).sort((a, b) => b.at - a.at)});
+  }
+
   // api/spawn: on the host its `after` pane (`host/<pane>`) or its dir (`host:dir`) names,
   // with its pid and pane tagged as the list's; with neither, here as before
   async spawnRoute(req) {
@@ -864,6 +888,7 @@ export class Server {
     if (get && path === "/api/dirs") {
       return json(await this.dirs(url.searchParams.get("prefix") ?? "", all));
     }
+    if ((get || post) && path === "/api/away") return await this.awayRoute(req, all);
     if (get && path === "/api/closed") return json(await this.closed(all));
     if (post && path === "/api/spawn") return await this.spawnRoute(req);
     if (post && path === "/api/focus") return await this.focusRoute(req);
@@ -986,10 +1011,11 @@ export class Server {
 // Start serving. {server, stop} or {error}: a port already taken is reported, not thrown,
 // so a caller can say why.
 export function runServer({source, port = PORT, hostname = "127.0.0.1", relay = null,
-  subs = null, goals = null, typed = null, changes = null}) {
+  subs = null, goals = null, typed = null, changes = null, away = null}) {
   const s = new Server(source, port, relay, subs);
   s.goals = goals;
   s.typed = typed;
+  s.away = away;
   if (changes) s.useChanges(changes);
   let http;
   try {
