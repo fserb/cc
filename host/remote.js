@@ -25,8 +25,15 @@ export const others = () => HOSTS.filter((h) => h !== SELF);
 
 export const base = (host) => `http://${ADDR.get(host) ?? `${host}:${PORT}`}`;
 
+// host -> why, while its list stream (follow) is down: a call to it answers at once
+// instead of waiting out its timeout, which held api/usage 13s and api/burn/series 20s on
+// every cache minute while marx slept (cc-phone.html, 2026-10-19)
+const downs = new Map();
+export const isDown = (host) => downs.get(host);
+
 // GET or POST json. [body, null] or [null, error message]
 export async function call(host, path, body = undefined, timeout = TIMEOUT) {
+  if (downs.has(host)) return [null, `${host}: down, ${downs.get(host)}`];
   const init = {signal: AbortSignal.timeout(timeout)};
   if (body !== undefined) {
     Object.assign(init, {method: "POST", body: JSON.stringify(body),
@@ -227,12 +234,14 @@ export function follow(host, onList, retry = 5000) {
         why = await sse(`${base(host)}/api/events`, (event, data) => {
           if (event !== "list" || !data) return;
           const body = JSON.parse(data);
+          downs.delete(host);
           onList(body.rows, body);
         });
       } catch (e) {
         // down, refused or stalled: the same to the caller
         why = e.message;
       }
+      downs.set(host, why);
       onList(null, null, why);
       if (alive) await new Promise((ok) => setTimeout(ok, retry));
     }
