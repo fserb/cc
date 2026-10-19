@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc tooling: what the proposals change on screen</title>
+<style>
+  :root { --text: #212529; --muted: #6c757d; --line: #e9ecef; --accent: #0b7bd3; --orange: #e8590c; --hover: #f3f4f6;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 var(--font); color: var(--text); background: #fff; }
+  header { padding: 1rem 1.2rem 0; } header h1 { font-size: 1.2rem; margin: 0; }
+  header p { color: var(--muted); font-size: 0.88rem; margin: 0.2rem 0 0; }
+  main { display: flex; flex-direction: column; gap: 1.5rem; padding: 1.2rem; max-width: 70rem; }
+  section { border: 1px solid var(--line); border-radius: 8px; padding: 0.8rem 1rem 1rem; }
+  h2 { font-size: 1rem; margin: 0 0 0.2rem; } h2 + p { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.8rem; }
+  .pair { display: flex; flex-wrap: wrap; gap: 1.2rem; }
+  .frame { flex: 1 1 26rem; border: 1px dashed var(--line); border-radius: 6px; padding: 0.9rem 0.8rem; }
+  .frame > h3 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 0.6rem; font-weight: 400; }
+  /* cc's session row, layout H */
+  .row { padding: 0.45rem 0.7rem; border-radius: 8px; }
+  .row + .row { margin-top: 2px; }
+  .row .l1 { display: flex; gap: 0.4rem; align-items: baseline; }
+  .row .n { font-weight: 600; } .row .ctx { color: var(--orange); font-size: 0.8rem; } .row .p { margin-left: auto; color: var(--muted); font-size: 0.8rem; }
+  .row .l2 { color: var(--muted); font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .closing { color: var(--muted); font-size: 0.78rem; }
+  .row .closing::before { content: "◌ "; }
+  .ticks { font: 0.75rem/1.4 var(--mono); color: var(--muted); margin-top: 0.6rem; }
+  .ticks b { color: var(--orange); font-weight: 500; }
+  pre { margin: 0; background: #f7f8f9; border-radius: 6px; padding: 0.7rem 0.8rem; font: 0.8rem/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+  pre .c { color: var(--muted); } pre .s { color: var(--accent); }
+  .open { font-size: 0.82rem; color: var(--muted); margin: 0.7rem 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>cc tooling: what the proposals change on screen</h1>
+  <p>From <a href="https://nadya.gum.ts.net/nadya/research/cc-tooling.html">research/cc-tooling.html</a> (cc-b, Oct 19th). Most proposals change no screen; these four do.</p>
+</header>
+<main>
+
+<section>
+  <h2>1. The context size stops blinking (proposal 1)</h2>
+  <p>A screenshot in a tool result can make the last 256KB of the log hold no reply, so the size reads 0 for that poll. Same session, six polls a few seconds apart.</p>
+  <div class="pair">
+    <div class="frame"><h3>today</h3>
+      <div class="row"><div class="l1"><span class="n">arcade-lbp-h</span><span class="ctx">312k</span><span class="p">marx:web/arcade</span></div><div class="l2">LBP capture-replay, level 3</div></div>
+      <div class="ticks">polls: <b>312k</b> · · <b>314k</b> · <b>318k</b><br>trig: 3 × session.arcade-lbp-h.context (300k crossed 3 times)</div>
+    </div>
+    <div class="frame"><h3>proposed</h3>
+      <div class="row"><div class="l1"><span class="n">arcade-lbp-h</span><span class="ctx">318k</span><span class="p">marx:web/arcade</span></div><div class="l2">LBP capture-replay, level 3</div></div>
+      <div class="ticks">polls: <b>312k 312k 312k 314k 314k 318k</b><br>trig: 1 × session.arcade-lbp-h.context</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>2. A close that waits for the end of the turn (proposal 3)</h2>
+  <p>nadya asks for the close once; cchost does it at the session's next turn end if nothing is typed and no draft is open. cc says so in the row's second line.</p>
+  <div class="pair">
+    <div class="frame"><h3>cc row while the close waits</h3>
+      <div class="row"><div class="l1"><span class="n">cc-b</span><span class="p">web/cc</span></div><div class="l2">cc tooling proposals</div><div class="closing">closes when this turn ends (nadya)</div></div>
+      <div class="row"><div class="l1"><span class="n">cc-a</span><span class="p">web/cc</span></div><div class="l2">cc inbox for posted mocks</div></div>
+    </div>
+    <div class="frame"><h3>ccx</h3>
+<pre><span class="c">$</span> ccx close --when-idle cc-b
+cc-b is busy: closes when this turn ends, if nothing is typed (until 12:40)
+<span class="c">… 40 s later, on its next done:</span>
+<span class="s">[ccx] closed cc-b (nadya:1612203) at 11:41:07, session 3f2c…e1, restore it from cc's restore list</span>
+<span class="c">or, if you typed into it first:</span>
+<span class="s">[ccx] did not close cc-b: text in its input box; the close is dropped</span></pre>
+    </div>
+  </div>
+  <p class="open">Open: should typing into the session cancel the close for good (shown), or only delay it?</p>
+</section>
+
+<section>
+  <h2>3. Start a helper with its brief and its watch rules in one call (proposal 4)</h2>
+  <p>Today nadya runs ccx new, a 20 s loop on /screen for the banner, ccx user "$(cat brief)", and two trig adds.</p>
+  <div class="pair">
+    <div class="frame"><h3>today (nadya's Bash, one helper)</h3>
+<pre>ccx new --goal "cc tooling" ~/web/cc cc-b
+for i in $(seq 1 10); do sleep 2; curl -s 127.0.0.1:7681/api/s/$pid/screen \
+  | grep -q 'Claude Code v' && break; done
+ccx user $pid "$(cat tmp/assign/cc-b.md)"
+trig add 'on session.cc-b.done -> me "cc-b finished a turn: …"'
+trig add 'on session.cc-b.asking -> me "cc-b asks: …"'</pre>
+    </div>
+    <div class="frame"><h3>proposed</h3>
+<pre><span class="c">$</span> ccx new --goal "cc tooling" --prompt-file tmp/assign/cc-b.md --watch ~/web/cc cc-b
+1612203
+<span class="c">prompt typed at 11:02:14 (2.1 s after start)</span>
+<span class="c">watch: trig rules trig-n-cc-b-done, trig-n-cc-b-asking (for nadya)</span></pre>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>4. Read a session without scraping the pane (proposal 5)</h2>
+  <p>nadya reads /screen with a python one-liner ~75 times a day, and logged 5 times (Oct 13th-18th, 8 sessions) that it took a dim prompt suggestion for something the user typed.</p>
+  <div class="pair">
+    <div class="frame"><h3>today</h3>
+<pre><span class="c">$</span> curl -s marx:7681/api/s/7954/screen | python3 -c "…print(d['text'][-900:])"
+● Committed 4b1e2aa. The reorder works on all three levels.
+
+────────────────────────────────────────
+❯ keep going with the next level
+────────────────────────────────────────
+  ⏵⏵ bypass permissions on</pre>
+      <p class="open">"keep going…" is Claude Code's suggestion in dim grey; the text dump drops the grey.</p>
+    </div>
+    <div class="frame"><h3>proposed</h3>
+<pre><span class="c">$</span> ccx peek soccer-e
+soccer-e  wait 3m  marx:~/web/soccer  312k
+last reply (11:02):
+  Committed 4b1e2aa. The reorder works on all three levels.
+input: empty <span class="c">(suggestion: "keep going with the next level")</span>
+dialog: none</pre>
+    </div>
+  </div>
+</section>
+
+</main>
+</body>
+</html>
