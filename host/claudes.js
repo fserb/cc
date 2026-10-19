@@ -19,7 +19,7 @@ export class Instance {
     this.asking = "";         // the record's waitingFor: a dialog is up, and which one
     this.question = "";       // a wait whose last reply ends in a question: its last line (readTitle)
     this.waitsOn = "";        // hold on a peer: the name of the session it waits for
-    this.agents = 0;          // subagents running now (subagentsRunning)
+    this.agents = 0;          // subagents running or idle on their shell (subagentsRunning)
     this.name = "";           // the session's own name, what a peer addresses it by
     this.sock = "";           // the record's messagingSocketPath, where peer.js delivers
     this.sessionId = "";      // the record's; with cwd, what names the session log
@@ -274,19 +274,25 @@ export function readTitle(path, size) {
   return {title: found["custom-title"] ?? found["ai-title"] ?? "", context, question};
 }
 
-// How many of this session's subagents are running now. Each has its own log,
+// How many of this session's subagents are running now, or idle on a shell of their own. Each has its own log,
 // `<sessionId>/subagents/agent-<id>.jsonl` beside the session's; one has stopped when its
 // last entry is an `end_turn`, the answer to its `SubagentHandback`, or an interrupt. A last
 // reply can also be written with `stop_reason: null` (seen on 2.1.296), the same as a reply
 // mid-turn with a tool call still to come, so a last entry with no tool call is running
 // only while the log was written in the last QUIET_MS. One
-// that stopped waiting on its own background shell is not running, as Claude Code has it,
-// and runs again when the shell wakes it. Only while the record says busy, which is what a
-// live subagent makes it (2.1.283): a log left open by a killed agent counts for nothing
-// once the session is idle. Cached against each log's size.
+// that stopped waiting on its own background shell is idle, and runs again when the shell
+// wakes it; it counts too, since the pane still lists it (2026-10-18, iron-j: 4 such agents
+// with shells up to 2h old under `◯`, and +N said nothing). Such a shell is a
+// `"backgroundTaskId":"<id>"` in the log with no `<task-id><id></task-id>` notice and no
+// TaskStop naming it after; each log is read whole once, then only what was added. Only
+// while the record says busy, which is what a live subagent makes it (2.1.283): a log left
+// open by a killed agent counts for nothing once the session is idle.
 const AGENT_TAIL = 64 * 1024;
 const QUIET_MS = 30_000;
-const AGENTS = new Map();          // subagent log -> [size when read, running or null]
+const AGENTS = new Map();          // subagent log -> {size, running, read, shells}
+const UTF8_ENC = new TextEncoder();
+const BG_START = /"backgroundTaskId":"([a-z0-9]+)"/g;
+const BG_END = /<task-id>([a-z0-9]+)<\/task-id>|"name":"(?:TaskStop|KillShell)","input":\{"(?:task_id|shell_id)":"([a-z0-9]+)"/g;
 
 function subagentsRunning(rec) {
   if (rec.status !== "busy" || !rec.cwd || !rec.sessionId) return 0;
@@ -298,12 +304,19 @@ function subagentsRunning(rec) {
       const path = `${dir}/${e.name}`;
       const st = Deno.statSync(path);
       if ((st.mtime?.getTime() ?? 0) < (rec.startedAt ?? 0)) continue;  // an earlier run's
-      let [size, running] = AGENTS.get(path) ?? [-1, false];
-      if (size !== st.size) {
-        running = agentRunning(readTail(path, st.size, AGENT_TAIL));
-        AGENTS.set(path, [st.size, running]);
+      let a = AGENTS.get(path);
+      if (!a || a.size > st.size) a = {size: -1, running: false, read: 0, shells: new Set()};
+      if (a.size !== st.size) {
+        a.running = agentRunning(readTail(path, st.size, AGENT_TAIL));
+        a.size = st.size;
+        const text = readTail(path, st.size, st.size - a.read);
+        const done = text.slice(0, text.lastIndexOf("\n") + 1);   // whole lines only
+        a.read += UTF8_ENC.encode(done).length;
+        for (const [, id] of done.matchAll(BG_START)) a.shells.add(id);
+        for (const [, x, y] of done.matchAll(BG_END)) a.shells.delete(x ?? y);
+        AGENTS.set(path, a);
       }
-      if (running ?? Date.now() - (st.mtime?.getTime() ?? 0) < QUIET_MS) n++;
+      if (a.shells.size || (a.running ?? Date.now() - (st.mtime?.getTime() ?? 0) < QUIET_MS)) n++;
     }
   } catch {
     return n;
