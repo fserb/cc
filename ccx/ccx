@@ -1388,8 +1388,9 @@ async function cmdGoal(spec, ...words) {
 
 // ccx post <url|path> [title...]
 // Into cc's inbox (UPDATES): a mock or a report for the user to look at. Not cchost's: cc's web/api box on nadya keeps
-// it (~/nadya/tmp/inbox.jsonl), so this is the one command that talks to something else. A path is made absolute and
-// named on this host (`marx:~/web/x/mocks/a.html`; on nadya `~/nadya/` is left off, as the files tab names it)
+// it (~/nadya/tmp/inbox.jsonl), so this is the one command that talks to something else. A path is made absolute (from
+// any dir) and named as the page that serves it: on nadya ~/nadya/x as /nadya/x and ~/web/<x>/y as /<x>/y, on marx
+// ~/web/x as https://marx.gum.ts.net/x; anything else as `<host>:~/...`, which cc opens in the files tab
 async function cmdPost(where, ...words) {
   for (const a of [where, ...words]) {
     if (a === "-h" || a === "--help") commandHelp("post");
@@ -1399,10 +1400,18 @@ async function cmdPost(where, ...words) {
   let url = where;
   if (!/^https?:\/\//.test(where)) {
     const home = Deno.env.get("HOME") ?? "";
-    let p = where.startsWith("~/") ? where : where.startsWith("/") ? where : `${Deno.cwd()}/${where}`;
-    p = p.replace(/\/\.\//g, "/");
+    const abs = where.startsWith("~/") ? `${home}${where.slice(1)}` : where.startsWith("/") ? where : `${Deno.cwd()}/${where}`;
+    const parts = [];
+    for (const s of abs.split("/")) {
+      if (s === "" || s === ".") continue;
+      if (s === "..") parts.pop(); else parts.push(s);
+    }
+    let p = `/${parts.join("/")}`;
     if (home && (p === home || p.startsWith(`${home}/`))) p = `~${p.slice(home.length)}`;
-    url = SELF === "nadya" ? p.replace(/^~\/nadya\//, "") : `${SELF}:${p}`;
+    url = SELF === "nadya" && /^~\/nadya\//.test(p) ? p.slice(1)
+      : SELF === "nadya" && /^~\/web\//.test(p) ? p.slice(5)
+      : SELF === "marx" && /^~\/web\//.test(p) ? `https://marx.gum.ts.net${p.slice(5)}`
+      : `${SELF}:${p}`;
   }
   const self = selfPid();
   const by = (self && (await listing()).find((i) => !i.host && i.pid === self)?.name) || SELF;

@@ -1186,3 +1186,33 @@ Deno.test("api: chat --no-follow is cchost's api/chat for the directory ccx runs
       ok(/s1 → peer\n\s+hello there/.test(r.out), r.out);
     });
   });
+
+Deno.test("post: a path from any dir is the page that serves it, a URL as given", async () => {
+  // nadya's `ccx post agents/shopping/x.md` from ~/nadya stored "agents/shopping/x.md", which cc opened wrong (2026-10-20)
+  const got = [];
+  const srv = Deno.serve({port: 7697, hostname: "127.0.0.1", onListen() {}}, async (req) => {
+    got.push((await req.json()).url);
+    return new Response("{}");
+  });
+  const home = await Deno.makeTempDir();
+  await Deno.mkdir(`${home}/nadya/agents`, {recursive: true});
+  const env = {HOME: home, CLAUDE_PID: "", CC_INBOX: "http://127.0.0.1:7697/"};
+  try {
+    for (const [self, cwd, arg, want] of [
+      ["nadya", `${home}/nadya`, "agents/x.md", "/nadya/agents/x.md"],
+      ["nadya", `${home}/nadya/agents`, "../research/y.html", "/nadya/research/y.html"],
+      ["nadya", home, "~/web/cc/mocks/a.html", "/cc/mocks/a.html"],
+      ["nadya", home, "ai/cc/notes.md", "nadya:~/ai/cc/notes.md"],
+      ["marx", home, "web/arcade/mocks/b.html", "https://marx.gum.ts.net/arcade/mocks/b.html"],
+      ["marx", home, "/tmp/z.md", "marx:/tmp/z.md"],
+      ["nadya", home, "https://example.com/a/../b", "https://example.com/a/../b"],
+    ]) {
+      const r = await ccxEnv({...env, CCX_SELF: self}, ["post", arg], cwd);
+      eq(r.code, 0, `${self} ${arg}: ${r.err}`);
+      eq(got.pop(), want, `${self}: ccx post ${arg} from ${cwd}`);
+    }
+  } finally {
+    await srv.shutdown();
+    await Deno.remove(home, {recursive: true});
+  }
+});
