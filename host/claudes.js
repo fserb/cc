@@ -285,8 +285,10 @@ export function readTitle(path, size) {
 // with shells up to 2h old under `◯`, and +N said nothing). Such a shell is a
 // `"backgroundTaskId":"<id>"` in the log with no `<task-id><id></task-id>` notice and no
 // TaskStop naming it after; each log is read whole once, then only what was added. Only
-// while the record says busy, which is what a live subagent makes it (2.1.283): a log left
-// open by a killed agent counts for nothing once the session is idle.
+// while the record says busy, which is what a live subagent makes it (2.1.283), or shell,
+// which is what agents idle on their shells make it (2026-10-20, iron-k: 5 agents under `◯`,
+// the record `shell`, +N nothing): a log left open by a killed agent counts for nothing once
+// the session is idle.
 const AGENT_TAIL = 64 * 1024;
 const QUIET_MS = 30_000;
 const AGENTS = new Map();          // subagent log -> {size, running, read, shells}
@@ -295,7 +297,7 @@ const BG_START = /"backgroundTaskId":"([a-z0-9]+)"/g;
 const BG_END = /<task-id>([a-z0-9]+)<\/task-id>|"name":"(?:TaskStop|KillShell)","input":\{"(?:task_id|shell_id)":"([a-z0-9]+)"/g;
 
 function subagentsRunning(rec) {
-  if (rec.status !== "busy" || !rec.cwd || !rec.sessionId) return 0;
+  if ((rec.status !== "busy" && rec.status !== "shell") || !rec.cwd || !rec.sessionId) return 0;
   const dir = `${projectDir(rec.cwd)}/${rec.sessionId}/subagents`;
   let n = 0;
   try {
