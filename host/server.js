@@ -269,8 +269,6 @@ export class Server {
     this.changes = null;                  // a Changes, under `cchost`
     this.changeClients = new Set();       // api/changes clients
     this.chatRoot = undefined;            // ~/.claude for chat.js, unless a test sets one
-    this.lastList = "";
-    this.lastAll = "";
     this.self = SELF;                     // this host, as the merged list names it
     this.hosts = HOSTS;                   // every host, in the merged list's order
     this.base = base;                     // host -> its daemon's url
@@ -336,7 +334,7 @@ export class Server {
   // reads it
   mergedBody() {
     const rows = [], up = [], down = [], away = {};
-    let offline = "";
+    const offline = [];
     for (const h of this.allHosts()) {
       const p = this.peers.get(h);
       const body = h === this.self ? this.listBody() : p?.body;
@@ -346,10 +344,11 @@ export class Server {
       }
       up.push(h);
       rows.push(...body.rows.map((r) => tagRow(h, r)));
-      offline ||= body.offline ?? "";
+      // a host's `offline` is its probe's label: "offline", or "offline <api host>"
+      if (body.offline) offline.push(`${h} can't reach ${body.offline.slice(8) || "the Claude API"}`);
       if (typeof body.away === "boolean") away[h] = body.away;
     }
-    return {rows, offline, up, down, away, self: this.self, hosts: this.allHosts(),
+    return {rows, offline: offline.join("; "), up, down, away, self: this.self, hosts: this.allHosts(),
       host: up.join(" · ") + (down.length ? ` (${down.map(([h]) => h).join(", ")} down)` : "")};
   }
 
@@ -363,21 +362,19 @@ export class Server {
       ...this.chats, ...this.changeClients]) c.close();
   }
 
-  // the list to its streams if it changed; `cchost` also calls it after each poll, and
-  // peer() when another host's list arrives
+  // the list to each stream whose last one differs; `cchost` also calls it after each poll,
+  // and peer() when another host's list arrives. Kept per stream, not one for all: a stream
+  // opened while this host was offline got that body from listEvents, and a shared last
+  // already back online sent it nothing more (nadya showed marx offline for hours, Oct 23rd)
   pushList() {
-    if (this.lists.size) {
-      const body = this.listBody(), text = JSON.stringify(body);
-      if (text !== this.lastList) {
-        this.lastList = text;
-        for (const c of this.lists) c.send("list", body);
-      }
-    }
-    if (this.allLists.size) {
-      const body = this.mergedBody(), text = JSON.stringify(body);
-      if (text !== this.lastAll) {
-        this.lastAll = text;
-        for (const c of this.allLists) c.send("list", body);
+    for (const [set, read] of [[this.lists, () => this.listBody()],
+      [this.allLists, () => this.mergedBody()]]) {
+      if (!set.size) continue;
+      const body = read(), text = JSON.stringify(body);
+      for (const c of set) {
+        if (c.last === text) continue;
+        c.last = text;
+        c.send("list", body);
       }
     }
   }
@@ -471,7 +468,9 @@ export class Server {
     const set = all ? this.allLists : this.lists;
     const c = stream(() => set.delete(c));
     set.add(c);
-    c.send("list", all ? this.mergedBody() : this.listBody());
+    const body = all ? this.mergedBody() : this.listBody();
+    c.last = JSON.stringify(body);
+    c.send("list", body);
     return c.response;
   }
 

@@ -128,7 +128,7 @@ Deno.test("Server: all=1 merges every host's rows, tagged, with up and down", as
   eq(all.rows.map((r) => [r.pid, r.pane, r.session, r.path]),
     [["a.5", "a/%5", "a:kitty-1", "a:~/p5"], ["b.7", "b/%3", "b:kitty-2", "b:~/x"]], "rows");
   eq([all.up, all.down, all.host, all.offline], [["a", "b"], [["c", "connection refused"]],
-    "a · b (c down)", "offline"], "up, down, host, offline");
+    "a · b (c down)", "b can't reach the Claude API"], "up, down, host, offline");
   s.peers.delete("c");
   eq((await (await call(s, "/api/list?all=1")).json()).down, [["c", "no list yet"]],
     "a host not heard from yet");
@@ -335,4 +335,24 @@ Deno.test("Server: close ifUntouched names why it refuses, background work apart
   eq(await why(7), [409, "not closed: it is hold"], "a hold on a peer");
   eq(await why(8), [409, "not closed: it is busy"], "busy");
   eq(await why(9), [409, "not closed: it shows a dialog (dialog open)"], "a dialog");
+});
+
+Deno.test("Server: a stream opened while offline gets the recovery", async () => {
+  const net = {offline: true, label: "offline"};
+  const s = new Server(() => ({instances: [], net}));
+  s.pushList();
+  net.offline = false;
+  s.pushList();
+  net.offline = true;
+  const sent = [];
+  s.listEvents();
+  for (const c of s.lists) {
+    const send = c.send;
+    c.send = (e, d) => (sent.push(d.offline), send(e, d));
+  }
+  net.offline = false;
+  s.pushList();
+  s.pushList();
+  eq(sent, [""], "online once, and only once");
+  s.stop();
 });
