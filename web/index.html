@@ -2229,7 +2229,7 @@ document.addEventListener("click", async (e) => {
   const rs = e.target.closest("#pop [data-restore]"); if (rs) { restore(S.closed[+rs.dataset.restore]); return; }
   const tk = e.target.closest("#pop [data-task]");
   if (tk) { const k = +tk.dataset.task; if (/<[^>]*>/.test(S.tasks[k].msg)) { taskAsk = k; $("#pop").hidden = true; drawPop(); $("#pop form.task input").focus(); } else runTask(k); return; }
-  const chip = e.target.closest("#addf [data-dir]"); if (chip) { const q = $("#addf").q; q.value = `${chip.dataset.dir}/`.replace(/\/\/$/, "/"); q.focus(); addHints(); return; }
+  const chip = e.target.closest("#addf [data-dir]"); if (chip) { const q = $("#addf").q; q.value = `${chip.dataset.dir}/`.replace(/\/\/$/, "/"); $("#addh").hidden = true; q.focus(); return; }
   const pic = e.target.closest(".m img.att");
   if (pic) { $("#pic").firstChild.src = pic.src; $("#pic").showModal(); return; }
   if (e.target.closest("#pic")) { $("#pic").close(); return; }
