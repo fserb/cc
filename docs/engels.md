@@ -77,8 +77,8 @@ tailcat's forward does not redial a server that restarted (0.7.0, tried Oct 24th
 cchost kills and restarts a forward whose host has been down a minute. Tried on nadya
 against a local serve; not yet against engels.
 
-## Not decided
+## Decided (user, Oct 24th)
 
-- away mode on engels: cc's switch sets every host that answers, engels included, so corp
-  agents' question boxes would be answered after 5 minutes too
-- public tailcat DERP relays (now) or a self-run derper
+- away mode on engels follows cc's switch like the other hosts: corp agents' question boxes
+  are answered after 5 minutes too
+- public tailcat DERP relays
