@@ -46,9 +46,20 @@ export function resolveArgs(args, home = HOME) {
 // a line of tailcat's, without the address it prints when it starts (it holds the key)
 const clean = (line) => line.replace(/^#\s*/, "").replace(/\btc[\w-]{40,}/g, "tc…").slice(0, 200);
 
+// the tailcat binary: on PATH, else where `go install` or a release copy puts it; the cchost unit's PATH has
+// neither ~/.local/bin nor ~/go/bin (Oct 24th: "Failed to spawn 'tailcat'" on nadya)
+function tailcatBin() {
+  const home = Deno.env.get("HOME") ?? "";
+  const dirs = [...(Deno.env.get("PATH") ?? "").split(":"), `${home}/.local/bin`, `${home}/go/bin`];
+  for (const d of dirs) {
+    try { if (d && Deno.statSync(`${d}/tailcat`).isFile) return `${d}/tailcat`; } catch {}
+  }
+  return "tailcat";
+}
+
 export class Tailcat {
   // isDown(name): why the host `name` is down, or nothing (remote.isDown)
-  constructor(links, isDown = () => null, bin = "tailcat") {
+  constructor(links, isDown = () => null, bin = tailcatBin()) {
     this.bin = bin;
     this.isDown = isDown;
     this.links = links.map((l) => ({...l, cmd: l.args[0] ?? "", state: "starting", pid: 0,
