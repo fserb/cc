@@ -876,10 +876,6 @@ function items() {
 // updates (user, Oct 18th; web/mocks/sidebar-rich-h.html): what is going on for a while, between the fixed rows and the
 // sessions under its own title, soonest change first. Each is a row like the others (title, a small text after it and
 // on the right, the subline) and below it a thin bar or up to 2 lines and "N more" (user); a click opens its page (open), never a part of it
-const CARRIER = {fedex: "FedEx", ups: "UPS", usps: "USPS", dhl: "DHL", amazon: "Amazon", intelcom: "Intelcom", purolator: "Purolator", canadapost: "Canada Post", asl: "ASL"};
-const carrier = (x) => CARRIER[x.carrier] ?? x.carrierName ?? x.carrier;
-const shortLabel = (x) => x.shop && !/amazon/i.test(x.shop) ? x.shop[0] + x.shop.slice(1).toLowerCase() : (x.label ?? "").replace(/[\[(,|].*$/, "").split(/\s+/).slice(0, 4).join(" ");
-const weekday = (iso) => new Date(iso).toLocaleDateString("en-CA", {weekday: "short"});
 function updates() {
   const up = [], now = Date.now(), pk = S.packages;
   // an Uber Eats order until 1 h after it is delivered (its `last` is the delivery time); the bar is the time gone
@@ -899,8 +895,7 @@ function updates() {
     up.push({id: remKey(t), title: t.text, tags: `<span class="tag ev">${esc(t.on)}</span>`, r: "", sub: evSays(t), hot: true, d: "blue"});
   const ib = (S.inbox ?? []).filter((x) => !x.read);
   if (ib.length || cur === "inbox")
-    up.push({id: "inbox", title: "inbox", tags: ib.length ? `<span class="tag">${ib.length} new</span>` : "", r: ib[0] ? ago(ib[0].at / 1000) : "", unread: ib.length, d: ib.length ? "green" : "", sub: "", ver: ib.map((x) => x.id).join(),
-      list: ib.slice(0, 3).map((x) => [x.title, x.by]), more: ib.length > 3 ? `${ib.length - 3} more` : ""});
+    up.push({id: "inbox", title: "inbox", tags: ib.length ? `<span class="tag">${ib.length} new</span>` : "", r: ib[0] ? ago(ib[0].at / 1000) : "", unread: ib.length, d: ib.length ? "green" : "", sub: "", ver: ib.map((x) => x.id).join()});  // the count alone, no lines (user, Oct 24th: "a bit too noisy")
   const aw = S.away?.answered.filter((a) => a.at > awaySince()) ?? [];
   if (S.away?.on || aw.length || cur === "away")
     up.push({id: "away", title: "away mode", tags: S.away?.on ? `<span class="tag">on</span>` : "", r: aw[0] ? ago(aw[0].at / 1000) : "", unread: aw.length, d: aw.length ? "green" : "",
@@ -908,12 +903,11 @@ function updates() {
       list: aw.slice(0, 3).map((a) => [a.question, a.name]), more: aw.length > 3 ? `${aw.length - 3} more` : ""});
   // parcels not yet delivered, with a tracking number or not (an order the tracker read from a shop's mail), and the front desk
   const desk = pk?.desk.count ?? 0, ps = (pk?.packages.filter((x) => x.carrier !== "ubereats" && !x.unknown && !x.delivered) ?? []).sort((a, b) => Date.parse(b.last) - Date.parse(a.last));
-  if (desk || ps.length || cur === "packages") {
-    const err = (x) => /^error/.test(x.status ?? "");
-    up.push({id: "packages", title: "parcels", tags: ps.length ? `<span class="tag">${ps.length}</span>` : "", r: pk ? ago(Date.parse(ps[0]?.last ?? pk.updated) / 1000) : "",
-      sub: "",  // the lines say it (user, Oct 18th: the subline repeated them); the front desk is a line of its own
-      list: [...desk ? [["front desk", `${desk} waiting`]] : [], ...[...ps].sort((a, b) => (Date.parse(a.eta) || Infinity) - (Date.parse(b.eta) || Infinity)).slice(0, desk ? 2 : 3).map((x) => [`${carrier(x)}, ${shortLabel(x)}`, err(x) ? "tracking error" : x.eta ? weekday(x.eta) : x.status ?? "", err(x)])], more: ""});  // the 3 arriving soonest, no "N more": the count is beside the title (user)
-  }
+  // the count alone, desk and on the way together, no lines (user, Oct 24th: "a bit too noisy", "everything can wait")
+  if (desk || ps.length || cur === "packages")
+    up.push({id: "packages", title: "parcels", tags: desk + ps.length ? `<span class="tag">${desk + ps.length}</span>` : "", r: pk ? ago(Date.parse(ps[0]?.last ?? pk.updated) / 1000) : "",
+      sub: "", ver: `${desk}|${ps.map((x) => x.number).join()}`});
+
   for (const u of up) { u.sec = "updates"; u.ver ??= `${u.sub}|${u.r}`; }
   for (const k of Object.keys(upHidden)) if (!up.some((u) => u.id === k)) delete upHidden[k];
   return up.filter((u) => upHidden[u.id] !== u.ver);
