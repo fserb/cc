@@ -10,7 +10,15 @@ const srv = Deno.serve({port: 0, signal: ac.signal, onListen() {}}, (req) => {
   }
   return Response.json({ok: 1});
 });
-Deno.env.set("CCX_HOSTS", `me,fake=localhost:${srv.addr.port}`);
+// a host on another account: asked for nothing that makes the personal usage or burn
+const corpAsked = [];
+const corpAc = new AbortController();
+const corp = Deno.serve({port: 0, signal: corpAc.signal, onListen() {}}, (req) => {
+  corpAsked.push(new URL(req.url).pathname);
+  return Response.json({usage: {used: 99, resetsAt: Date.now() + 9e8, history: []}, rows: [], w: []});
+});
+Deno.env.set("CCX_HOSTS", `me,fake=localhost:${srv.addr.port},corp=localhost:${corp.addr.port}`);
+Deno.env.set("CCX_CORP", "corp");
 Deno.env.set("CCX_SELF", "me");
 const remote = await import("./remote.js");
 const wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
@@ -27,4 +35,15 @@ Deno.test("remote: a host whose list stream is down answers at once, then again 
   stop();
   ac.abort();
   await srv.finished;
+});
+
+Deno.test("remote: a CCX_CORP host is never asked for usage or burn", async () => {
+  await remote.mergedUsage();
+  const {rows} = await remote.allRows(0, 1, () => [{w: 1}]);
+  await remote.burnSeries(2, 60_000);
+  if (corpAsked.length) throw new Error(`corp asked: ${corpAsked.join(", ")}`);
+  if (rows.some((r) => r.host === "corp")) throw new Error("corp rows");
+  if (!remote.others().includes("corp") || remote.CORP.join() !== "corp") throw new Error("corp not listed");
+  corpAc.abort();
+  await corp.finished;
 });

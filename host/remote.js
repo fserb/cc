@@ -22,6 +22,10 @@ export const HOSTS = ENTRIES.map(([h]) => h);
 // refuses (nadya resolves itself to four fe80:: as well), so it is localhost
 const ADDR = new Map(ENTRIES.map(([h, a]) => [h, a ?? (h === SELF ? "localhost" : h) + `:${PORT}`]));
 export const others = () => HOSTS.filter((h) => h !== SELF);
+// hosts whose claudes run on another account (CCX_CORP=engels, user, Oct 24th): listed and
+// driven like the others, but their usage and burn never reach the personal quota numbers
+export const CORP = (Deno.env.get("CCX_CORP") ?? "").split(",").map((h) => h.trim()).filter((h) => h);
+const quotaHosts = () => others().filter((h) => !CORP.includes(h));
 
 export const base = (host) => `http://${ADDR.get(host) ?? `${host}:${PORT}`}`;
 
@@ -55,7 +59,7 @@ export async function call(host, path, body = undefined, timeout = TIMEOUT) {
 // lines: each log has only what its own sessions saw, so one host's alone has gaps (nadya's
 // started on Fri 2026-10-09, and `ccx usage` there drew Mon-Thu as interpolated)
 export async function mergedUsage() {
-  const all = [readUsage(), ...(await Promise.all(others().map(async (h) =>
+  const all = [readUsage(), ...(await Promise.all(quotaHosts().map(async (h) =>
     (await call(h, "/api/usage?local=1"))[0]?.usage)))].filter((u) => u);
   const best = all.reduce((a, b) => !a || b.resetsAt > a.resetsAt ||
     (b.resetsAt === a.resetsAt && b.used > a.used) ? b : a, null);
@@ -73,9 +77,9 @@ export async function mergedUsage() {
 export async function allRows(from, to, local) {
   const q = `/api/burn/rows?from=${from}&to=${to}`;
   const [mine, ...rest] = await Promise.all([local(from, to),
-    ...others().map((h) => call(h, q, undefined, 10_000))]);
+    ...quotaHosts().map((h) => call(h, q, undefined, 10_000))]);
   const rows = mine.map((r) => ({...r, host: SELF})), down = [];
-  others().forEach((h, n) => {
+  quotaHosts().forEach((h, n) => {
     const [body, err] = rest[n];
     if (err) return down.push([h, err]);
     rows.push(...body.rows.map((r) => ({...r, host: h})));
@@ -117,9 +121,9 @@ export async function burnSeries(n, step, now = Date.now()) {
 async function allSeries(n, step, now) {
   const q = `/api/burn/series?local=1&n=${n}&step=${step}&at=${now}`;
   const [mine, rest] = await Promise.all([series(n, step, now),
-    Promise.all(others().map((h) => call(h, q, undefined, 10_000)))]);
+    Promise.all(quotaHosts().map((h) => call(h, q, undefined, 10_000)))]);
   const down = [];
-  others().forEach((h, i) => {
+  quotaHosts().forEach((h, i) => {
     const [body, err] = rest[i];
     if (err || body.from !== mine.from) return down.push([h, err ?? "buckets differ"]);
     body.w.forEach((w, j) => mine.w[j] += w);

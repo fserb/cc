@@ -1,15 +1,20 @@
 #!/bin/sh
 ':' //; exec deno run -A --ext js "$(readlink -f "$0")" "$@"
 // cchost: the daemon every machine with claudes runs, what cc reads the machine through.
-// The server on every interface, tailnet and loopback only, and a stand-in record for
-// every claude on the other hosts so SendMessage reaches them. The polyglot head is
+// The server on this host's tailnet addresses and loopback (--listen names others), and a
+// stand-in record for every claude on the other hosts so SendMessage reaches them. The polyglot head is
 // ccx's: sh re-execs deno on the realpath, so a symlink on PATH works.
 //
-//   cchost [serve] [--port N]
+//   cchost [serve] [--port N] [--listen addr,addr]
+//
+// --listen: the addresses to listen on, e.g. 127.0.0.1 on engels, which tailcat forwards to.
+// Default: this host's tailnet addresses (100.x, fd7a:...), 127.0.0.1 and ::1, and every
+// 30s any tailnet address that came since (tailscale up after cchost, a new tailnet). Was
+// 0.0.0.0 until Oct 24th (user)
 
 import {discover, StateClock, watchSessions} from "./claudes.js";
 import {Online} from "./online.js";
-import {PORT, runServer} from "./server.js";
+import {PORT, runServer, tailnetAddrs} from "./server.js";
 import {Goals} from "./goals.js";
 import {Typed} from "./typed.js";
 import {clearStandIns, Relay} from "./relay.js";
@@ -21,17 +26,19 @@ import {settle} from "./burn.js";
 import {Changes} from "./changes.js";
 import {Away} from "./away.js";
 import {pusher} from "./waitpush.js";
+import {parseLinks, Tailcat} from "./tailcat.js";
 
 function usage() {
-  console.error("usage: cchost [serve] [--port N]");
+  console.error("usage: cchost [serve] [--port N] [--listen addr,addr]");
   Deno.exit(2);
 }
 
 async function serve(args) {
-  let port;
+  let port, listen;
   for (let n = 0; n < args.length; n++) {
-    if (args[n] !== "--port" || !/^\d+$/.test(args[n + 1] ?? "")) usage();
-    port = Number(args[++n]);
+    if (args[n] === "--port" && /^\d+$/.test(args[n + 1] ?? "")) port = Number(args[++n]);
+    else if (args[n] === "--listen" && args[n + 1]) listen = args[++n].split(",").map((a) => a.trim()).filter((a) => a);
+    else usage();
   }
   port ??= PORT;
   const clock = new StateClock(remote.SELF), net = new Online();
@@ -97,13 +104,28 @@ async function serve(args) {
   const relay = new Relay(remote.SELF, async (host, body) =>
     (await remote.call(host, "/api/relay", body))[1]);
   const away = new Away();
-  const r = runServer({source: () => ({instances, net}), port, hostname: "0.0.0.0", relay,
+  const listening = listen ?? ["127.0.0.1", ...(hasV6Loopback() ? ["::1"] : []), ...tailnetAddrs()];
+  const r = runServer({source: () => ({instances, net}), port, hostnames: listening, relay,
     subs, goals, typed: new Typed(), changes, away});
   if (r.error) {
     console.error(`cchost: ${r.error}`);
     Deno.exit(1);
   }
   server = r.server;
+  // the tailcat links of CCX_TAILCAT (tailcat.js), their state in api/list
+  const tailcat = new Tailcat(parseLinks(Deno.env.get("CCX_TAILCAT")), remote.isDown);
+  if (tailcat.links.length) {
+    server.tailcat = tailcat;
+    tailcat.start();
+  }
+  if (!listen) setInterval(() => {
+    for (const a of tailnetAddrs()) {
+      if (listening.includes(a)) continue;
+      const error = r.listen(a);
+      if (error) console.error(`cchost: ${error}`);
+      else listening.push(a);
+    }
+  }, 30_000);
   // away mode: a question box left DELAY is answered (away.js); a look every 10s
   setInterval(() => away.check(instances, (pid) => server.draft(pid)).catch((e) => console.error(`away: ${e.message}`)), 10_000);
   // a session waiting on the user for 2 min: one push to the phone (waitpush.js), on nadya
@@ -123,16 +145,23 @@ async function serve(args) {
   stops.push(...remote.others().map((h) => remote.followChanges(h, changes)));
   const quit = () => {
     for (const stop of stops) stop();
+    tailcat.stop();
     relay.close();
     Deno.exit(0);
   };
   Deno.addSignalListener("SIGINT", quit);
   Deno.addSignalListener("SIGTERM", quit);
-  console.log(`cchost ${remote.SELF} on :${port}, following ${remote.others().join(", ") ||
+  console.log(`cchost ${remote.SELF} on ${listening.map((a) => a.includes(":") ? `[${a}]` : a).join(", ")} :${port}, following ${remote.others().join(", ") ||
     "no other host"}`);
   await new Promise(() => {});
 }
 
+// ::1 only where the machine has it, or its listen fails and takes cchost down with it
+function hasV6Loopback() {
+  return Deno.networkInterfaces().some((i) => i.address === "::1");
+}
 
-const args = Deno.args[0] === "serve" ? Deno.args.slice(1) : Deno.args;
+// no arguments: CCHOST_ARGS, which the unit and plist pass from ~/.config/cchost.env
+const given = Deno.args.length ? Deno.args : (Deno.env.get("CCHOST_ARGS") ?? "").split(/\s+/).filter((a) => a);
+const args = given[0] === "serve" ? given.slice(1) : given;
 await serve(args);

@@ -26,7 +26,7 @@ import {sendPeer} from "./peer.js";
 import {closedSessions} from "./closed.js";
 import {byDay, LONGER, pace, readUsage} from "./usage.js";
 import {localRows, series} from "./burn.js";
-import {base, burnReport, burnSeries, call, HOSTS, mergedUsage, SELF, tokenPace} from "./remote.js";
+import {base, burnReport, burnSeries, call, CORP, HOSTS, mergedUsage, SELF, tokenPace} from "./remote.js";
 import {STATES} from "./subs.js";
 import {chatLog, mergeChats, PAIR_WINDOW, sameMessage, watchChat} from "./chat.js";
 import {Online} from "./online.js";
@@ -102,10 +102,11 @@ export function rowOf(i) {
 }
 
 // A row of `host` as the merged list has it: `<host>.<pid>`, `<host>/<pane>`,
-// `<host>:<session>`, `<host>:<path>`, so a client needs no idea of hosts
+// `<host>:<session>`, `<host>:<path>`, so a client needs no idea of hosts; `corp: true` on a
+// CCX_CORP host's (nadya's tools split on it, nadya-a, Oct 24th)
 export const tagRow = (host, r) => ({...r, pid: `${host}.${r.pid}`,
   pane: r.pane ? `${host}/${r.pane}` : "", session: r.session ? `${host}:${r.session}` : "",
-  path: `${host}:${r.path}`});
+  path: `${host}:${r.path}`, ...(CORP.includes(host) ? {corp: true} : {})});
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {status,
@@ -226,14 +227,21 @@ export function clientAddr(addr, xff) {
 }
 
 // Who may connect, by address: this machine (caddy's /ccapi among it) or the tailnet
-// (100.64.0.0/10 and fd7a:115c:a1e0::/48). `cchost` listens on every interface, so this
-// is the boundary
+// (100.64.0.0/10 and fd7a:115c:a1e0::/48). `cchost` listens on its tailnet addresses and
+// loopback; this still refuses what reaches those from elsewhere
 export function tailnetOrLocal(addr) {
   const a = addr.toLowerCase().replace(/^::ffff:/, "");
   if (loopback(a)) return true;
   if (a.startsWith("fd7a:115c:a1e0:")) return true;
   const m = a.match(/^100\.(\d+)\./);
   return Boolean(m && Number(m[1]) >= 64 && Number(m[1]) < 128);
+}
+
+// This machine's own tailnet addresses (100.64.0.0/10, fd7a:115c:a1e0::/48), what cchost
+// listens on by default besides loopback (user, Oct 24th: it was 0.0.0.0)
+export function tailnetAddrs() {
+  return [...new Set(Deno.networkInterfaces().map((i) => i.address)
+    .filter((a) => !loopback(a) && tailnetOrLocal(a)))];
 }
 
 // The Host a request may name: an address, or this machine's own name, bare or as a
@@ -260,6 +268,7 @@ export class Server {
     this.goals = null;                    // a Goals, under `cchost`
     this.typed = null;                    // a Typed, under `cchost`
     this.away = null;                     // an Away, under `cchost`
+    this.tailcat = null;                  // a Tailcat, under `cchost` with CCX_TAILCAT
     this.drafts = new Map();              // pid -> {text, at}: cc's chat box for it, api/s/<pid>/draft
     this.lists = new Set();               // api/events clients
     this.allLists = new Set();            // api/events?all=1 clients
@@ -314,7 +323,7 @@ export class Server {
   listBody() {
     const {instances, net} = this.source();
     return {rows: tmuxOrder(instances).map(rowOf), offline: net?.offline ? net.label : "",
-      host: HOSTNAME, away: this.away?.on};
+      host: HOSTNAME, away: this.away?.on, ...(this.tailcat ? {tailcat: this.tailcat.state()} : {})};
   }
 
   // Another host's list, from the event stream `cchost` follows for the relay: its body
@@ -333,7 +342,7 @@ export class Server {
   // in, `down` [host, why] for the rest; `host` says the same as text, for a client that
   // reads it
   mergedBody() {
-    const rows = [], up = [], down = [], away = {};
+    const rows = [], up = [], down = [], away = {}, tailcat = {};
     const offline = [];
     for (const h of this.allHosts()) {
       const p = this.peers.get(h);
@@ -347,8 +356,10 @@ export class Server {
       // a host's `offline` is its probe's label: "offline", or "offline <api host>"
       if (body.offline) offline.push(`${h} can't reach ${body.offline.slice(8) || "the Claude API"}`);
       if (typeof body.away === "boolean") away[h] = body.away;
+      if (body.tailcat) tailcat[h] = body.tailcat;
     }
     return {rows, offline: offline.join("; "), up, down, away, self: this.self, hosts: this.allHosts(),
+      corp: CORP, tailcat,
       host: up.join(" · ") + (down.length ? ` (${down.map(([h]) => h).join(", ")} down)` : "")};
   }
 
@@ -1009,25 +1020,36 @@ export class Server {
   }
 }
 
-// Start serving. {server, stop} or {error}: a port already taken is reported, not thrown,
-// so a caller can say why.
-export function runServer({source, port = PORT, hostname = "127.0.0.1", relay = null,
+// Start serving on each of `hostnames`. {server, stop, listen} or {error}: a port already
+// taken is reported, not thrown, so a caller can say why. listen(addr) adds one later, and
+// answers an error message or null
+export function runServer({source, port = PORT, hostnames = ["127.0.0.1"], relay = null,
   subs = null, goals = null, typed = null, changes = null, away = null}) {
   const s = new Server(source, port, relay, subs);
   s.goals = goals;
   s.typed = typed;
   s.away = away;
   if (changes) s.useChanges(changes);
-  let http;
-  try {
-    http = Deno.serve({port, hostname, onListen() {}}, (req, info) => s.handle(req, info).catch((e) =>
-      json({error: String(e?.message ?? e)}, 500)));
-  } catch (e) {
-    return {error: `${hostname}:${port}: ${e.message}`};
+  const https = [];
+  const listen = (hostname) => {
+    try {
+      https.push(Deno.serve({port, hostname, onListen() {}}, (req, info) => s.handle(req, info).catch((e) =>
+        json({error: String(e?.message ?? e)}, 500))));
+      return null;
+    } catch (e) {
+      return `${hostname.includes(":") ? `[${hostname}]` : hostname}:${port}: ${e.message}`;
+    }
+  };
+  for (const h of hostnames) {
+    const error = listen(h);
+    if (error) {
+      for (const http of https) http.shutdown();
+      return {error};
+    }
   }
   s.start();
-  return {server: s, stop: async () => {
+  return {server: s, listen, stop: async () => {
     s.stop();
-    await http.shutdown();
+    await Promise.all(https.map((http) => http.shutdown()));
   }};
 }

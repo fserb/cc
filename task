@@ -27,6 +27,10 @@ HOST_PLIST="$HOME/Library/LaunchAgents/$HOST_LABEL.plist"
 HOST_UNIT="$HOME/.config/systemd/user/cchost.service"
 OLD_UNIT="$HOME/.config/systemd/user/ccx-host.service"
 HOST_PATH="$(dirname "$(command -v deno)"):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+# this host's own settings for cchost, KEY=VALUE lines: CCX_HOSTS, CCX_CORP, CCX_TAILCAT,
+# CCHOST_ARGS (nadya lists engels, engels listens on 127.0.0.1:7691; docs/engels.md). The systemd unit
+# reads it at each start; the plist gets a copy, so a change there needs an install
+HOST_ENV="$HOME/.config/cchost.env"
 
 install() {
   _drop_old
@@ -53,6 +57,7 @@ install() {
 		<string>$HOST_PATH</string>
 		<key>HOME</key>
 		<string>$HOME</string>
+$(_plist_env)
 	</dict>
 	<key>RunAtLoad</key>
 	<true/>
@@ -86,6 +91,7 @@ Description=cchost
 [Service]
 ExecStart=$ROOT/host/cchost
 Environment=PATH=$HOST_PATH
+EnvironmentFile=-$HOST_ENV
 Restart=always
 RestartSec=2
 
@@ -151,13 +157,27 @@ _bootout() {
   return 1
 }
 
-# fail unless cchost answers on 7681 within 30s: a kickstart took 6-10s on marx
+# HOST_ENV's lines as plist keys
+_plist_env() {
+  [[ -f "$HOST_ENV" ]] || return 0
+  local k v
+  while IFS='=' read -r k v; do
+    [[ "$k" =~ ^[A-Z_][A-Z0-9_]*$ ]] || continue
+    v=${v#\"}; v=${v%\"}
+    printf '\t\t<key>%s</key>\n\t\t<string>%s</string>\n' "$k" "$v"
+  done < "$HOST_ENV"
+}
+
+# fail unless cchost answers within 30s (on 7681, or HOST_ENV's --port): a kickstart took
+# 6-10s on marx
 _answers() {
+  local port=7681
+  [[ -f "$HOST_ENV" ]] && port=$(sed -n 's/^CCHOST_ARGS=.*--port \([0-9]*\).*/\1/p' "$HOST_ENV" | grep . || echo 7681)
   for _ in $(seq 150); do
-    curl -sf -o /dev/null --max-time 2 http://127.0.0.1:7681/api/list && return 0
+    curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:$port/api/list" && return 0
     sleep 0.2
   done
-  echo "cchost does not answer on 127.0.0.1:7681 30s after the restart" >&2
+  echo "cchost does not answer on 127.0.0.1:$port 30s after the restart" >&2
   return 1
 }
 
