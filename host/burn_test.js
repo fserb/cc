@@ -67,3 +67,20 @@ Deno.test("weigh: each model's list price over $5/M, Opus 5.5 reads at 0.05x inp
   assertEquals(Math.round(weigh("claude-fable-5-1", u)), 93.5e6 / 5);
   assertEquals(weigh("<synthetic>", u), weigh("claude-opus-5-5", u));
 });
+
+Deno.test("breakdown: a week across a plan change reads its counter's end, at its own tokens per %", () => {
+  // last week: 60% at the old plan, then it read 10% (the new plan) and ended at 50%; this
+  // week has no drop and keeps the log's difference
+  const reset = 1000 * WEEK, start = reset - WEEK, last = start - WEEK, now = start + 30 * H;
+  const at = (t, used, r = start) => ({at: t, used, resetsAt: r});
+  const u = {used: 20, resetsAt: reset, history: [at(last + 10 * H, 30), at(last + 50 * H, 60),
+    at(last + 51 * H, 10), at(last + 52 * H, 11), at(last + 160 * H, 50),
+    at(start + 10 * H, 5, reset)]};
+  const b = breakdown([row(last + 5 * H, "bb", "bb", 300), row(last + 100 * H, "cc", "cc", 200),
+    row(start + H, "cc", "cc", 7)], u, now);
+  assertEquals(b.weeks.map((w) => [w.label, w.used]), [["last week", 50], ["this week", 20]]);
+  assertEquals(b.weeks[0].projects.map((p) => [p.p, p.q]), [["bb", 30], ["cc", 20]]);
+  const days = b.days.filter((d) => d.to <= start);
+  assertEquals(Math.round(days.reduce((s, d) => s + d.used, 0)), 50);
+  assertEquals(b.weeks[1].projects.map((p) => [p.p, p.q]), [["cc", 20]]);
+});

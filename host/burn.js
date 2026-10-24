@@ -30,7 +30,7 @@
 // VERSION; a store from other prices is rewritten once on load (reweigh).
 
 import { HOME } from "./sh.js";
-import { usedAt, weekSamples } from "./usage.js";
+import { usedAt, usedNow, weekSamples } from "./usage.js";
 
 export const STORE = `${HOME}/.claude/ccx-burn.jsonl`;
 // weighted tokens per 1% of the 7-day quota (calibration above); the fallback for
@@ -463,16 +463,30 @@ export function breakdown(rows, u, now = Date.now()) {
     last.some((s) => s.used > 0) ? last : null,
   ], ["this week", start, now, weekSamples(u, now)]];
   const out = { at: now, reset: u.resetsAt, used: u.used, weeks: [], days: [] };
+  const tokens = (from, to) =>
+    rows.reduce((n, r) => r.h >= from && r.h < to ? n + r.w : n, 0);
+  // A week with a mid-week drop (a reset, or a plan change: 88% at 5x read 10% at 20x on
+  // 2026-10-17) reads what its counter read at its end, and its days that week's own
+  // tokens per %, its tokens over that: the log's difference adds every drop back, which
+  // summed 5x and 20x %s into 181% for a week that ended at 92%
+  let per = null;
+  const used = (samples, from, to) => {
+    if (!samples) return null;
+    if (per == null) return usedAt(samples, to) - usedAt(samples, from);
+    return per ? tokens(from, to) / per : 0;
+  };
   const win = (label, from, to, samples) => ({
     label,
     from,
     to,
-    ...group(
-      rows.filter((r) => r.h >= from && r.h < to),
-      samples ? usedAt(samples, to) - usedAt(samples, from) : null,
-    ),
+    ...group(rows.filter((r) => r.h >= from && r.h < to), used(samples, from, to)),
   });
   for (const [label, from, to, samples] of weeks) {
+    per = null;
+    if (samples?.drops.length) {
+      const end = usedNow(samples, to);
+      per = end > 0 ? tokens(from, to) / end : 0;
+    }
     out.weeks.push(win(label, from, to, samples));
     for (let a = from; a < to;) {
       const next = new Date(a);
