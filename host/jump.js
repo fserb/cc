@@ -3,6 +3,7 @@
 import {BYTES, MAC, ON_EXIT, run, sh, shSync} from "./sh.js";
 import {kittyOwner, processes} from "./claudes.js";
 import {dialogRefusal, screen} from "./dialog.js";
+import {inputBox} from "./queue.js";
 
 // `kitten @` writes a bare `ESC P @kitty-cmd {...} ESC \`, and tmux forwards only
 // `ESC P tmux; ... ESC \`, so the command never reaches kitty and --no-response still
@@ -214,10 +215,8 @@ export function imageParts(text, images) {
 export async function typeInto(inst, text, {force = false, images = []} = {}) {
   if (!inst.pane) return `pid ${inst.pid} is not inside tmux; nothing to type into`;
   if (!force) {
-    const shown = await screen(inst.pane);
-    if (shown === null) return `tmux: cannot capture ${inst.pane}`;
-    const refused = dialogRefusal(shown);
-    if (refused) return refused;
+    const err = await promptReady(inst.pane);
+    if (err) return err;
   }
   const buf = `ccx-${inst.pid}`;
   if (!images.length) {
@@ -232,6 +231,21 @@ export async function typeInto(inst, text, {force = false, images = []} = {}) {
   if (typedImages.size > 100) typedImages.delete(typedImages.keys().next().value);
   const r = await run("tmux", "send-keys", "-t", inst.pane, "Enter");
   return r.code === 0 ? null : `tmux: ${r.err.trim() || `exit ${r.code}`}`;
+}
+
+// Wait for `pane` to show Claude's input box. A new session writes its record ~0.8s before it
+// draws the box (Oct 24th): text pasted then went to zsh, or sat in the box without its Enter.
+// null when the box is up, else why not: a dialog (at once), or no box after `wait`.
+export async function promptReady(pane, wait = 10000) {
+  for (const end = Date.now() + wait;;) {
+    const shown = await screen(pane);
+    if (shown === null) return `tmux: cannot capture ${pane}`;
+    const refused = dialogRefusal(shown);
+    if (refused) return refused;
+    if (inputBox(shown)) return null;
+    if (Date.now() >= end) return `no Claude prompt on ${pane} after ${wait / 1000}s`;
+    await new Promise((ok) => setTimeout(ok, 100));
+  }
 }
 
 // imageParts() each a paste of its own, an image waiting for its tag. null, or why not.

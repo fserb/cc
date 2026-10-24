@@ -16,7 +16,7 @@
 //   until the session writes its record (a trusted dir, ~600ms) or the dialog shows
 
 import {HOME, MAC, run, sh} from "./sh.js";
-import {jump, sendKeys, sendKitty, typeInto} from "./jump.js";
+import {jump, promptReady, sendKeys, sendKitty, typeInto} from "./jump.js";
 import {discover} from "./claudes.js";
 import {parseDialog, pickKeys, screen} from "./dialog.js";
 
@@ -211,6 +211,8 @@ export async function spawn({dir, after = "", mkdir = false, name = "", focus = 
   const pid = await claudeIn(made.pane);
   if (!pid) return {error: "claude did not start", pane: made.pane};
   const warnings = [await trustFolder(pid, made.pane)];
+  // returned only once it takes input, so a `ccx user` right after is not lost
+  if (!warnings[0]) warnings.push(await promptReady(made.pane, 15000));
   if (focus) {
     const inst = (await discover()).find((i) => i.pid === pid);
     warnings.push(inst ? await jump(inst) : `${pid} not found to focus`);

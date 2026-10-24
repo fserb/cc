@@ -3,7 +3,7 @@
 // from another project with its words replaced and its layout kept.
 
 import {dialogRefusal, parseDialog, pendingAsk, pickKeys, withAsk, tabAt} from "./dialog.js";
-import {IMAGE, imageParts, typeInto} from "./jump.js";
+import {IMAGE, imageParts, promptReady, typeInto} from "./jump.js";
 import {run} from "./sh.js";
 
 function eq(got, want, what) {
@@ -136,6 +136,32 @@ Deno.test("typeInto: refused on a pane showing a dialog, typed with force", asyn
       now = (await run("tmux", "capture-pane", "-p", "-t", pane)).out;
     }
     eq(now.includes("zzmark"), true, "typed");
+  } finally {
+    await run("tmux", "kill-session", "-t", sess);
+  }
+});
+
+// A new session's pane shows zsh and `claude -n ...` for ~0.8s after its record (Oct 24th):
+// typeInto() waits for the input box, and types nothing before it.
+Deno.test("typeInto: waits for Claude's input box", async () => {
+  const sess = `ccx-test-box-${Deno.pid}`;
+  const file = new URL("fixtures/dialog/idle.txt", import.meta.url).pathname;
+  const made = await run("tmux", "new-session", "-d", "-s", sess, "-x", "200", "-y", "50",
+    `echo '$ claude -n x'; sleep 0.8; cat '${file}'; cat > /dev/null`);
+  if (made.code !== 0) return console.log(`no tmux: ${made.err.trim()}`);
+  try {
+    const pane = `${sess}:0.0`;
+    eq(await promptReady(pane, 200), `no Claude prompt on ${pane} after 0.2s`, "no box yet");
+    eq(await typeInto({pid: 0, pane}, "zzmark"), null, "typed");
+    let now = "";
+    for (let n = 0; n < 40 && !now.includes("zzmark"); n++) {
+      await new Promise((ok) => setTimeout(ok, 50));
+      now = (await run("tmux", "capture-pane", "-p", "-t", pane)).out;
+    }
+    const lines = now.split("\n");
+    const box = lines.findIndex((l) => l.startsWith("❯"));
+    const typed = lines.findIndex((l) => l.includes("zzmark"));
+    eq(box >= 0 && typed > box, true, "typed after the box was drawn");
   } finally {
     await run("tmux", "kill-session", "-t", sess);
   }
