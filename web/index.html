@@ -903,9 +903,10 @@ function updates() {
       list: aw.slice(0, 3).map((a) => [a.question, a.name]), more: aw.length > 3 ? `${aw.length - 3} more` : ""});
   // parcels not yet delivered, with a tracking number or not (an order the tracker read from a shop's mail), and the front desk
   const desk = pk?.desk.count ?? 0, ps = (pk?.packages.filter((x) => x.carrier !== "ubereats" && !x.unknown && !x.delivered) ?? []).sort((a, b) => Date.parse(b.last) - Date.parse(a.last));
-  // the count alone, desk and on the way together, no lines (user, Oct 24th: "a bit too noisy", "everything can wait")
+  // the counts alone, no lines (user, Oct 24th: "a bit too noisy", "everything can wait"): on the way + at the front desk, "2+2"; "2" none at the desk, "2 to pick up" none on the way
+  const pn = ps.length ? [ps.length, desk].filter(Boolean).join("+") : desk ? `${desk} to pick up` : "", pt = [ps.length && `${ps.length} on the way`, desk && `${desk} to pick up`].filter(Boolean).join(", ");
   if (desk || ps.length || cur === "packages")
-    up.push({id: "packages", title: "parcels", tags: desk + ps.length ? `<span class="tag">${desk + ps.length}</span>` : "", r: pk ? ago(Date.parse(ps[0]?.last ?? pk.updated) / 1000) : "",
+    up.push({id: "packages", title: "parcels", tags: pn ? `<span class="tag" title="${pt}">${pn}</span>` : "", r: pk ? ago(Date.parse(ps[0]?.last ?? pk.updated) / 1000) : "",
       sub: "", ver: `${desk}|${ps.map((x) => x.number).join()}`});
 
   for (const u of up) { u.sec = "updates"; u.ver ??= `${u.sub}|${u.r}`; }
