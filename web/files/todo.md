@@ -1,1 +1,0 @@
-/home/fserb/nadya/todo/todo.md
