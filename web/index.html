@@ -713,6 +713,7 @@ function listen() {
     const aw = JSON.stringify(d.away ?? null);
     if (d.away && listen.away !== undefined && aw !== listen.away) loadAway();
     listen.away = aw;
+    logPrefetch();
     // the open session ended (its host still answers): go to nadya, replacing the hash
     if (had && !S.rows.some((r) => r.pid === cur) && up.includes(cur.split(".")[0])) { cur = "nadya"; if (history.state?.cc) history.replaceState({cc: cur}, ""); open(); return; }
     draw(); drawView(true);
@@ -721,6 +722,10 @@ function listen() {
 }
 // one session stream at a time: the open one (log for nadya, screen + dialog for all)
 let stream = null;
+// each session's last log seen, pid -> {log, start, since}, so a switch draws it at once and the stream's reset
+// replaces it (user, Oct 24th: "keep the last messages always available on each tab")
+const logs = new Map();
+const keepLog = (pid) => logs.set(pid, {log: S.log, start: stream?.start, since: S.rows.find((r) => r.pid === pid)?.since});
 // again: the same session's stream opened anew, its log kept on screen until the new one's reset replaces it
 function follow(pid, again) {
   if (stream?.pid === pid && !again) return;
@@ -739,7 +744,6 @@ function follow(pid, again) {
     S.log = S.log.concat(d.events); keepLog(pid); ackPending(); draw(); drawView(true);
   });
   es.addEventListener("screen", (e) => { (S.screens[pid] ??= {}).text = JSON.parse(e.data).text; drawView(true); });
-    logPrefetch();
   es.addEventListener("dialog", (e) => { (S.screens[pid] ??= {}).dialog = JSON.parse(e.data); drawView(true); draw(); });
 }
 // a ccx log page holds the last 40 chat messages: scrolling up pages back (?before=) until the chat has `want` messages or the log's top
@@ -748,10 +752,6 @@ async function older(want) {
   const s = stream;
   if (!s?.loaded || s.paging || !s.start) return;
   s.paging = true;
-// each session's last log seen, pid -> {log, start, since}, so a switch draws it at once and the stream's reset
-// replaces it (user, Oct 24th: "keep the last messages always available on each tab")
-const logs = new Map();
-const keepLog = (pid) => logs.set(pid, {log: S.log, start: stream?.start, since: S.rows.find((r) => r.pid === pid)?.since});
   try {
     while (stream === s && s.start > 0 && chatCount() < want) {
       const d = await json(`${CCX}/s/${s.pid}/log?before=${s.start}`);
@@ -760,6 +760,22 @@ const keepLog = (pid) => logs.set(pid, {log: S.log, start: stream?.start, since:
     }
   } catch {} finally { s.paging = false; }
   if (stream === s) drawView(true);
+}
+// every session's last page (ccx log, 40 chat messages), read in the background one at a time, and again when its
+// state changes, so a switch shows the latest turn. All of nadya's 7 were 350 KB (115 KB gzipped) on Oct 24th, so
+// the phone does it too, unless Data Saver is on; a kept one of an ended session goes
+let prefetching = false;
+async function logPrefetch() {
+  for (const p of logs.keys()) if (p !== stream?.pid && !S.rows.some((r) => r.pid === p)) logs.delete(p);
+  if (prefetching || navigator.connection?.saveData) return;
+  prefetching = true;
+  try {
+    for (const r of S.rows) {
+      if (stream?.pid === r.pid || logs.get(r.pid)?.since === r.since || document.hidden) continue;
+      const d = await json(`${CCX}/s/${r.pid}/log`).catch(() => null);
+      if (d?.events && stream?.pid !== r.pid) logs.set(r.pid, {log: d.events, start: d.start, since: r.since});
+    }
+  } finally { prefetching = false; }
 }
 
 // ---------- what waits on the user
@@ -785,22 +801,6 @@ function pace() {
   const t = S.usage.paceTokens, out = p.out ? new Date(p.out) : null;
   if (t?.short?.ratio != null) return {x: t.short.ratio, xl: t.long?.ratio ?? null, w: ["5m", "15m"], out: t.short.out ? new Date(t.short.out) : null};
   return {x: p.ratio, xl: S.usage.paceLong?.ratio ?? null, w: ["1h", "3h"], out};
-}
-// every session's last page (ccx log, 40 chat messages), read in the background one at a time, and again when its
-// state changes, so a switch shows the latest turn. All of nadya's 7 were 350 KB (115 KB gzipped) on Oct 24th, so
-// the phone does it too, unless Data Saver is on; a kept one of an ended session goes
-let prefetching = false;
-async function logPrefetch() {
-  for (const p of logs.keys()) if (p !== stream?.pid && !S.rows.some((r) => r.pid === p)) logs.delete(p);
-  if (prefetching || navigator.connection?.saveData) return;
-  prefetching = true;
-  try {
-    for (const r of S.rows) {
-      if (stream?.pid === r.pid || logs.get(r.pid)?.since === r.since || document.hidden) continue;
-      const d = await json(`${CCX}/s/${r.pid}/log`).catch(() => null);
-      if (d?.events && stream?.pid !== r.pid) logs.set(r.pid, {log: d.events, start: d.start, since: r.since});
-    }
-  } finally { prefetching = false; }
 }
 // the header's graph: usage, weighted tokens per 5 min over the last 2h, every host (api/burn/series), scaled to
 // the window's peak, at least 1.3M per 5 min (the 5-hour session limit's rate); no pace in it (user, Oct 14th). Always drawn, empty without data, so the header keeps its width
