@@ -82,7 +82,7 @@
   .it.hot .tx div, .it.unread .tx div { font-weight: 600; }
   .it:has(.t1) { grid-template-columns: 10px minmax(0, 1fr); }
   .it .tx .t1 { display: flex; gap: 0.5rem; align-items: baseline; font-weight: 400; } .it .t1 b { font-weight: inherit; flex: none; } .it.hot .t1 b, .it.unread .t1 b { font-weight: 600; }
-  .it .tag { font-size: 0.75rem; color: var(--muted); font-weight: 400; } .it .t1 .tag { flex: none; } .it .tx div:not(.t1) .tag { margin-left: 0.5rem; }  /* small grey text after a row's name (tags) */
+  .it .tag { font-size: 0.75rem; color: var(--muted); font-weight: 400; } .it .t1 .tag { flex: none; } .it .t1 .tag.ev { all: unset; font-size: 0.75rem; font-weight: 400; color: var(--muted); flex: 0 3 auto; min-width: 3em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .it .tx div:not(.t1) .tag { margin-left: 0.5rem; }  /* small grey text after a row's name (tags) */
   .it .t1 .at { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; direction: rtl; font: 0.72rem var(--mono); color: var(--muted); }  /* rtl cuts the start of a long path, so its last part stays */
   .it time { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
   /* updates (user, Oct 18th; web/mocks/sidebar-rich-h.html): the row of every entry, and below it a thin bar or a short list */
@@ -307,6 +307,7 @@
   .pplain { list-style: none; margin: 0; padding: 0; } .pplain.pgap { margin-top: 1rem; } .pplain li { display: flex; gap: 1rem; align-items: baseline; padding: 0.4rem 0; } .pplain li + li { border-top: 1px solid var(--line); } .pplain li.none { color: var(--muted); }
   .pplain .tx { flex: 1; min-width: 0; } .pplain .one { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .pplain .pt { color: var(--muted); }
   .pplain input[type=checkbox] { margin: 0; position: relative; top: 1px; accent-color: var(--accent); } .pplain li.x .tx { color: var(--muted); text-decoration: line-through; }
+  .ev { display: inline-block; font-size: 0.75rem; line-height: 1.3; color: var(--muted); background: var(--track); border: 1px solid var(--line); border-radius: 4px; padding: 0 0.35rem; vertical-align: 0.05em; white-space: nowrap; }  /* an event reminder's condition */
   .pnote { display: block; font-size: 0.8rem; color: var(--muted); margin-top: 0.1rem; }
   .padd input { box-sizing: border-box; width: 100%; font: inherit; border: 0; border-bottom: 1px solid var(--accent); outline: 0; background: none; color: inherit; padding: 0; }
   .pplain code, .pev code { font: 0.8rem var(--mono); color: var(--muted); } .pfp { font: 0.85rem var(--mono); } .pfp a { color: inherit; } .pfp .dir { color: var(--muted); }
@@ -614,14 +615,38 @@ async function inboxDo(verb, id) {
 }
 // an update hidden with its ×: id -> what it said then, so it comes back when that changes
 const upHidden = JSON.parse(localStorage.cc_up_hidden ?? "{}");
+// an event line in reminders.md (Oct 24th), owner first: `when <cond>[ until <date>]: text`, `if not <cond> by <date>: text`.
+// trig fires it once and nadya marks it `[!]` with the outcome ([happened], [not by], [settled], [expired], [broken: ...]),
+// read anywhere on the line. Its condition is drawn as a tag (`when home`, `if not mail from clinique by Oct 30th`), not text
+const EV_OUT = /\[(happened|not by|settled|expired|broken: [^\]]*)\] ?/;
+const EV_DATE = String.raw`(\d{4}-\d\d-\d\d(?: \d\d?:\d\d)?)`;
+const EV_RE = new RegExp(`^(?:when (.+?)(?: until ${EV_DATE})?|if not (.+?) by ${EV_DATE}): (.*)$`);
+function evDay(d) {
+  const [day, time] = d.split(" "), x = new Date(`${day}T12:00`), n = x.getDate();
+  const th = n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th";
+  return `${x.toLocaleDateString("en-US", {month: "short"})} ${n}${th}${time ? ` ${time}` : ""}`;
+}
+// `[outcome] [owner: ]text` -> {outcome, owner, cond, by, text}; cond only on an event line
+function remParts(rest) {
+  const [, outcome] = rest.match(EV_OUT) ?? [];
+  const [, owner, body] = rest.replace(EV_OUT, "").trim().match(/^(?:(user|nadya): )?(.*)$/);
+  const [, when, until, ifnot, by, text] = body.match(EV_RE) ?? [];
+  if (text == null) return {outcome, owner, text: body};
+  const on = when ? `when ${when}` : `if not ${ifnot}`;  // the short one, for a row in updates: the subline has the date
+  return {outcome, owner, by: by && evDay(by), text, on, cond: when ? `${on}${until ? ` until ${evDay(until)}` : ""}` : `${on} by ${evDay(by)}`};
+}
+// what a fired event line says happened, for its row in updates
+function evSays(t, dated) {
+  return t.outcome === "happened" ? "happened" : t.outcome === "not by" ? `didn't happen${dated ? "" : ` by ${t.by}`}` : t.outcome === "expired" ? "expired, didn't happen" : t.outcome ?? "fired";
+}
 async function loadList(file) {
-  // both files: `- [m] [YYYY-MM-DD [HH:MM]] text`; reminders.md has the dated ones, todo.md the undated notes
+  // both files: `- [m] [YYYY-MM-DD [HH:MM]] text`; reminders.md has the dated ones and the event lines, todo.md the undated notes
   const text = await fetch(`files/${file}`, {cache: "no-cache"}).then((r) => r.ok ? r.text() : "").catch(() => "");
   return [...text.matchAll(/^- \[(.)\] (?:(\d{4}-\d\d-\d\d)(?: (\d\d:\d\d))? )?(.*)$/gm)].map(([, mark, date, time, rest]) => {
     const due = date ? new Date(`${date}T${time ?? "09:00"}`) : null;
     // reminders.md names an owner, `user:` or `nadya:`; nadya's are its own to do, not waiting on the user
-    const [, owner, body] = rest.match(/^(?:(user|nadya): )?(.*)$/);
-    return {file, mark, date, time, due, owner, text: body.split(/\. |\(user/)[0].trim(), full: rest};
+    const {text, ...ev} = remParts(rest);
+    return {file, mark, date, time, due, ...ev, text: text.split(/\. |\(user/)[0].trim(), full: rest};
   }).filter((t) => t.mark !== "x");
 }
 // reminders.md on start and every 30s, for the plan row's dot and next due one (user, 2026-10-16)
@@ -869,6 +894,9 @@ function updates() {
   const today = new Date().toLocaleDateString("en-CA");
   for (const t of S.reminders.filter((t) => t.owner !== "nadya" && t.due && t.due <= now && !sent.has("todo:" + t.full)))
     up.push({id: remKey(t), title: t.text, r: t.date === today ? t.time ?? "" : t.date.slice(5), sub: now - t.due < 60e3 ? "due now" : `due ${ago(t.due / 1000)} ago`, hot: true, d: "blue"});
+  // an event line once trig fired it (`[!]`), the same way; one settled (the event came before its date) waits on nobody
+  for (const t of S.reminders.filter((t) => t.cond && t.mark === "!" && t.owner !== "nadya" && t.outcome !== "settled" && !sent.has("todo:" + t.full)))
+    up.push({id: remKey(t), title: t.text, tags: `<span class="tag ev">${esc(t.on)}</span>`, r: "", sub: evSays(t), hot: true, d: "blue"});
   const ib = (S.inbox ?? []).filter((x) => !x.read);
   if (ib.length || cur === "inbox")
     up.push({id: "inbox", title: "inbox", tags: ib.length ? `<span class="tag">${ib.length} new</span>` : "", r: ib[0] ? ago(ib[0].at / 1000) : "", unread: ib.length, d: ib.length ? "green" : "", sub: "", ver: ib.map((x) => x.id).join(),
@@ -1367,7 +1395,7 @@ async function loadPlan() {
   const items = (text) => text.split(/^## Items$/m)[1] ?? "";
   const queued = [...[...items(hard).matchAll(/^### (.+)\n([^]*?)(?=^### |^## |$(?![^]))/gm)].map(([, t, body]) => ({file: "hard-queue.md", plan: "hard queue", text: `${t}${/\*\*Stopped/.test(body) ? " (stopped)" : ""}`, done: false})),
     ...[...items(free).matchAll(/^- (.+)$/gm)].map(([, t]) => ({file: "free-cycles.md", plan: "free cycles", text: t.length > 200 ? `${t.slice(0, 200)}…` : t, done: false}))];
-  const list = (text, file) => [...text.matchAll(/^- \[(.)\] (?:(\d{4}-\d\d-\d\d)(?: (\d\d:\d\d))? )?(?:(user|nadya): )?(.*)$/gm)].map(([, mark, date, time, owner, text]) => ({file, mark, date, time, owner, text, done: mark === "x"}));
+  const list = (text, file) => [...text.matchAll(/^- \[(.)\] (?:(\d{4}-\d\d-\d\d)(?: (\d\d:\d\d))? )?(.*)$/gm)].map(([, mark, date, time, rest]) => ({file, mark, date, time, ...remParts(rest), done: mark === "x"}));
   let h = "";
   const horizons = plan.split("\n").flatMap((l) => { if (l.startsWith("## ")) { h = l.slice(3).replace(/ \(.*/, "").toLowerCase(); return []; } return l.startsWith("- ") && h ? [{file: "plan.md", plan: h, text: l.slice(2), done: false}] : []; });
   S.plan = [...list(todo, "todo.md"), ...list(rem, "reminders.md"), ...horizons, ...queued];
@@ -1506,7 +1534,8 @@ function reminderView(key) {
 }
 function dueBox() { return dueTodos(true).map(needTodo).join(""); }
 function needTodo(t) {
-  return [t].map((t) => `<div class="need"><b>${esc(t.text)}</b><p>due ${esc(t.date)} ${esc(t.time ?? "")}</p>${sent.has("todo:" + t.full) ? `<p class="done">✓ ${esc(sent.get("todo:" + t.full))}</p>` : `<div class="opts" data-todo="${esc(t.full)}" data-file="${t.file}" data-due="${esc(`${t.date} ${t.time ?? ""}`.trim())}"><button>done</button><button>snooze 1 h</button><button>send to nadya</button></div>`}</div>`).join("");
+  const due = t.cond ? `${t.cond}: ${evSays(t, true)}` : `${t.date} ${t.time ?? ""}`.trim();
+  return [t].map((t) => `<div class="need"><b>${esc(t.text)}</b><p>${t.cond ? `<span class="ev">${esc(t.cond)}</span> ${esc(evSays(t, true))}` : `due ${esc(due)}`}</p>${sent.has("todo:" + t.full) ? `<p class="done">✓ ${esc(sent.get("todo:" + t.full))}</p>` : `<div class="opts" data-todo="${esc(t.full)}" data-file="${t.file}" data-due="${esc(due)}"><button>done</button>${t.cond ? "" : "<button>snooze 1 h</button>"}<button>send to nadya</button></div>`}</div>`).join("");
 }
 function projectsView() {
   if (!S.projects.length || !S.plan) return `<article class="pj"><p class="meta">loading…</p></article>`;
@@ -1567,8 +1596,8 @@ const pjA = (d, inner) => d.go ? `<a href="#${esc(d.go)}" data-go="${esc(d.go)}"
 function pjTodoRow(t) {
   const k = pjKey(t), said = sent.get("pj:" + k);
   const note = t.done ? "" : said ? `<span class="pnote">✓ ${esc(said)}</span>` : t.how === "guess" ? `<span class="pnote">nadya's guess${S.pj.change === k ? ` <select data-pjto="${esc(k)}"><option value="">project…</option>${pjModel().all.map((p) => `<option>${esc(p.id)}</option>`).join("")}</select>` : `<button data-pjok="${esc(k)}">ok</button><button data-pjch="${esc(k)}">change</button>`}</span>` : "";
-  const when = t.done ? "done" : t.date ? `${t.date.slice(5)}${t.time ? " " + t.time : ""}` : t.plan ?? "";
-  return `<li class="${t.done ? "x" : ""}" title="${esc(t.file)}${t.owner ? `, ${t.owner}'s` : ""}"><input type="checkbox" ${t.done ? "checked disabled" : ""} data-pjdone="${esc(k)}"><span class="tx">${t.part && !S.pj.part ? `<span class="pt">${esc(t.part)} · </span>` : ""}${esc(t.text)}${note}</span><small>${esc(when)}</small></li>`;
+  const when = t.done ? "done" : t.date ? `${t.date.slice(5)}${t.time ? " " + t.time : ""}` : t.cond && t.mark === "!" ? (t.outcome ?? "fired").replace(/:.*/, "") : t.plan ?? "";
+  return `<li class="${t.done ? "x" : ""}" title="${esc(t.file)}${t.owner ? `, ${t.owner}'s` : ""}"><input type="checkbox" ${t.done ? "checked disabled" : ""} data-pjdone="${esc(k)}"><span class="tx">${t.part && !S.pj.part ? `<span class="pt">${esc(t.part)} · </span>` : ""}${esc(t.text)}${t.cond ? ` <span class="ev">${esc(t.cond)}</span>` : ""}${note}</span><small>${esc(when)}</small></li>`;
 }
 function projectView(id) {
   if (!S.projects.length || !S.plan) return `<article class="pj"><p class="meta">loading…</p></article>`;
